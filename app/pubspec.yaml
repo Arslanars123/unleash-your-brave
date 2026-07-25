@@ -1,0 +1,45 @@
+name: unleash_your_brave
+description: Unleash Your Brave — Flutter mobile client
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management
+  flutter_bloc: ^9.1.0
+  equatable: ^2.0.7
+
+  # Networking
+  dio: ^5.8.0+1
+
+  # Routing
+  go_router: ^14.8.1
+
+  # Dependency injection
+  get_it: ^8.0.3
+
+  # Functional helpers (Either / Failure)
+  dartz: ^0.10.1
+
+  # Local storage
+  shared_preferences: ^2.5.2
+
+  # Environment
+  flutter_dotenv: ^5.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
