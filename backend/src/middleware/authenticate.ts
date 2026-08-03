@@ -13,11 +13,38 @@ export const authenticate: RequestHandler = (req, _res, next) => {
 
   try {
     const payload = verifyAccessToken(header.slice('Bearer '.length).trim());
-    req.auth = { userId: payload.sub, role: payload.role };
+    req.auth = {
+      userId: payload.sub,
+      role: payload.role,
+      speakerId: payload.speakerId ?? null,
+      sponsorId: payload.sponsorId ?? null,
+    };
     next();
   } catch {
     next(new UnauthorizedError('Invalid or expired token'));
   }
+};
+
+/** Attach auth when a valid token is present; continue as anonymous otherwise. */
+export const optionalAuthenticate: RequestHandler = (req, _res, next) => {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) {
+    next();
+    return;
+  }
+
+  try {
+    const payload = verifyAccessToken(header.slice('Bearer '.length).trim());
+    req.auth = {
+      userId: payload.sub,
+      role: payload.role,
+      speakerId: payload.speakerId ?? null,
+      sponsorId: payload.sponsorId ?? null,
+    };
+  } catch {
+    // Ignore invalid tokens for public reads.
+  }
+  next();
 };
 
 /** Route guard. Must run after `authenticate`. */

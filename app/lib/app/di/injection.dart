@@ -6,11 +6,15 @@ import 'package:unleash_your_brave/features/auth/data/datasources/auth_local_dat
 import 'package:unleash_your_brave/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:unleash_your_brave/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:unleash_your_brave/features/auth/domain/repositories/auth_repository.dart';
+import 'package:unleash_your_brave/features/auth/domain/usecases/change_password_usecase.dart';
 import 'package:unleash_your_brave/features/auth/domain/usecases/get_current_user_usecase.dart';
 import 'package:unleash_your_brave/features/auth/domain/usecases/login_usecase.dart';
 import 'package:unleash_your_brave/features/auth/domain/usecases/logout_usecase.dart';
 import 'package:unleash_your_brave/features/auth/domain/usecases/register_usecase.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:unleash_your_brave/features/agenda/data/datasources/agenda_local_datasource.dart';
+import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
+import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 
 final sl = GetIt.instance;
 
@@ -33,6 +37,12 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => RegisterUseCase(sl()));
   sl.registerLazySingleton(() => GetCurrentUserUseCase(sl()));
   sl.registerLazySingleton(() => LogoutUseCase(sl()));
+  sl.registerLazySingleton(() => ChangePasswordUseCase(sl()));
+
+  // Home / events / agenda
+  sl.registerLazySingleton(() => EventsRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => SessionsRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => AgendaLocalDataSource(prefs));
 
   // Auth presentation — singleton so GoRouter and the widget tree share state
   sl.registerLazySingleton(
@@ -41,6 +51,7 @@ Future<void> configureDependencies() async {
       registerUseCase: sl(),
       getCurrentUserUseCase: sl(),
       logoutUseCase: sl(),
+      changePasswordUseCase: sl(),
     ),
   );
 }

@@ -57,7 +57,7 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       return Right(result.user);
     } on ServerException catch (error) {
-      return Left(ServerFailure(error.message));
+      return Left(AuthFailure(error.message));
     } on NetworkException catch (error) {
       return Left(NetworkFailure(error.message));
     } catch (_) {
@@ -89,6 +89,27 @@ class AuthRepositoryImpl implements AuthRepository {
       return Left(NetworkFailure(error.message));
     } on CacheException catch (error) {
       return Left(CacheFailure(error.message));
+    } catch (_) {
+      return const Left(UnexpectedFailure());
+    }
+  }
+
+  @override
+  Future<Either<Failure, UserEntity>> changePassword({
+    String? currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = await _remote.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      await _local.cacheUser(user);
+      return Right(user);
+    } on ServerException catch (error) {
+      return Left(AuthFailure(error.message));
+    } on NetworkException catch (error) {
+      return Left(NetworkFailure(error.message));
     } catch (_) {
       return const Left(UnexpectedFailure());
     }

@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import { AppError, NotFoundError } from '../core/errors/app-error.js';
 import type { ErrorEnvelope } from '../core/http/response.js';
@@ -20,6 +21,19 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       },
     };
     res.status(422).json(body);
+    return;
+  }
+
+  if (err instanceof MulterError) {
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? 'File is too large (images max 5MB, materials max 50MB)'
+        : err.message || 'Upload failed';
+    const body: ErrorEnvelope = {
+      success: false,
+      error: { code: 'UPLOAD_ERROR', message },
+    };
+    res.status(400).json(body);
     return;
   }
 

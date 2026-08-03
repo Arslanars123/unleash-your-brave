@@ -5,6 +5,8 @@ import type { UserRole } from '../users/user.types.js';
 export interface AccessTokenPayload {
   sub: string;
   role: UserRole;
+  speakerId: string | null;
+  sponsorId: string | null;
   type: 'access';
 }
 
@@ -20,10 +22,29 @@ export interface TokenPair {
   expiresIn: string;
 }
 
-export function signAccessToken(userId: string, role: UserRole): string {
-  return jwt.sign({ sub: userId, role, type: 'access' } satisfies AccessTokenPayload, env.jwt.accessSecret, {
-    expiresIn: env.jwt.accessTtl as jwt.SignOptions['expiresIn'],
-  });
+export interface TokenProfileLinks {
+  speakerId?: string | null;
+  sponsorId?: string | null;
+}
+
+export function signAccessToken(
+  userId: string,
+  role: UserRole,
+  links: TokenProfileLinks = {},
+): string {
+  return jwt.sign(
+    {
+      sub: userId,
+      role,
+      speakerId: links.speakerId ?? null,
+      sponsorId: links.sponsorId ?? null,
+      type: 'access',
+    } satisfies AccessTokenPayload,
+    env.jwt.accessSecret,
+    {
+      expiresIn: env.jwt.accessTtl as jwt.SignOptions['expiresIn'],
+    },
+  );
 }
 
 export function signRefreshToken(userId: string): string {
@@ -32,9 +53,13 @@ export function signRefreshToken(userId: string): string {
   });
 }
 
-export function issueTokenPair(userId: string, role: UserRole): TokenPair {
+export function issueTokenPair(
+  userId: string,
+  role: UserRole,
+  links: TokenProfileLinks = {},
+): TokenPair {
   return {
-    accessToken: signAccessToken(userId, role),
+    accessToken: signAccessToken(userId, role, links),
     refreshToken: signRefreshToken(userId),
     tokenType: 'Bearer',
     expiresIn: env.jwt.accessTtl,
@@ -46,7 +71,11 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
   if (payload.type !== 'access') {
     throw new Error('Invalid token type');
   }
-  return payload;
+  return {
+    ...payload,
+    speakerId: payload.speakerId ?? null,
+    sponsorId: payload.sponsorId ?? null,
+  };
 }
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {

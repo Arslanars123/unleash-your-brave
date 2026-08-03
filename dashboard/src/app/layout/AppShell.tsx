@@ -1,10 +1,23 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, LogOut, Users } from 'lucide-react';
+import {
+  CalendarDays,
+  Clapperboard,
+  Handshake,
+  Images,
+  LayoutDashboard,
+  LogOut,
+  Megaphone,
+  Mic2,
+  UserRound,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthProvider';
 import { Button } from '@/shared/ui/Button';
 
 export function AppShell() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin, isSpeaker, isSponsor } = useAuth();
+
+  const portalLabel = isAdmin ? 'Admin' : isSpeaker ? 'Speaker' : isSponsor ? 'Sponsor' : 'Portal';
 
   return (
     <div className="shell">
@@ -13,19 +26,67 @@ export function AppShell() {
           <span className="brand-mark sm">UYB</span>
           <div>
             <strong>Unleash Your Brave</strong>
-            <p>Admin console</p>
+            <p>{portalLabel}</p>
           </div>
         </div>
 
         <nav className="sidebar-nav">
-          <NavLink to="/" end>
-            <LayoutDashboard size={18} />
-            Overview
-          </NavLink>
-          <NavLink to="/users">
-            <Users size={18} />
-            Users
-          </NavLink>
+          {isAdmin ? (
+            <>
+              <NavLink to="/" end>
+                <LayoutDashboard size={18} />
+                Overview
+              </NavLink>
+              <NavLink to="/events">
+                <CalendarDays size={18} />
+                Event
+              </NavLink>
+              <NavLink to="/sessions">
+                <Clapperboard size={18} />
+                Sessions
+              </NavLink>
+              <NavLink to="/speakers">
+                <Mic2 size={18} />
+                Speakers
+              </NavLink>
+              <NavLink to="/sponsors">
+                <Handshake size={18} />
+                Sponsors
+              </NavLink>
+              <NavLink to="/announcements">
+                <Megaphone size={18} />
+                Announcements
+              </NavLink>
+              <NavLink to="/posts">
+                <Images size={18} />
+                Posts
+              </NavLink>
+              <NavLink to="/users">
+                <Users size={18} />
+                Attendees
+              </NavLink>
+            </>
+          ) : null}
+
+          {isSpeaker ? (
+            <>
+              <NavLink to="/my-profile">
+                <UserRound size={18} />
+                My profile
+              </NavLink>
+              <NavLink to="/my-sessions">
+                <Clapperboard size={18} />
+                My sessions
+              </NavLink>
+            </>
+          ) : null}
+
+          {isSponsor ? (
+            <NavLink to="/my-profile">
+              <Handshake size={18} />
+              My profile
+            </NavLink>
+          ) : null}
         </nav>
 
         <div className="sidebar-footer">

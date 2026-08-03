@@ -49,6 +49,26 @@ class AuthRemoteDataSource {
     }
   }
 
+  Future<UserModel> changePassword({
+    String? currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _dioClient.client.post(
+        ApiConstants.changePassword,
+        data: {
+          if (currentPassword != null && currentPassword.isNotEmpty)
+            'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        },
+      );
+      final data = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return UserModel.fromJson(data);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
   ({UserModel user, String accessToken, String refreshToken}) _parseAuthResult(
     Map<String, dynamic> body,
   ) {

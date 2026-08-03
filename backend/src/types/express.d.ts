@@ -6,6 +6,8 @@ declare global {
       auth?: {
         userId: string;
         role: UserRole;
+        speakerId: string | null;
+        sponsorId: string | null;
       };
     }
   }

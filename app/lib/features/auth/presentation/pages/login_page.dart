@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:unleash_your_brave/core/responsive/responsive.dart';
+import 'package:unleash_your_brave/core/theme/app_colors.dart';
+import 'package:unleash_your_brave/core/theme/app_typography.dart';
+import 'package:unleash_your_brave/core/utils/app_toast.dart';
+import 'package:unleash_your_brave/core/utils/validators.dart';
+import 'package:unleash_your_brave/core/widgets/adaptive_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:unleash_your_brave/features/auth/presentation/widgets/auth_form_fields.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -12,151 +20,162 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'member@unleashyourbrave.com');
-  final _passwordController = TextEditingController(text: 'Member123!');
-  bool _isRegister = false;
-  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _nameController.dispose();
     super.dispose();
   }
 
   void _submit() {
-    if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
 
-    final bloc = context.read<AuthBloc>();
-    if (_isRegister) {
-      bloc.add(
-        AuthRegisterRequested(
-          email: _emailController.text.trim(),
-          name: _nameController.text.trim(),
-          password: _passwordController.text,
-        ),
-      );
-    } else {
-      bloc.add(
-        AuthLoginRequested(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        ),
-      );
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _autovalidateMode = AutovalidateMode.onUserInteraction);
+      return;
     }
+
+    context.read<AuthBloc>().add(
+          AuthLoginRequested(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          ),
+        );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.bgBase,
       body: BlocConsumer<AuthBloc, AuthState>(
+        listenWhen: (previous, current) =>
+            current is AuthAuthenticated || current is AuthFailureState,
         listener: (context, state) {
           if (state is AuthAuthenticated) {
-            context.go('/');
+            if (state.user.mustChangePassword) {
+              AppToast.success('Create your password to finish setup.');
+              context.go('/set-password');
+            } else {
+              AppToast.success('Signed in successfully');
+              context.go('/');
+            }
           } else if (state is AuthFailureState) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message)),
-            );
+            AppToast.error(state.message);
           }
         },
         builder: (context, state) {
           final loading = state is AuthLoading;
 
-          return SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(18),
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFEA580C), Color(0xFF9A3412)],
-                            ),
-                          ),
-                          child: const Text(
-                            'UYB',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Unleash Your Brave',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _isRegister
-                              ? 'Create an account to begin your journey.'
-                              : 'Sign in to continue your journey.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Colors.brown.shade400,
-                              ),
-                        ),
-                        const SizedBox(height: 28),
-                        if (_isRegister) ...[
-                          TextFormField(
-                            controller: _nameController,
-                            decoration: const InputDecoration(labelText: 'Name'),
-                            validator: (value) =>
-                                (value == null || value.trim().length < 2)
-                                    ? 'Enter your name'
-                                    : null,
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(labelText: 'Email'),
-                          validator: (value) =>
-                              (value == null || !value.contains('@'))
-                                  ? 'Enter a valid email'
-                                  : null,
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(labelText: 'Password'),
-                          validator: (value) =>
-                              (value == null || value.length < 8)
-                                  ? 'Password must be at least 8 characters'
-                                  : null,
-                        ),
-                        const SizedBox(height: 20),
-                        ElevatedButton(
-                          onPressed: loading ? null : _submit,
-                          child: Text(loading ? 'Please wait…' : (_isRegister ? 'Create account' : 'Sign in')),
-                        ),
-                        TextButton(
-                          onPressed: loading
-                              ? null
-                              : () => setState(() => _isRegister = !_isRegister),
-                          child: Text(
-                            _isRegister
-                                ? 'Already have an account? Sign in'
-                                : 'Need an account? Register',
-                          ),
-                        ),
-                      ],
+          return AdaptiveCenteredBody(
+            child: Form(
+              key: _formKey,
+              autovalidateMode: _autovalidateMode,
+              child: AutofillGroup(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const AuthBrandHeader(
+                      title: 'Welcome',
+                      emphasis: 'back',
+                      subtitle:
+                          'Sign in with the email and password you created after verifying your purchase code.',
                     ),
-                  ),
+                    SizedBox(height: context.sectionGap),
+                    Container(
+                      padding: context.cardPadding,
+                      decoration: BoxDecoration(
+                        color: AppColors.bgCard,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AuthTextField(
+                            controller: _emailController,
+                            label: 'Email',
+                            prefixIcon: Icons.mail_outline_rounded,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            enabled: !loading,
+                            autofillHints: const [AutofillHints.email],
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                            ],
+                            validator: Validators.email,
+                          ),
+                          const SizedBox(height: 14),
+                          AuthTextField(
+                            controller: _passwordController,
+                            label: 'Password',
+                            prefixIcon: Icons.lock_outline_rounded,
+                            obscureText: _obscurePassword,
+                            enabled: !loading,
+                            onToggleObscure: () {
+                              setState(
+                                  () => _obscurePassword = !_obscurePassword);
+                            },
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _submit(),
+                            autofillHints: const [AutofillHints.password],
+                            validator: Validators.loginPassword,
+                          ),
+                          SizedBox(height: context.isShortViewport ? 18 : 24),
+                          AuthPrimaryButton(
+                            label: 'Sign in',
+                            loading: loading,
+                            onPressed: _submit,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed:
+                          loading ? null : () => context.go('/verify-code'),
+                      child: Text.rich(
+                        textAlign: TextAlign.center,
+                        TextSpan(
+                          style: AppTypography.caption,
+                          children: [
+                            const TextSpan(text: 'First time? '),
+                            TextSpan(
+                              text: 'Enter your email verification code',
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.accentPink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: loading ? null : () => context.go('/signup'),
+                      child: Text.rich(
+                        textAlign: TextAlign.center,
+                        TextSpan(
+                          style: AppTypography.caption,
+                          children: [
+                            const TextSpan(text: "Don't have an account? "),
+                            TextSpan(
+                              text: 'Sign up',
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.accentPink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

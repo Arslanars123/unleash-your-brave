@@ -13,6 +13,10 @@ build/
 coverage/
 *.tsbuildinfo
 
+# Uploaded media (local disk in development)
+backend/uploads/**
+!backend/uploads/.gitkeep
+
 # Logs
 *.log
 npm-debug.log*

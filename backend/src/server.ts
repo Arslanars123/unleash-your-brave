@@ -2,6 +2,7 @@ import { createContainer } from './app/container.js';
 import { createApp } from './app/create-app.js';
 import { env } from './config/env.js';
 import { logger } from './core/logger.js';
+import { closeMongo } from './db/mongo.js';
 
 async function bootstrap(): Promise<void> {
   const container = await createContainer();
@@ -13,7 +14,9 @@ async function bootstrap(): Promise<void> {
 
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'Shutting down');
-    server.close(() => process.exit(0));
+    server.close(() => {
+      void closeMongo().finally(() => process.exit(0));
+    });
   };
 
   process.on('SIGINT', () => shutdown('SIGINT'));

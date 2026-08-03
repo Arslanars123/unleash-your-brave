@@ -9,20 +9,41 @@ import {
 } from 'react';
 import { authApi, type LoginPayload } from '@/features/auth/api/auth-api';
 import { tokenStorage } from '@/shared/lib/token-storage';
-import type { PublicUser } from '@/shared/types/api';
+import type { PublicUser, UserRole } from '@/shared/types/api';
+
+const DASHBOARD_ROLES: UserRole[] = ['admin', 'speaker', 'sponsor'];
 
 interface AuthContextValue {
   user: PublicUser | null;
   isAuthenticated: boolean;
   isBootstrapping: boolean;
-  login: (payload: LoginPayload) => Promise<void>;
+  isAdmin: boolean;
+  isSpeaker: boolean;
+  isSponsor: boolean;
+  login: (payload: LoginPayload) => Promise<PublicUser>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function assertDashboardUser(user: PublicUser): PublicUser {
+  if (!DASHBOARD_ROLES.includes(user.role)) {
+    throw new Error('This portal is for admins, speakers, and sponsors');
+  }
+  return user;
+}
+
+function homePathForRole(role: UserRole): string {
+  if (role === 'speaker') return '/my-profile';
+  if (role === 'sponsor') return '/my-profile';
+  return '/';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<PublicUser | null>(() => tokenStorage.getUser<PublicUser>());
+  const [user, setUser] = useState<PublicUser | null>(() => {
+    const cached = tokenStorage.getUser<PublicUser>();
+    return cached && DASHBOARD_ROLES.includes(cached.role) ? cached : null;
+  });
   const [isBootstrapping, setIsBootstrapping] = useState(true);
 
   useEffect(() => {
@@ -31,12 +52,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function bootstrap() {
       const access = tokenStorage.getAccess();
       if (!access) {
-        if (!cancelled) setIsBootstrapping(false);
+        tokenStorage.clear();
+        if (!cancelled) {
+          setUser(null);
+          setIsBootstrapping(false);
+        }
         return;
       }
 
       try {
-        const me = await authApi.me();
+        const me = assertDashboardUser(await authApi.me());
         if (!cancelled) {
           setUser(me);
           tokenStorage.setUser(JSON.stringify(me));
@@ -56,13 +81,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (payload: LoginPayload) => {
-    const result = await authApi.login(payload);
-    if (result.user.role !== 'admin') {
-      throw new Error('Admin access required');
-    }
+    const result = await authApi.login({
+      email: payload.email.trim(),
+      password: payload.password,
+    });
+    assertDashboardUser(result.user);
     tokenStorage.setTokens(result.tokens.accessToken, result.tokens.refreshToken);
     tokenStorage.setUser(JSON.stringify(result.user));
     setUser(result.user);
+    return result.user;
   }, []);
 
   const logout = useCallback(() => {
@@ -75,6 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated: Boolean(user),
       isBootstrapping,
+      isAdmin: user?.role === 'admin',
+      isSpeaker: user?.role === 'speaker',
+      isSponsor: user?.role === 'sponsor',
       login,
       logout,
     }),
@@ -90,4 +120,9 @@ export function useAuth(): AuthContextValue {
     throw new Error('useAuth must be used inside AuthProvider');
   }
   return ctx;
+}
+
+export function getHomePathForUser(user: PublicUser | null): string {
+  if (!user) return '/login';
+  return homePathForRole(user.role);
 }

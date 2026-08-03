@@ -77,6 +77,10 @@ class DioClient {
 
 /// Maps Dio errors into domain-friendly exceptions.
 Never throwMappedDioError(DioException error) {
+  if (_isNetworkFailure(error)) {
+    throw const NetworkException();
+  }
+
   final status = error.response?.statusCode;
   final payload = error.response?.data;
 
@@ -86,10 +90,28 @@ Never throwMappedDioError(DioException error) {
     if (err is Map<String, dynamic> && err['message'] is String) {
       message = err['message'] as String;
     }
-  } else if (error.type == DioExceptionType.connectionError ||
-      error.type == DioExceptionType.connectionTimeout) {
-    throw const NetworkException();
   }
 
   throw ServerException(message, statusCode: status);
+}
+
+bool _isNetworkFailure(DioException error) {
+  switch (error.type) {
+    case DioExceptionType.connectionError:
+    case DioExceptionType.connectionTimeout:
+    case DioExceptionType.receiveTimeout:
+    case DioExceptionType.sendTimeout:
+      return true;
+    case DioExceptionType.unknown:
+      final detail = error.error?.toString().toLowerCase() ?? '';
+      return detail.contains('socket') ||
+          detail.contains('network') ||
+          detail.contains('connection') ||
+          detail.contains('failed host lookup');
+    case DioExceptionType.badResponse:
+    case DioExceptionType.cancel:
+    case DioExceptionType.badCertificate:
+    case DioExceptionType.transformTimeout:
+      return false;
+  }
 }

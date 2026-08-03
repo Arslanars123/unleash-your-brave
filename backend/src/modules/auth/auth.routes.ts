@@ -4,7 +4,12 @@ import { authenticate } from '../../middleware/authenticate.js';
 import { authRateLimiter } from '../../middleware/rate-limit.js';
 import { validate } from '../../middleware/validate.js';
 import type { AuthController } from './auth.controller.js';
-import { loginSchema, refreshSchema, registerSchema } from './auth.schema.js';
+import {
+  changePasswordSchema,
+  loginSchema,
+  refreshSchema,
+  registerSchema,
+} from './auth.schema.js';
 
 export function createAuthRouter(controller: AuthController): Router {
   const router = Router();
@@ -21,6 +26,14 @@ export function createAuthRouter(controller: AuthController): Router {
   router.post('/refresh', validate({ body: refreshSchema }), asyncHandler(controller.refresh));
 
   router.get('/me', authenticate, asyncHandler(controller.me));
+
+  router.post(
+    '/change-password',
+    authenticate,
+    authRateLimiter,
+    validate({ body: changePasswordSchema }),
+    asyncHandler(controller.changePassword),
+  );
 
   return router;
 }

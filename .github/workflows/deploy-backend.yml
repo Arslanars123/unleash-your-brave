@@ -1,0 +1,104 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-2
+  ECR_REPOSITORY: unleash-backend
+  APP_RUNNER_SERVICE_ARN: arn:aws:apprunner:ap-southeast-2:773063618702:service/unleash-api/63972ddb9f6a43568352bcfedfbdf9d9
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          TAG="ci-$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$TAG"
+          docker build --platform linux/amd64 -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to App Runner
+        env:
+          IMAGE_URI: ${{ steps.build.outputs.image }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          ACCESS_ROLE: arn:aws:iam::773063618702:role/AppRunnerECRAccessRoleUnleash
+        run: |
+          set -euo pipefail
+
+          CURRENT=$(aws apprunner describe-service \
+            --service-arn "$APP_RUNNER_SERVICE_ARN" \
+            --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables' \
+            --output json)
+
+          SOURCE=$(CURRENT_ENV="$CURRENT" IMAGE_URI="$IMAGE_URI" MONGODB_URI="$MONGODB_URI" ACCESS_ROLE="$ACCESS_ROLE" python3 - <<'PY'
+          import json, os
+          env = json.loads(os.environ.get("CURRENT_ENV") or "{}") or {}
+          mongo = (os.environ.get("MONGODB_URI") or "").strip()
+          if mongo:
+              env["MONGODB_URI"] = mongo
+          if not env.get("MONGODB_URI"):
+              raise SystemExit("MONGODB_URI missing: set GitHub secret MONGODB_URI")
+          print(json.dumps({
+              "AuthenticationConfiguration": {
+                  "AccessRoleArn": os.environ["ACCESS_ROLE"]
+              },
+              "AutoDeploymentsEnabled": False,
+              "ImageRepository": {
+                  "ImageIdentifier": os.environ["IMAGE_URI"],
+                  "ImageRepositoryType": "ECR",
+                  "ImageConfiguration": {
+                      "Port": "4000",
+                      "RuntimeEnvironmentVariables": env,
+                  },
+              },
+          }))
+          PY
+          )
+
+          aws apprunner update-service \
+            --service-arn "$APP_RUNNER_SERVICE_ARN" \
+            --source-configuration "$SOURCE"
+
+          echo "Waiting for App Runner RUNNING..."
+          for i in $(seq 1 60); do
+            STATUS=$(aws apprunner describe-service --service-arn "$APP_RUNNER_SERVICE_ARN" --query 'Service.Status' --output text)
+            echo "[$i] $STATUS"
+            case "$STATUS" in
+              RUNNING) exit 0 ;;
+              CREATE_FAILED|UPDATE_FAILED) exit 1 ;;
+            esac
+            sleep 10
+          done
+          exit 1

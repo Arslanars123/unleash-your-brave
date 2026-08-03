@@ -13,6 +13,13 @@
 share build tooling, packages, or runtime code. The only shared contract is the
 versioned HTTP API under `/api/v1`.
 
+## Flutter visual system
+
+See [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) for colors, type, and component rules.
+Tokens are implemented in `app/lib/core/theme/` (`app_colors.dart`,
+`app_typography.dart`, `app_theme.dart`). All new Flutter screens should follow
+that dark luxury / editorial event-app aesthetic.
+
 ## Flutter (`app/`) — Clean Architecture
 
 Per-feature layers:

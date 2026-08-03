@@ -62,3 +62,11 @@ flutter run
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the layering rules, dependency
 direction, and the conventions each project follows.
+
+## Deploy (AWS) + GoHighLevel webhook
+
+Backend and admin dashboard deploy **separately**. See
+[`docs/AWS_DEPLOY.md`](docs/AWS_DEPLOY.md) for App Runner + Amplify steps and the GHL
+webhook URL:
+
+`POST /api/v1/webhooks/ghl`

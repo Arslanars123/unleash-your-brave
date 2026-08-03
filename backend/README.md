@@ -45,7 +45,11 @@ Health check: `GET http://localhost:4000/health`
 
 ## Persistence
 
-The current repository is an in-memory store so the project boots with zero
-external dependencies. Swap `InMemoryUserRepository` in `src/app/container.ts`
-for a Prisma / Drizzle / TypeORM adapter when you are ready — the service
-interfaces do not change.
+Data is stored in **MongoDB** (local or Atlas). Set `MONGODB_URI` in `.env`:
+
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017/unleash_your_brave
+```
+
+Repositories in `src/db/repositories/` implement the module interfaces. Demo
+seed data is idempotent (skips existing emails / empty-collection checks).

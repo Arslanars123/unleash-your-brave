@@ -1,7 +1,12 @@
 import type { Request, Response } from 'express';
 import { sendSuccess } from '../../core/http/response.js';
 import type { AuthService } from './auth.service.js';
-import type { LoginInput, RefreshInput, RegisterInput } from './auth.schema.js';
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  RefreshInput,
+  RegisterInput,
+} from './auth.schema.js';
 
 export class AuthController {
   constructor(private readonly service: AuthService) {}
@@ -12,6 +17,13 @@ export class AuthController {
 
   login = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.login(req.body as LoginInput));
+  };
+
+  changePassword = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(
+      res,
+      await this.service.changePassword(req.auth!.userId, req.body as ChangePasswordInput),
+    );
   };
 
   refresh = async (req: Request, res: Response): Promise<void> => {

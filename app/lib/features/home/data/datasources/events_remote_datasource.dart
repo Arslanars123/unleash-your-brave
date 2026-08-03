@@ -1,0 +1,21 @@
+import 'package:dio/dio.dart';
+import 'package:unleash_your_brave/core/constants/app_constants.dart';
+import 'package:unleash_your_brave/core/network/dio_client.dart';
+import 'package:unleash_your_brave/features/home/data/models/event_model.dart';
+
+class EventsRemoteDataSource {
+  EventsRemoteDataSource(this._dioClient);
+
+  final DioClient _dioClient;
+
+  Future<EventModel> getCurrent() async {
+    try {
+      final response = await _dioClient.client.get(ApiConstants.currentEvent);
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return EventModel.fromJson(data);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+}

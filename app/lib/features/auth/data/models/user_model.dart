@@ -9,6 +9,7 @@ class UserModel extends UserEntity {
     required super.name,
     required super.role,
     required super.status,
+    super.mustChangePassword = false,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -18,6 +19,7 @@ class UserModel extends UserEntity {
       name: json['name'] as String,
       role: json['role'] as String,
       status: json['status'] as String,
+      mustChangePassword: json['mustChangePassword'] as bool? ?? false,
     );
   }
 
@@ -28,6 +30,7 @@ class UserModel extends UserEntity {
       'name': name,
       'role': role,
       'status': status,
+      'mustChangePassword': mustChangePassword,
     };
   }
 
