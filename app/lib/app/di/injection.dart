@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unleash_your_brave/core/network/dio_client.dart';
 import 'package:unleash_your_brave/core/network/token_storage.dart';
+import 'package:unleash_your_brave/core/notifications/push_notification_service.dart';
 import 'package:unleash_your_brave/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:unleash_your_brave/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:unleash_your_brave/features/auth/data/datasources/uploads_remote_datasource.dart';
@@ -16,6 +17,11 @@ import 'package:unleash_your_brave/features/auth/domain/usecases/update_my_profi
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/agenda_local_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
+import 'package:unleash_your_brave/features/chat/data/datasources/chat_local_datasource.dart';
+import 'package:unleash_your_brave/features/chat/data/datasources/chat_remote_datasource.dart';
+import 'package:unleash_your_brave/features/chat/data/repositories/chat_repository_impl.dart';
+import 'package:unleash_your_brave/features/chat/domain/repositories/chat_repository.dart';
+import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_cubit.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 
 final sl = GetIt.instance;
@@ -42,6 +48,19 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => LogoutUseCase(sl()));
   sl.registerLazySingleton(() => ChangePasswordUseCase(sl()));
   sl.registerLazySingleton(() => UpdateMyProfileUseCase(sl()));
+
+  // Chat data
+  sl.registerLazySingleton(() => ChatRemoteDataSource(sl(), sl()));
+  sl.registerLazySingleton(() => ChatLocalDataSource(prefs));
+  sl.registerLazySingleton<ChatRepository>(
+    () => ChatRepositoryImpl(remote: sl(), local: sl()),
+  );
+
+  // Chat presentation
+  sl.registerLazySingleton(() => ChatUnreadCubit(sl()));
+
+  // Push notifications
+  sl.registerLazySingleton(() => PushNotificationService(sl()));
 
   // Home / events / agenda
   sl.registerLazySingleton(() => EventsRemoteDataSource(sl()));

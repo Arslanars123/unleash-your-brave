@@ -26,6 +26,10 @@ const envSchema = z.object({
   INVITE_CODE_TTL_DAYS: z.coerce.number().int().positive().default(7),
   /** MongoDB connection string (Atlas or local). */
   MONGODB_URI: z.string().min(1).default('mongodb://127.0.0.1:27017/unleash_your_brave'),
+  /** Firebase Admin service account JSON string (preferred in App Runner). */
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  /** Or path to a service-account JSON file (local/dev). */
+  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -66,6 +70,10 @@ export const env = {
   },
   inviteCodeTtlDays: raw.INVITE_CODE_TTL_DAYS,
   mongodbUri: raw.MONGODB_URI,
+  firebase: {
+    serviceAccountJson: raw.FIREBASE_SERVICE_ACCOUNT_JSON,
+    serviceAccountPath: raw.FIREBASE_SERVICE_ACCOUNT_PATH,
+  },
 } as const;
 
 export type Env = typeof env;

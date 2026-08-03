@@ -33,7 +33,9 @@ export function createApp(container: Container): Express {
   app.use(
     compression({
       filter: (req, res) => {
-        if (req.url?.startsWith('/api/v1/realtime')) return false;
+        if (req.url?.startsWith('/api/v1/realtime') || req.url?.startsWith('/api/v1/chat/stream')) {
+          return false;
+        }
         return compression.filter(req, res);
       },
     }),
@@ -46,7 +48,9 @@ export function createApp(container: Container): Express {
       logger,
       autoLogging: {
         ignore: (req: IncomingMessage) =>
-          req.url === '/health' || Boolean(req.url?.startsWith('/api/v1/realtime')),
+          req.url === '/health' ||
+          Boolean(req.url?.startsWith('/api/v1/realtime')) ||
+          Boolean(req.url?.startsWith('/api/v1/chat/stream')),
       },
     }),
   );
@@ -71,6 +75,7 @@ export function createApp(container: Container): Express {
   app.use('/api/v1/uploads', container.routers.uploads);
   app.use('/api/v1/webhooks', container.routers.webhooks);
   app.use('/api/v1/realtime', container.routers.realtime);
+  app.use('/api/v1/chat', container.routers.chat);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

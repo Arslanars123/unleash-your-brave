@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/features/agenda/domain/entities/session_entity.dart';
@@ -11,6 +12,9 @@ import 'package:unleash_your_brave/features/auth/presentation/pages/login_page.d
 import 'package:unleash_your_brave/features/auth/presentation/pages/set_password_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/signup_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/verify_code_page.dart';
+import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_cubit.dart';
+import 'package:unleash_your_brave/features/chat/presentation/pages/chat_list_page.dart';
+import 'package:unleash_your_brave/features/chat/presentation/pages/chat_room_page.dart';
 import 'package:unleash_your_brave/features/home/presentation/pages/home_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/edit_profile_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/main_shell.dart';
@@ -95,11 +99,19 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: '/network',
-                builder: (context, state) => const PlaceholderTabPage(
-                  title: 'Network',
-                  subtitle: 'Connect with fellow members soon.',
-                  icon: Icons.groups_outlined,
+                builder: (context, state) => BlocProvider.value(
+                  value: sl<ChatUnreadCubit>(),
+                  child: const ChatListPage(),
                 ),
+                routes: [
+                  GoRoute(
+                    path: 'chat',
+                    builder: (context, state) => BlocProvider.value(
+                      value: sl<ChatUnreadCubit>(),
+                      child: const ChatRoomPage(),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

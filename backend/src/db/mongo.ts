@@ -87,5 +87,36 @@ async function ensureIndexes(database: Db): Promise<void> {
     database.collection('post_comments').createIndexes([
       { key: { postId: 1, createdAt: 1 }, name: 'post_comments_post_created' },
     ]),
+    database.collection('chat_groups').createIndexes([
+      { key: { createdAt: -1 }, name: 'chat_groups_createdAt' },
+    ]),
+    database.collection('chat_messages').createIndexes([
+      { key: { groupId: 1, createdAt: -1, _id: -1 }, name: 'chat_messages_group_created' },
+      {
+        key: { groupId: 1, clientId: 1 },
+        unique: true,
+        name: 'chat_messages_group_client_unique',
+      },
+      { key: { senderId: 1 }, name: 'chat_messages_senderId' },
+    ]),
+    database.collection('chat_member_state').createIndexes([
+      {
+        key: { groupId: 1, userId: 1 },
+        unique: true,
+        name: 'chat_member_state_group_user_unique',
+      },
+    ]),
+    database.collection('chat_reactions').createIndexes([
+      {
+        key: { messageId: 1, userId: 1 },
+        unique: true,
+        name: 'chat_reactions_message_user_unique',
+      },
+      { key: { messageId: 1 }, name: 'chat_reactions_messageId' },
+    ]),
+    database.collection('device_tokens').createIndexes([
+      { key: { token: 1 }, unique: true, name: 'device_tokens_token_unique' },
+      { key: { userId: 1 }, name: 'device_tokens_userId' },
+    ]),
   ]);
 }

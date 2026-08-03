@@ -1,0 +1,160 @@
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import admin from 'firebase-admin';
+import { env } from '../../config/env.js';
+import { logger } from '../../core/logger.js';
+import type { DeviceTokenRepository } from './chat.repository.js';
+import type { ChatMessageView, DevicePlatform } from './chat.types.js';
+
+let initialized = false;
+
+function initFirebaseAdmin(): boolean {
+  if (initialized) return true;
+  if (admin.apps.length > 0) {
+    initialized = true;
+    return true;
+  }
+
+  try {
+    if (env.firebase.serviceAccountJson) {
+      const credentials = JSON.parse(env.firebase.serviceAccountJson) as admin.ServiceAccount;
+      admin.initializeApp({
+        credential: admin.credential.cert(credentials),
+      });
+      initialized = true;
+      logger.info('Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT_JSON');
+      return true;
+    }
+
+    if (env.firebase.serviceAccountPath) {
+      const raw = readFileSync(env.firebase.serviceAccountPath, 'utf8');
+      const credentials = JSON.parse(raw) as admin.ServiceAccount;
+      admin.initializeApp({
+        credential: admin.credential.cert(credentials),
+      });
+      initialized = true;
+      logger.info(
+        { path: env.firebase.serviceAccountPath },
+        'Firebase Admin initialized from service account file',
+      );
+      return true;
+    }
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to initialize Firebase Admin');
+    return false;
+  }
+
+  logger.warn(
+    'Firebase Admin is not configured — push notifications will be skipped until FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH is set',
+  );
+  return false;
+}
+
+export class PushNotificationService {
+  constructor(private readonly tokens: DeviceTokenRepository) {}
+
+  async registerToken(input: {
+    userId: string;
+    token: string;
+    platform: DevicePlatform;
+  }) {
+    return this.tokens.upsert({
+      id: randomUUID(),
+      userId: input.userId,
+      token: input.token.trim(),
+      platform: input.platform,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  async unregisterToken(userId: string, token: string): Promise<void> {
+    await this.tokens.removeByUserAndToken(userId, token);
+  }
+
+  /**
+   * Notify every registered device except the sender's user id.
+   * Invalid / unregistered FCM tokens are pruned automatically.
+   */
+  async notifyNewChatMessage(params: {
+    senderUserId: string;
+    groupId: string;
+    groupName: string;
+    message: ChatMessageView;
+  }): Promise<{ attempted: number; success: number; pruned: number }> {
+    if (!initFirebaseAdmin()) {
+      return { attempted: 0, success: 0, pruned: 0 };
+    }
+
+    const devices = await this.tokens.listAllExceptUser(params.senderUserId);
+    if (devices.length === 0) {
+      return { attempted: 0, success: 0, pruned: 0 };
+    }
+
+    const title = params.groupName;
+    const body =
+      params.message.type === 'gif'
+        ? `${params.message.senderName} sent a GIF`
+        : `${params.message.senderName}: ${params.message.body.slice(0, 140)}`;
+
+    const data = {
+      type: 'chat.message',
+      groupId: params.groupId,
+      messageId: params.message.id,
+      senderId: params.message.senderId,
+      click_action: 'FLUTTER_NOTIFICATION_CLICK',
+    };
+
+    let success = 0;
+    let pruned = 0;
+
+    // Send in chunks of 500 (FCM multicast limit).
+    for (let i = 0; i < devices.length; i += 500) {
+      const chunk = devices.slice(i, i + 500);
+      const response = await admin.messaging().sendEachForMulticast({
+        tokens: chunk.map((d) => d.token),
+        notification: { title, body },
+        data,
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'chat_messages',
+            tag: `chat_${params.groupId}`,
+            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: { title, body },
+              sound: 'default',
+              badge: 1,
+              threadId: params.groupId,
+            },
+          },
+        },
+      });
+
+      success += response.successCount;
+
+      response.responses.forEach((result, index) => {
+        if (result.success) return;
+        const code = result.error?.code ?? '';
+        if (
+          code === 'messaging/registration-token-not-registered' ||
+          code === 'messaging/invalid-registration-token'
+        ) {
+          void this.tokens.removeByToken(chunk[index]!.token);
+          pruned += 1;
+        } else {
+          logger.warn(
+            { code, message: result.error?.message },
+            'FCM send failed for device token',
+          );
+        }
+      });
+    }
+
+    return { attempted: devices.length, success, pruned };
+  }
+}

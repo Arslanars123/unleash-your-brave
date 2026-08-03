@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
+import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_cubit.dart';
 
 class MainShell extends StatelessWidget {
   const MainShell({super.key, required this.navigationShell});
@@ -58,11 +61,23 @@ class MainShell extends StatelessWidget {
               children: [
                 for (var i = 0; i < _destinations.length; i++)
                   Expanded(
-                    child: _NavItem(
-                      destination: _destinations[i],
-                      selected: index == i,
-                      onTap: () => _onTap(context, i),
-                    ),
+                    child: i == 2 // Network tab index
+                        ? BlocBuilder<ChatUnreadCubit, ChatUnreadState>(
+                            bloc: sl<ChatUnreadCubit>(),
+                            builder: (context, chatState) {
+                              return _NavItem(
+                                destination: _destinations[i],
+                                selected: index == i,
+                                onTap: () => _onTap(context, i),
+                                badge: chatState.unreadCount > 0 ? chatState.unreadCount : null,
+                              );
+                            },
+                          )
+                        : _NavItem(
+                            destination: _destinations[i],
+                            selected: index == i,
+                            onTap: () => _onTap(context, i),
+                          ),
                   ),
               ],
             ),
@@ -97,11 +112,13 @@ class _NavItem extends StatelessWidget {
     required this.destination,
     required this.selected,
     required this.onTap,
+    this.badge,
   });
 
   final _NavDestination destination;
   final bool selected;
   final VoidCallback onTap;
+  final int? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -114,10 +131,40 @@ class _NavItem extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            selected ? destination.selectedIcon : destination.icon,
-            size: 22,
-            color: color,
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(
+                selected ? destination.selectedIcon : destination.icon,
+                size: 22,
+                color: color,
+              ),
+              if (badge != null && badge! > 0)
+                Positioned(
+                  right: -8,
+                  top: -8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentPink,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      badge! > 99 ? '99+' : '$badge',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(

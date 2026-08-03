@@ -53,6 +53,7 @@ jobs:
         env:
           IMAGE_URI: ${{ steps.build.outputs.image }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           ACCESS_ROLE: arn:aws:iam::773063618702:role/AppRunnerECRAccessRoleUnleash
         run: |
           set -euo pipefail
@@ -62,7 +63,7 @@ jobs:
             --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables' \
             --output json)
 
-          SOURCE=$(CURRENT_ENV="$CURRENT" IMAGE_URI="$IMAGE_URI" MONGODB_URI="$MONGODB_URI" ACCESS_ROLE="$ACCESS_ROLE" python3 - <<'PY'
+          SOURCE=$(CURRENT_ENV="$CURRENT" IMAGE_URI="$IMAGE_URI" MONGODB_URI="$MONGODB_URI" FIREBASE_SERVICE_ACCOUNT_JSON="$FIREBASE_SERVICE_ACCOUNT_JSON" ACCESS_ROLE="$ACCESS_ROLE" python3 - <<'PY'
           import json, os
           env = json.loads(os.environ.get("CURRENT_ENV") or "{}") or {}
           mongo = (os.environ.get("MONGODB_URI") or "").strip()
@@ -70,6 +71,9 @@ jobs:
               env["MONGODB_URI"] = mongo
           if not env.get("MONGODB_URI"):
               raise SystemExit("MONGODB_URI missing: set GitHub secret MONGODB_URI")
+          firebase = (os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
+          if firebase:
+              env["FIREBASE_SERVICE_ACCOUNT_JSON"] = firebase
           print(json.dumps({
               "AuthenticationConfiguration": {
                   "AccessRoleArn": os.environ["ACCESS_ROLE"]

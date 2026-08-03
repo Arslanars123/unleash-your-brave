@@ -1,0 +1,53 @@
+import { z } from 'zod';
+import { ALLOWED_REACTIONS, CHAT_MESSAGE_TYPES, DEVICE_PLATFORMS } from './chat.types.js';
+
+export const listMessagesQuerySchema = z.object({
+  before: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(40),
+});
+
+export const listMembersQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  perPage: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export const createMessageSchema = z
+  .object({
+    clientId: z.string().uuid(),
+    type: z.enum(CHAT_MESSAGE_TYPES),
+    body: z.string().max(4000).optional(),
+    gifUrl: z.string().url().max(2000).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type === 'text' && !(value.body?.trim())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'body is required for text', path: ['body'] });
+    }
+    if (value.type === 'gif' && !value.gifUrl) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'gifUrl is required for gif', path: ['gifUrl'] });
+    }
+  });
+
+export const messageIdParamSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export const receiptSchema = z.object({
+  messageId: z.string().uuid(),
+});
+
+export const reactionSchema = z.object({
+  emoji: z.enum(ALLOWED_REACTIONS),
+});
+
+export const syncQuerySchema = z.object({
+  since: z.string().datetime({ offset: true }).or(z.string().min(1)),
+});
+
+export const registerDeviceSchema = z.object({
+  token: z.string().trim().min(10).max(4096),
+  platform: z.enum(DEVICE_PLATFORMS),
+});
+
+export const unregisterDeviceSchema = z.object({
+  token: z.string().trim().min(10).max(4096),
+});

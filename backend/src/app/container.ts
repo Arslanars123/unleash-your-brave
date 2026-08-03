@@ -4,6 +4,11 @@ import { AuthService } from '../modules/auth/auth.service.js';
 import { AnnouncementController } from '../modules/announcements/announcement.controller.js';
 import { createAnnouncementRouter } from '../modules/announcements/announcement.routes.js';
 import { AnnouncementService } from '../modules/announcements/announcement.service.js';
+import { ChatController } from '../modules/chat/chat.controller.js';
+import { ChatHub } from '../modules/chat/chat.hub.js';
+import { createChatRouter } from '../modules/chat/chat.routes.js';
+import { ChatService } from '../modules/chat/chat.service.js';
+import { PushNotificationService } from '../modules/chat/push.service.js';
 import { EventController } from '../modules/events/event.controller.js';
 import { createEventRouter } from '../modules/events/event.routes.js';
 import { EventService } from '../modules/events/event.service.js';
@@ -35,6 +40,11 @@ import { RealtimeHub } from '../modules/realtime/realtime.hub.js';
 import { createRealtimeRouter } from '../modules/realtime/realtime.routes.js';
 import { connectMongo } from '../db/mongo.js';
 import { MongoAnnouncementRepository } from '../db/repositories/mongo-announcement.repository.js';
+import { MongoChatGroupRepository } from '../db/repositories/mongo-chat-group.repository.js';
+import { MongoChatMemberStateRepository } from '../db/repositories/mongo-chat-member-state.repository.js';
+import { MongoChatMessageRepository } from '../db/repositories/mongo-chat-message.repository.js';
+import { MongoChatReactionRepository } from '../db/repositories/mongo-chat-reaction.repository.js';
+import { MongoDeviceTokenRepository } from '../db/repositories/mongo-device-token.repository.js';
 import { MongoEventRepository } from '../db/repositories/mongo-event.repository.js';
 import { MongoPostRepository } from '../db/repositories/mongo-post.repository.js';
 import { MongoSessionFeedbackRepository } from '../db/repositories/mongo-session-feedback.repository.js';
@@ -58,6 +68,11 @@ export async function createContainer() {
   const sponsorRepository = new MongoSponsorRepository();
   const announcementRepository = new MongoAnnouncementRepository();
   const postRepository = new MongoPostRepository();
+  const chatGroupRepository = new MongoChatGroupRepository();
+  const chatMessageRepository = new MongoChatMessageRepository();
+  const chatMemberStateRepository = new MongoChatMemberStateRepository();
+  const chatReactionRepository = new MongoChatReactionRepository();
+  const deviceTokenRepository = new MongoDeviceTokenRepository();
   const mailService = new MailService();
 
   const userService = new UserService(userRepository, speakerRepository, sponsorRepository);
@@ -79,6 +94,17 @@ export async function createContainer() {
   const announcementService = new AnnouncementService(announcementRepository);
   const postService = new PostService(postRepository, userRepository);
   const realtimeHub = new RealtimeHub();
+  const chatHub = new ChatHub();
+  const pushNotificationService = new PushNotificationService(deviceTokenRepository);
+  const chatService = new ChatService(
+    chatGroupRepository,
+    chatMessageRepository,
+    chatMemberStateRepository,
+    chatReactionRepository,
+    userRepository,
+    chatHub,
+    pushNotificationService,
+  );
   const ghlWebhookService = new GhlWebhookService(userService, realtimeHub, mailService);
 
   const userController = new UserController(userService);
@@ -90,6 +116,7 @@ export async function createContainer() {
   const sponsorController = new SponsorController(sponsorService);
   const announcementController = new AnnouncementController(announcementService);
   const postController = new PostController(postService);
+  const chatController = new ChatController(chatService, chatHub, pushNotificationService);
   const ghlWebhookController = new GhlWebhookController(ghlWebhookService);
   const realtimeController = new RealtimeController(realtimeHub);
   const uploadController = new UploadController();
@@ -105,6 +132,8 @@ export async function createContainer() {
     postService,
   );
 
+  await chatService.ensureGroup();
+
   return {
     routers: {
       auth: createAuthRouter(authController),
@@ -118,6 +147,7 @@ export async function createContainer() {
       uploads: createUploadRouter(uploadController),
       webhooks: createGhlWebhookRouter(ghlWebhookController),
       realtime: createRealtimeRouter(realtimeController),
+      chat: createChatRouter(chatController),
     },
     services: {
       userService,
@@ -129,8 +159,11 @@ export async function createContainer() {
       sponsorService,
       announcementService,
       postService,
+      chatService,
+      pushNotificationService,
       ghlWebhookService,
       realtimeHub,
+      chatHub,
       mailService,
     },
   };
