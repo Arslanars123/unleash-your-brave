@@ -21,6 +21,10 @@ abstract class AuthRepository {
     required String newPassword,
   });
 
+  Future<Either<Failure, UserEntity>> updateMyProfile(
+    Map<String, dynamic> payload,
+  );
+
   Future<Either<Failure, void>> logout();
 
   Future<bool> hasSession();

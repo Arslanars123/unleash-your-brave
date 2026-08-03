@@ -6,6 +6,8 @@ class ApiConstants {
   static const me = '/auth/me';
   static const refresh = '/auth/refresh';
   static const changePassword = '/auth/change-password';
+  static const updateMyProfile = '/users/me';
+  static const uploadImage = '/uploads/images';
   static const currentEvent = '/events/current';
   static const sessions = '/sessions';
 }

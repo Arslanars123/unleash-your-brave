@@ -146,3 +146,58 @@ export const updateUserSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to update',
   });
+
+/** Members editing their own profile — no role/status/password/VIP controls. */
+export const updateMyProfileSchema = z
+  .object({
+    name: z.string().trim().min(2).max(80).optional(),
+    photoUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .optional()
+      .refine(
+        (value) =>
+          value === undefined ||
+          value === '' ||
+          isValidMediaUrl(value) ||
+          /^https?:\/\//i.test(value),
+        { message: 'Enter a valid photo URL or uploaded path' },
+      ),
+    title: z.string().trim().max(160).optional(),
+    business: z.string().trim().max(160).optional(),
+    industry: z.string().trim().max(160).optional(),
+    location: z.string().trim().max(160).optional(),
+    bio: z.string().trim().max(5000).optional(),
+    goals: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+    interests: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+    networkingPrefs: z.enum(NETWORKING_PREFS).optional(),
+    linkedinUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .optional()
+      .refine((value) => value === undefined || value === '' || /^https?:\/\//i.test(value), {
+        message: 'Enter a valid URL',
+      }),
+    instagramUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .optional()
+      .refine((value) => value === undefined || value === '' || /^https?:\/\//i.test(value), {
+        message: 'Enter a valid URL',
+      }),
+    websiteUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .optional()
+      .refine((value) => value === undefined || value === '' || /^https?:\/\//i.test(value), {
+        message: 'Enter a valid URL',
+      }),
+    profileCompleted: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'Provide at least one field to update',
+  });

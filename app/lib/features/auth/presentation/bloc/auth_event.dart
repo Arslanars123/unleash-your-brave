@@ -49,6 +49,15 @@ final class AuthChangePasswordRequested extends AuthEvent {
   List<Object?> get props => [currentPassword, newPassword];
 }
 
+final class AuthUserUpdated extends AuthEvent {
+  const AuthUserUpdated(this.user);
+
+  final UserEntity user;
+
+  @override
+  List<Object?> get props => [user];
+}
+
 final class AuthLogoutRequested extends AuthEvent {
   const AuthLogoutRequested();
 }

@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { UnauthorizedError } from '../../core/errors/app-error.js';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
 import type { UserService } from './user.service.js';
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from './user.types.js';
@@ -22,6 +23,13 @@ export class UserController {
 
   update = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.update(req.params.id as string, req.body as UpdateUserInput));
+  };
+
+  updateMe = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth?.userId) {
+      throw new UnauthorizedError('Authentication required');
+    }
+    sendSuccess(res, await this.service.update(req.auth.userId, req.body as UpdateUserInput));
   };
 
   remove = async (req: Request, res: Response): Promise<void> => {

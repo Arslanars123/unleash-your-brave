@@ -116,6 +116,23 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<Either<Failure, UserEntity>> updateMyProfile(
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final user = await _remote.updateMyProfile(payload);
+      await _local.cacheUser(user);
+      return Right(user);
+    } on ServerException catch (error) {
+      return Left(AuthFailure(error.message));
+    } on NetworkException catch (error) {
+      return Left(NetworkFailure(error.message));
+    } catch (_) {
+      return const Left(UnexpectedFailure());
+    }
+  }
+
+  @override
   Future<Either<Failure, void>> logout() async {
     try {
       await _local.clear();

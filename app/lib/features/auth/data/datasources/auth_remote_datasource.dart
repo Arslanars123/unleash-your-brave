@@ -69,6 +69,20 @@ class AuthRemoteDataSource {
     }
   }
 
+  Future<UserModel> updateMyProfile(Map<String, dynamic> payload) async {
+    try {
+      final response = await _dioClient.client.patch(
+        ApiConstants.updateMyProfile,
+        data: payload,
+      );
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return UserModel.fromJson(data);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
   ({UserModel user, String accessToken, String refreshToken}) _parseAuthResult(
     Map<String, dynamic> body,
   ) {

@@ -6,12 +6,21 @@ import type { UserController } from './user.controller.js';
 import {
   createUserSchema,
   listUsersQuerySchema,
+  updateMyProfileSchema,
   updateUserSchema,
   userIdParamSchema,
 } from './user.schema.js';
 
 export function createUserRouter(controller: UserController): Router {
   const router = Router();
+
+  // Self-service profile update (any authenticated role).
+  router.patch(
+    '/me',
+    authenticate,
+    validate({ body: updateMyProfileSchema }),
+    asyncHandler(controller.updateMe),
+  );
 
   router.use(authenticate, authorize('admin'));
 

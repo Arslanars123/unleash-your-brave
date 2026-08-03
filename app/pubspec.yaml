@@ -37,6 +37,7 @@ dependencies:
   # Typography (Playfair Display + Inter)
   google_fonts: ^6.2.1
   url_launcher: ^6.3.2
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

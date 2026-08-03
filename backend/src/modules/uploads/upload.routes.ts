@@ -10,7 +10,7 @@ export function createUploadRouter(controller: UploadController): Router {
   router.post(
     '/images',
     authenticate,
-    authorize('admin', 'speaker', 'sponsor'),
+    authorize('admin', 'speaker', 'sponsor', 'member'),
     imageUpload.single('file'),
     asyncHandler(controller.uploadImage),
   );

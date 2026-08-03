@@ -12,6 +12,7 @@ import 'package:unleash_your_brave/features/auth/presentation/pages/set_password
 import 'package:unleash_your_brave/features/auth/presentation/pages/signup_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/verify_code_page.dart';
 import 'package:unleash_your_brave/features/home/presentation/pages/home_page.dart';
+import 'package:unleash_your_brave/features/shell/presentation/pages/edit_profile_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/main_shell.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/placeholder_tab_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/profile_page.dart';
@@ -119,6 +120,12 @@ class AppRouter {
               GoRoute(
                 path: '/profile',
                 builder: (context, state) => const ProfilePage(),
+                routes: [
+                  GoRoute(
+                    path: 'edit',
+                    builder: (context, state) => const EditProfilePage(),
+                  ),
+                ],
               ),
             ],
           ),

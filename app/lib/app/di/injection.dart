@@ -4,6 +4,7 @@ import 'package:unleash_your_brave/core/network/dio_client.dart';
 import 'package:unleash_your_brave/core/network/token_storage.dart';
 import 'package:unleash_your_brave/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:unleash_your_brave/features/auth/data/datasources/auth_remote_datasource.dart';
+import 'package:unleash_your_brave/features/auth/data/datasources/uploads_remote_datasource.dart';
 import 'package:unleash_your_brave/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:unleash_your_brave/features/auth/domain/repositories/auth_repository.dart';
 import 'package:unleash_your_brave/features/auth/domain/usecases/change_password_usecase.dart';
@@ -11,6 +12,7 @@ import 'package:unleash_your_brave/features/auth/domain/usecases/get_current_use
 import 'package:unleash_your_brave/features/auth/domain/usecases/login_usecase.dart';
 import 'package:unleash_your_brave/features/auth/domain/usecases/logout_usecase.dart';
 import 'package:unleash_your_brave/features/auth/domain/usecases/register_usecase.dart';
+import 'package:unleash_your_brave/features/auth/domain/usecases/update_my_profile_usecase.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/agenda_local_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
@@ -28,6 +30,7 @@ Future<void> configureDependencies() async {
   // Auth data
   sl.registerLazySingleton(() => AuthRemoteDataSource(sl()));
   sl.registerLazySingleton(() => AuthLocalDataSource(sl()));
+  sl.registerLazySingleton(() => UploadsRemoteDataSource(sl()));
   sl.registerLazySingleton<AuthRepository>(
     () => AuthRepositoryImpl(remote: sl(), local: sl()),
   );
@@ -38,6 +41,7 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => GetCurrentUserUseCase(sl()));
   sl.registerLazySingleton(() => LogoutUseCase(sl()));
   sl.registerLazySingleton(() => ChangePasswordUseCase(sl()));
+  sl.registerLazySingleton(() => UpdateMyProfileUseCase(sl()));
 
   // Home / events / agenda
   sl.registerLazySingleton(() => EventsRemoteDataSource(sl()));

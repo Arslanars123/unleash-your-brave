@@ -50,5 +50,9 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a profile photo from your library.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a new profile photo with your camera.</string>
 </dict>
 </plist>
