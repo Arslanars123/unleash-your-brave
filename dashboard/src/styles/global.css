@@ -1691,9 +1691,10 @@ td strong {
   text-underline-offset: 2px;
 }
 
-/* Google Places dropdown must sit above the modal */
+/* Google Places dropdown must sit above the modal backdrop */
 .pac-container {
-  z-index: 2000 !important;
+  z-index: 10000 !important;
+  pointer-events: auto;
 }
 
 .modal-actions {

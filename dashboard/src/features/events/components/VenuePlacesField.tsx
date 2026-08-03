@@ -20,16 +20,7 @@ interface VenuePlacesFieldProps {
 
 declare global {
   interface Window {
-    google?: {
-      maps?: {
-        places?: {
-          Autocomplete: new (
-            inputField: HTMLInputElement,
-            opts?: google.maps.places.AutocompleteOptions,
-          ) => google.maps.places.Autocomplete;
-        };
-      };
-    };
+    google?: typeof google;
     __uybMapsReady?: Promise<void>;
   }
 }
@@ -82,28 +73,63 @@ export function VenuePlacesField({
   onChange,
   errors,
 }: VenuePlacesFieldProps) {
-  const searchId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  const [search, setSearch] = useState('');
+  const addressId = useId();
+  const addressRef = useRef<HTMLInputElement>(null);
+  const onChangeRef = useRef(onChange);
+  const venueNameRef = useRef(venueName);
+  const venueCityRef = useRef(venueCity);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [mapsReady, setMapsReady] = useState(false);
+  const [status, setStatus] = useState('Loading Google Places…');
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 
+  onChangeRef.current = onChange;
+  venueNameRef.current = venueName;
+  venueCityRef.current = venueCity;
+
   useEffect(() => {
     if (!apiKey?.trim()) {
-      setMapsError('Set VITE_GOOGLE_MAPS_API_KEY to enable Places search.');
+      setMapsError('Set VITE_GOOGLE_MAPS_API_KEY in dashboard/.env, then restart npm run dev.');
+      setStatus('');
       return;
     }
 
     let cancelled = false;
     void loadGoogleMaps(apiKey.trim())
       .then(() => {
-        if (!cancelled) setMapsReady(true);
+        if (cancelled) return;
+        const waitForPlaces = () =>
+          new Promise<void>((resolve, reject) => {
+            const started = Date.now();
+            const tick = () => {
+              if (window.google?.maps?.places) {
+                resolve();
+                return;
+              }
+              if (Date.now() - started > 8000) {
+                reject(new Error('Places library timed out'));
+                return;
+              }
+              window.setTimeout(tick, 50);
+            };
+            tick();
+          });
+
+        return waitForPlaces().then(() => {
+          if (!cancelled) {
+            setMapsReady(true);
+            setStatus('Type here, then click a Google suggestion to set the map pin.');
+          }
+        });
       })
       .catch(() => {
-        if (!cancelled) setMapsError('Unable to load Google Places. Check the API key.');
+        if (!cancelled) {
+          setMapsError(
+            'Unable to load Google Places. Enable Maps JavaScript API + Places API for this key, then restart npm run dev.',
+          );
+          setStatus('');
+        }
       });
 
     return () => {
@@ -112,31 +138,39 @@ export function VenuePlacesField({
   }, [apiKey]);
 
   useEffect(() => {
-    if (!mapsReady || !inputRef.current || !window.google?.maps?.places) return;
-    if (autocompleteRef.current) return;
+    const input = addressRef.current;
+    if (!mapsReady || !input || !window.google?.maps?.places) return;
 
-    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+    const autocomplete = new window.google.maps.places.Autocomplete(input, {
       fields: ['name', 'formatted_address', 'geometry', 'address_components'],
-      types: ['establishment'],
     });
 
-    autocomplete.addListener('place_changed', () => {
+    const listener = autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
       const location = place.geometry?.location;
-      if (!location) return;
+      if (!location) {
+        setStatus('Pick a suggestion from the dropdown to set the pin.');
+        return;
+      }
 
-      onChange({
-        venueName: place.name?.trim() || '',
-        venueAddress: place.formatted_address?.trim() || '',
-        venueCity: cityFromComponents(place.address_components),
+      const nextAddress =
+        place.formatted_address?.trim() || input.value.trim() || '';
+      onChangeRef.current({
+        venueName: place.name?.trim() || venueNameRef.current,
+        venueAddress: nextAddress,
+        venueCity: cityFromComponents(place.address_components) || venueCityRef.current,
         latitude: location.lat(),
         longitude: location.lng(),
       });
-      setSearch(place.name?.trim() || place.formatted_address?.trim() || '');
+      setStatus('Venue pin saved from Google Places.');
     });
 
-    autocompleteRef.current = autocomplete;
-  }, [mapsReady, onChange]);
+    return () => {
+      listener.remove();
+      window.google?.maps?.event.clearInstanceListeners(autocomplete);
+      document.querySelectorAll('.pac-container').forEach((node) => node.remove());
+    };
+  }, [mapsReady]);
 
   function clearCoords() {
     onChange({
@@ -152,25 +186,30 @@ export function VenuePlacesField({
 
   return (
     <div className="venue-places">
-      <label className="field" htmlFor={searchId}>
-        <span className="field-label">Search venue (Google Places)</span>
+      <label className="field" htmlFor={addressId}>
+        <span className="field-label">Venue address</span>
         <input
-          id={searchId}
-          ref={inputRef}
-          className="field-input"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Start typing a venue name…"
+          id={addressId}
+          ref={addressRef}
+          className={`field-input${errors?.venueAddress ? ' field-input-error' : ''}`}
+          name="venueAddress"
+          value={venueAddress}
+          onChange={(e) =>
+            onChange({
+              venueName,
+              venueAddress: e.target.value,
+              venueCity,
+              // Clear pin when the user edits address manually after a Places pick.
+              latitude: null,
+              longitude: null,
+            })
+          }
+          placeholder="Start typing an address or venue…"
           autoComplete="off"
-          disabled={!mapsReady}
         />
+        {errors?.venueAddress ? <span className="field-error">{errors.venueAddress}</span> : null}
         {mapsError ? <span className="field-error">{mapsError}</span> : null}
-        {!mapsError && !apiKey?.trim() ? (
-          <span className="hint">Places search needs VITE_GOOGLE_MAPS_API_KEY.</span>
-        ) : null}
-        {mapsReady ? (
-          <span className="hint">Pick a result to fill name, address, city, and map pin.</span>
-        ) : null}
+        {!mapsError && status ? <span className="hint">{status}</span> : null}
       </label>
 
       <label className="field">
@@ -191,26 +230,6 @@ export function VenuePlacesField({
           placeholder="The Vinoy"
         />
         {errors?.venueName ? <span className="field-error">{errors.venueName}</span> : null}
-      </label>
-
-      <label className="field">
-        <span className="field-label">Venue address</span>
-        <input
-          className={`field-input${errors?.venueAddress ? ' field-input-error' : ''}`}
-          name="venueAddress"
-          value={venueAddress}
-          onChange={(e) =>
-            onChange({
-              venueName,
-              venueAddress: e.target.value,
-              venueCity,
-              latitude,
-              longitude,
-            })
-          }
-          placeholder="501 5th Ave NE"
-        />
-        {errors?.venueAddress ? <span className="field-error">{errors.venueAddress}</span> : null}
       </label>
 
       <label className="field">
@@ -242,7 +261,7 @@ export function VenuePlacesField({
             </button>
           </p>
         ) : (
-          <p className="hint">No map pin yet — search and select a place above.</p>
+          <p className="hint">No map pin yet — pick a Google Places suggestion above.</p>
         )}
       </div>
     </div>

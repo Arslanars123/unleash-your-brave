@@ -85,11 +85,15 @@ You should get `success: true` and a created/updated member. In the dashboard
 1. Push this repo to GitHub (or connect Amplify to the repo).
 2. Create an Amplify app → select the `dashboard/` folder as the app root  
    (or use the included [`dashboard/amplify.yml`](../dashboard/amplify.yml)).
-3. Add environment variable:
+3. Add environment variables:
 
 ```env
 VITE_API_BASE_URL=https://YOUR_API_URL/api/v1
+VITE_GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_BROWSER_KEY
 ```
+
+`VITE_GOOGLE_MAPS_API_KEY` is required for venue Places search on the live dashboard.
+Enable **Maps JavaScript API** and **Places API**, and restrict the key to your Amplify domain.
 
 4. Build settings use `amplify.yml` (npm ci → npm run build → `dist/`).
 5. After deploy, open the Amplify URL and log in with your admin account.

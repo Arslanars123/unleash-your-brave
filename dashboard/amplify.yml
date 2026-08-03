@@ -6,6 +6,7 @@ frontend:
         - npm ci
     build:
       commands:
+        # Vite inlines VITE_* at build time — set these in Amplify Console → Environment variables
         - npm run build
   artifacts:
     baseDirectory: dist
