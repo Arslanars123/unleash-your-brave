@@ -12,6 +12,7 @@ import 'package:unleash_your_brave/features/auth/presentation/pages/login_page.d
 import 'package:unleash_your_brave/features/auth/presentation/pages/set_password_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/signup_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/verify_code_page.dart';
+import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_room_cubit.dart';
 import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_cubit.dart';
 import 'package:unleash_your_brave/features/chat/presentation/pages/chat_list_page.dart';
 import 'package:unleash_your_brave/features/chat/presentation/pages/chat_room_page.dart';
@@ -106,10 +107,22 @@ class AppRouter {
                 routes: [
                   GoRoute(
                     path: 'chat',
-                    builder: (context, state) => BlocProvider.value(
-                      value: sl<ChatUnreadCubit>(),
-                      child: const ChatRoomPage(),
-                    ),
+                    builder: (context, state) {
+                      final authState = sl<AuthBloc>().state;
+                      final currentUserId = authState is AuthAuthenticated
+                          ? authState.user.id
+                          : '';
+                      return MultiBlocProvider(
+                        providers: [
+                          BlocProvider.value(value: sl<ChatUnreadCubit>()),
+                          BlocProvider(
+                            create: (_) =>
+                                ChatRoomCubit(sl(), currentUserId)..loadInitial(),
+                          ),
+                        ],
+                        child: const ChatRoomPage(),
+                      );
+                    },
                   ),
                 ],
               ),

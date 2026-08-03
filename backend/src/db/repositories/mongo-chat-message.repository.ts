@@ -32,10 +32,14 @@ export class MongoChatMessageRepository implements ChatMessageRepository {
   }): Promise<ChatMessage[]> {
     const filter: Filter<MongoDoc<ChatMessage>> = { groupId: params.groupId };
     if (params.beforeCreatedAt) {
+      const beforeAt =
+        params.beforeCreatedAt instanceof Date
+          ? params.beforeCreatedAt
+          : new Date(params.beforeCreatedAt);
       filter.$or = [
-        { createdAt: { $lt: params.beforeCreatedAt } },
+        { createdAt: { $lt: beforeAt } },
         {
-          createdAt: params.beforeCreatedAt,
+          createdAt: beforeAt,
           _id: { $lt: params.beforeId ?? '' },
         },
       ];
@@ -47,7 +51,13 @@ export class MongoChatMessageRepository implements ChatMessageRepository {
       .limit(params.limit)
       .toArray();
 
-    return fromDocs<ChatMessage>(docs);
+    return fromDocs<ChatMessage>(docs).map((message) => ({
+      ...message,
+      createdAt:
+        message.createdAt instanceof Date
+          ? message.createdAt
+          : new Date(message.createdAt),
+    }));
   }
 
   async listSince(params: {
@@ -55,16 +65,24 @@ export class MongoChatMessageRepository implements ChatMessageRepository {
     since: Date;
     limit: number;
   }): Promise<ChatMessage[]> {
+    const since =
+      params.since instanceof Date ? params.since : new Date(params.since);
     const docs = await this.collection
       .find({
         groupId: params.groupId,
-        createdAt: { $gt: params.since },
+        createdAt: { $gt: since },
       } as Filter<MongoDoc<ChatMessage>>)
       .sort({ createdAt: 1, _id: 1 })
       .limit(params.limit)
       .toArray();
 
-    return fromDocs<ChatMessage>(docs);
+    return fromDocs<ChatMessage>(docs).map((message) => ({
+      ...message,
+      createdAt:
+        message.createdAt instanceof Date
+          ? message.createdAt
+          : new Date(message.createdAt),
+    }));
   }
 
   async countUnread(params: {

@@ -77,11 +77,9 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     result.fold(
       (failure) => emit(state.copyWith(loading: false, error: failure.message)),
       (messages) {
-        // Messages come in reverse chronological order, so reverse for chronological display
-        final chronologicalMessages = messages.reversed.toList();
         emit(state.copyWith(
           loading: false,
-          messages: chronologicalMessages,
+          messages: _sortedByTimestamp(messages),
           error: null,
         ));
         _connectSse();
@@ -104,12 +102,15 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       (failure) => emit(state.copyWith(loadingMore: false, error: failure.message)),
       (olderMessages) {
         if (olderMessages.isNotEmpty) {
-          // Prepend older messages (they come in reverse chronological order)
-          final chronologicalOlder = olderMessages.reversed.toList();
-          final allMessages = [...chronologicalOlder, ...state.messages];
+          final byId = <String, ChatMessageEntity>{
+            for (final m in state.messages) m.id: m,
+          };
+          for (final m in olderMessages) {
+            byId[m.id] = m;
+          }
           emit(state.copyWith(
             loadingMore: false,
-            messages: allMessages,
+            messages: _sortedByTimestamp(byId.values.toList()),
             error: null,
           ));
         } else {
@@ -152,8 +153,10 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     );
 
     // Add optimistic message to UI
-    final updatedMessages = [...state.messages, pendingMessage];
-    emit(state.copyWith(messages: updatedMessages, sending: false));
+    emit(state.copyWith(
+      messages: _sortedByTimestamp([...state.messages, pendingMessage]),
+      sending: false,
+    ));
 
     // Send to backend
     final result = await _repository.sendMessage(
@@ -166,9 +169,10 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     result.fold(
       (failure) {
         // Remove optimistic message on failure
-        final filteredMessages = state.messages.where((m) => m.clientId != clientId).toList();
+        final filteredMessages =
+            state.messages.where((m) => m.clientId != clientId).toList();
         emit(state.copyWith(
-          messages: filteredMessages,
+          messages: _sortedByTimestamp(filteredMessages),
           error: failure.message,
         ));
       },
@@ -180,7 +184,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
           }
           return m;
         }).toList();
-        emit(state.copyWith(messages: updatedMessages));
+        emit(state.copyWith(messages: _sortedByTimestamp(updatedMessages)));
       },
     );
   }
@@ -275,25 +279,31 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       if (isMine) {
         // Replace optimistic message if it exists
         final updatedMessages = state.messages.map((m) {
-          if (m.clientId != null && m.senderId == _currentUserId && 
-              m.createdAt.difference(message.createdAt).abs() < const Duration(seconds: 5)) {
+          if (m.clientId != null &&
+              m.senderId == _currentUserId &&
+              m.createdAt.difference(message.createdAt).abs() <
+                  const Duration(seconds: 5)) {
             return message;
           }
           return m;
         }).toList();
-        emit(state.copyWith(messages: updatedMessages));
-      } else {
-        // New message from others
-        final updatedMessages = [...state.messages, message];
-        
-        // Mark as delivered for sender
-        markDelivered(message.id);
-        
-        // Update unread count if not near bottom
-        final newCount = state.isNearBottom ? 0 : state.newMessageCountWhileScrolledUp + 1;
-        
+        final hasMatch = updatedMessages.any((m) => m.id == message.id);
         emit(state.copyWith(
-          messages: updatedMessages,
+          messages: _sortedByTimestamp(
+            hasMatch ? updatedMessages : [...updatedMessages, message],
+          ),
+        ));
+      } else {
+        // New message from others — dedupe by id
+        if (state.messages.any((m) => m.id == message.id)) return;
+
+        markDelivered(message.id);
+
+        final newCount =
+            state.isNearBottom ? 0 : state.newMessageCountWhileScrolledUp + 1;
+
+        emit(state.copyWith(
+          messages: _sortedByTimestamp([...state.messages, message]),
           newMessageCountWhileScrolledUp: newCount,
         ));
       }
@@ -351,10 +361,21 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     final nonPendingMessages = state.messages.where((m) {
       return m.id != m.clientId; // Real messages have different id than clientId
     }).toList();
-    
+
     if (nonPendingMessages.length != state.messages.length) {
-      emit(state.copyWith(messages: nonPendingMessages));
+      emit(state.copyWith(messages: _sortedByTimestamp(nonPendingMessages)));
     }
+  }
+
+  /// Oldest → newest by createdAt (stable by id).
+  List<ChatMessageEntity> _sortedByTimestamp(List<ChatMessageEntity> messages) {
+    final sorted = [...messages];
+    sorted.sort((a, b) {
+      final delta = a.createdAt.compareTo(b.createdAt);
+      if (delta != 0) return delta;
+      return a.id.compareTo(b.id);
+    });
+    return sorted;
   }
 
   void _scheduleReconnect() {

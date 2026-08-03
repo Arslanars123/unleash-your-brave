@@ -123,8 +123,12 @@ export class ChatService {
       beforeId,
       limit,
     });
-    // Return chronological (oldest → newest) for UI.
-    const chronological = [...rows].reverse();
+    // Always return oldest → newest by createdAt (stable by id).
+    const chronological = [...rows].sort((a, b) => {
+      const delta = a.createdAt.getTime() - b.createdAt.getTime();
+      if (delta !== 0) return delta;
+      return a.id.localeCompare(b.id);
+    });
     return this.toMessageViews(chronological, userId);
   }
 
@@ -331,8 +335,13 @@ export class ChatService {
       since,
       limit: 200,
     });
+    const chronological = [...rows].sort((a, b) => {
+      const delta = a.createdAt.getTime() - b.createdAt.getTime();
+      if (delta !== 0) return delta;
+      return a.id.localeCompare(b.id);
+    });
     return {
-      messages: await this.toMessageViews(rows, userId),
+      messages: await this.toMessageViews(chronological, userId),
       group: await this.getGroupSummary(userId),
     };
   }

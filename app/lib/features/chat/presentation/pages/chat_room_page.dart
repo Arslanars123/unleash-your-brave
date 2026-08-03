@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/utils/media_url.dart';
@@ -121,13 +120,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) {
-        final authState = context.read<AuthBloc>().state;
-        final currentUserId = authState is AuthAuthenticated ? authState.user.id : '';
-        return ChatRoomCubit(sl(), currentUserId)..loadInitial();
-      },
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: AppColors.bgBase,
         appBar: AppBar(
           backgroundColor: AppColors.bgCard,
@@ -284,7 +277,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             );
           },
         ),
-      ),
     );
   }
 
