@@ -58,6 +58,8 @@ export async function seedDemoData(
       venueName: 'The Vinoy',
       venueAddress: '501 5th Ave NE',
       venueCity: 'St. Petersburg, FL',
+      latitude: 27.773056,
+      longitude: -82.631389,
       coverImage: '',
     });
     eventId = event.id;

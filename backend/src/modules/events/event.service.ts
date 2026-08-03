@@ -175,6 +175,18 @@ export class EventService {
       venueName: pick(input.venueName, latest?.venueName ?? ''),
       venueAddress: pick(input.venueAddress, latest?.venueAddress ?? ''),
       venueCity: pick(input.venueCity, latest?.venueCity ?? ''),
+      latitude:
+        input.latitude !== undefined
+          ? input.latitude
+          : copy
+            ? (latest?.latitude ?? null)
+            : null,
+      longitude:
+        input.longitude !== undefined
+          ? input.longitude
+          : copy
+            ? (latest?.longitude ?? null)
+            : null,
       coverImage: pick(input.coverImage, latest?.coverImage ?? ''),
     });
   }
@@ -216,6 +228,8 @@ export class EventService {
       ...(input.venueName !== undefined ? { venueName: input.venueName } : {}),
       ...(input.venueAddress !== undefined ? { venueAddress: input.venueAddress } : {}),
       ...(input.venueCity !== undefined ? { venueCity: input.venueCity } : {}),
+      ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
+      ...(input.longitude !== undefined ? { longitude: input.longitude } : {}),
       ...(input.coverImage !== undefined ? { coverImage: input.coverImage } : {}),
     });
 
@@ -250,6 +264,8 @@ export class EventService {
       venueName: input.venueName ?? '',
       venueAddress: input.venueAddress ?? '',
       venueCity: input.venueCity ?? '',
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
       coverImage: input.coverImage ?? '',
     });
 

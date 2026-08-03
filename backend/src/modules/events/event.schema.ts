@@ -52,6 +52,8 @@ function assertDaysUnique(days: Array<{ date: string }>, ctx: z.RefinementCtx): 
   });
 }
 
+const optionalCoord = z.union([z.number().finite(), z.null()]).optional();
+
 export const createEventSchema = z
   .object({
     name: z.string().trim().min(2, 'Name is required').max(160),
@@ -63,9 +65,35 @@ export const createEventSchema = z
     venueName: optionalText,
     venueAddress: optionalText,
     venueCity: optionalText,
+    latitude: optionalCoord,
+    longitude: optionalCoord,
     coverImage: coverImageSchema,
   })
   .superRefine((value, ctx) => {
+    if (
+      (value.latitude == null) !== (value.longitude == null) &&
+      !(value.latitude === undefined && value.longitude === undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['latitude'],
+        message: 'Provide both latitude and longitude, or neither',
+      });
+    }
+    if (value.latitude != null && (value.latitude < -90 || value.latitude > 90)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['latitude'],
+        message: 'Latitude must be between -90 and 90',
+      });
+    }
+    if (value.longitude != null && (value.longitude < -180 || value.longitude > 180)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['longitude'],
+        message: 'Longitude must be between -180 and 180',
+      });
+    }
     if (value.days && value.days.length > 0) {
       assertDaysUnique(value.days, ctx);
       return;
@@ -109,6 +137,8 @@ export const updateEventSchema = z
     venueName: z.string().trim().max(500).optional(),
     venueAddress: z.string().trim().max(500).optional(),
     venueCity: z.string().trim().max(500).optional(),
+    latitude: z.union([z.number().finite(), z.null()]).optional(),
+    longitude: z.union([z.number().finite(), z.null()]).optional(),
     coverImage: z
       .string()
       .trim()
@@ -124,6 +154,21 @@ export const updateEventSchema = z
   .superRefine((value, ctx) => {
     if (value.days) {
       assertDaysUnique(value.days, ctx);
+    }
+
+    if (value.latitude != null && (value.latitude < -90 || value.latitude > 90)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['latitude'],
+        message: 'Latitude must be between -90 and 90',
+      });
+    }
+    if (value.longitude != null && (value.longitude < -180 || value.longitude > 180)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['longitude'],
+        message: 'Longitude must be between -180 and 180',
+      });
     }
 
     if (value.startDate && value.endDate && Date.parse(value.endDate) < Date.parse(value.startDate)) {
@@ -143,6 +188,8 @@ export const scheduleEventSchema = z
     venueName: optionalText,
     venueAddress: optionalText,
     venueCity: optionalText,
+    latitude: optionalCoord,
+    longitude: optionalCoord,
     coverImage: coverImageSchema,
     copyDetailsFromPrevious: z.boolean().optional().default(true),
   })

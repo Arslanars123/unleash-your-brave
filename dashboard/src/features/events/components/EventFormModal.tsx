@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
+import { VenuePlacesField } from '@/features/events/components/VenuePlacesField';
 import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
@@ -30,6 +31,8 @@ export interface EventFormValues {
   venueName: string;
   venueAddress: string;
   venueCity: string;
+  latitude: number | null;
+  longitude: number | null;
   coverImage: string;
   copyDetailsFromPrevious: boolean;
 }
@@ -84,6 +87,8 @@ const emptyForm: EventFormValues = {
   venueName: '',
   venueAddress: '',
   venueCity: '',
+  latitude: null,
+  longitude: null,
   coverImage: '',
   copyDetailsFromPrevious: true,
 };
@@ -114,6 +119,8 @@ function eventToForm(event: PublicEvent): EventFormValues {
     venueName: event.venueName,
     venueAddress: event.venueAddress,
     venueCity: event.venueCity,
+    latitude: event.latitude ?? null,
+    longitude: event.longitude ?? null,
     coverImage: event.coverImage,
     copyDetailsFromPrevious: true,
   };
@@ -129,6 +136,8 @@ function scheduleBlankForm(previous: PublicEvent | null): EventFormValues {
     venueName: previous.venueName,
     venueAddress: previous.venueAddress,
     venueCity: previous.venueCity,
+    latitude: previous.latitude ?? null,
+    longitude: previous.longitude ?? null,
     coverImage: previous.coverImage,
     copyDetailsFromPrevious: true,
     consecutiveStart: '',
@@ -193,6 +202,8 @@ export function toEventPayload(values: EventFormValues): EventPayload {
     venueName: values.venueName.trim(),
     venueAddress: values.venueAddress.trim(),
     venueCity: values.venueCity.trim(),
+    latitude: values.latitude,
+    longitude: values.longitude,
     coverImage: values.coverImage.trim(),
   };
 }
@@ -207,6 +218,8 @@ export function toSchedulePayload(values: EventFormValues): ScheduleEventPayload
     venueName: values.venueName.trim(),
     venueAddress: values.venueAddress.trim(),
     venueCity: values.venueCity.trim(),
+    latitude: values.latitude,
+    longitude: values.longitude,
     coverImage: values.coverImage.trim(),
   };
 }
@@ -536,29 +549,27 @@ export function EventFormModal({
 
           {showDetails ? (
             <>
-              <Input
-                label="Venue name"
-                name="venueName"
-                value={values.venueName}
-                error={errors.venueName}
-                onChange={(e) => update('venueName', e.target.value)}
-                placeholder="The Vinoy"
-              />
-              <Input
-                label="Venue address"
-                name="venueAddress"
-                value={values.venueAddress}
-                error={errors.venueAddress}
-                onChange={(e) => update('venueAddress', e.target.value)}
-                placeholder="501 5th Ave NE"
-              />
-              <Input
-                label="Venue city"
-                name="venueCity"
-                value={values.venueCity}
-                error={errors.venueCity}
-                onChange={(e) => update('venueCity', e.target.value)}
-                placeholder="St. Petersburg, FL"
+              <VenuePlacesField
+                venueName={values.venueName}
+                venueAddress={values.venueAddress}
+                venueCity={values.venueCity}
+                latitude={values.latitude}
+                longitude={values.longitude}
+                errors={{
+                  venueName: errors.venueName,
+                  venueAddress: errors.venueAddress,
+                  venueCity: errors.venueCity,
+                }}
+                onChange={(next) =>
+                  setForm({
+                    ...values,
+                    venueName: next.venueName,
+                    venueAddress: next.venueAddress,
+                    venueCity: next.venueCity,
+                    latitude: next.latitude,
+                    longitude: next.longitude,
+                  })
+                }
               />
               <div className="cover-field">
                 <span className="field-label">Cover image</span>

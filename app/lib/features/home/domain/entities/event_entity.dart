@@ -9,6 +9,10 @@ class EventEntity {
     required this.endDate,
     required this.status,
     required this.venueCity,
+    this.venueName = '',
+    this.venueAddress = '',
+    this.latitude,
+    this.longitude,
     this.days = const [],
   });
 
@@ -19,11 +23,22 @@ class EventEntity {
   final DateTime endDate;
   final String status;
   final String venueCity;
+  final String venueName;
+  final String venueAddress;
+  final double? latitude;
+  final double? longitude;
   final List<EventDayEntity> days;
 
   bool get isUpcoming => status == 'upcoming';
   bool get isLive => status == 'live';
   bool get isEnded => status == 'ended';
+
+  bool get hasMapPin => latitude != null && longitude != null;
+
+  String get venueLabel {
+    final parts = [venueName, venueCity].where((p) => p.trim().isNotEmpty);
+    return parts.join(' · ');
+  }
 
   String get dateRangeLabel {
     final start = startDate.toUtc();

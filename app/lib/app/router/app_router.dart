@@ -17,9 +17,9 @@ import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_
 import 'package:unleash_your_brave/features/chat/presentation/pages/chat_list_page.dart';
 import 'package:unleash_your_brave/features/chat/presentation/pages/chat_room_page.dart';
 import 'package:unleash_your_brave/features/home/presentation/pages/home_page.dart';
+import 'package:unleash_your_brave/features/map/presentation/pages/map_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/edit_profile_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/main_shell.dart';
-import 'package:unleash_your_brave/features/shell/presentation/pages/placeholder_tab_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/profile_page.dart';
 
 class AppRouter {
@@ -132,11 +132,7 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: '/map',
-                builder: (context, state) => const PlaceholderTabPage(
-                  title: 'Map',
-                  subtitle: 'Venue map and wayfinding coming next.',
-                  icon: Icons.map_outlined,
-                ),
+                builder: (context, state) => const MapPage(),
               ),
             ],
           ),

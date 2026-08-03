@@ -33,6 +33,7 @@ yarn-error.log*
 **/ios/.symlinks/
 **/android/.gradle/
 **/android/local.properties
+**/ios/Flutter/MapsSecrets.xcconfig
 **/android/app/debug
 **/android/app/profile
 **/android/app/release

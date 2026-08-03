@@ -35,6 +35,9 @@ export interface Event {
   venueName: string;
   venueAddress: string;
   venueCity: string;
+  /** Google Places / map pin. Null when not set. */
+  latitude: number | null;
+  longitude: number | null;
   coverImage: string;
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +56,8 @@ export interface PublicEvent {
   venueName: string;
   venueAddress: string;
   venueCity: string;
+  latitude: number | null;
+  longitude: number | null;
   coverImage: string;
   createdAt: string;
   updatedAt: string;
@@ -76,6 +81,8 @@ export interface CreateEventInput {
   venueName?: string;
   venueAddress?: string;
   venueCity?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   coverImage?: string;
 }
 
@@ -87,6 +94,8 @@ export interface ScheduleEventInput {
   venueName?: string;
   venueAddress?: string;
   venueCity?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   coverImage?: string;
   /** When true, copies tagline/description/venue/cover from the previous edition. */
   copyDetailsFromPrevious?: boolean;
@@ -101,6 +110,8 @@ export interface UpdateEventInput {
   venueName?: string;
   venueAddress?: string;
   venueCity?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   coverImage?: string;
 }
 

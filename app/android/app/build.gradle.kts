@@ -8,6 +8,21 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun loadMapsApiKey(): String {
+    val envFile = rootProject.file("../.env")
+    if (envFile.exists()) {
+        envFile.readLines().forEach { line ->
+            val trimmed = line.trim()
+            if (trimmed.startsWith("GOOGLE_MAPS_API_KEY=")) {
+                return trimmed.substringAfter("=").trim().trim('"')
+            }
+        }
+    }
+    return project.findProperty("GOOGLE_MAPS_API_KEY") as String?
+        ?: System.getenv("GOOGLE_MAPS_API_KEY")
+        ?: ""
+}
+
 android {
     namespace = "com.unleashyourbrave.unleash_your_brave"
     compileSdk = flutter.compileSdkVersion
@@ -33,6 +48,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = loadMapsApiKey()
     }
 
     buildTypes {

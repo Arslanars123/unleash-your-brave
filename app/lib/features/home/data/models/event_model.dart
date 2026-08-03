@@ -10,6 +10,10 @@ class EventModel extends EventEntity {
     required super.endDate,
     required super.status,
     required super.venueCity,
+    super.venueName,
+    super.venueAddress,
+    super.latitude,
+    super.longitude,
     super.days,
   });
 
@@ -28,6 +32,10 @@ class EventModel extends EventEntity {
       endDate: DateTime.parse(json['endDate'] as String),
       status: json['status'] as String? ?? 'upcoming',
       venueCity: json['venueCity'] as String? ?? '',
+      venueName: json['venueName'] as String? ?? '',
+      venueAddress: json['venueAddress'] as String? ?? '',
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
       days: days,
     );
   }
@@ -41,6 +49,10 @@ class EventModel extends EventEntity {
       'endDate': endDate.toIso8601String(),
       'status': status,
       'venueCity': venueCity,
+      'venueName': venueName,
+      'venueAddress': venueAddress,
+      'latitude': latitude,
+      'longitude': longitude,
       'days': days
           .map(
             (day) => {

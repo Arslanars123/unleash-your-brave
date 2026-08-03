@@ -49,6 +49,8 @@ export function toPublicEvent(event: Event): PublicEvent {
     venueName: event.venueName,
     venueAddress: event.venueAddress,
     venueCity: event.venueCity,
+    latitude: event.latitude ?? null,
+    longitude: event.longitude ?? null,
     coverImage: event.coverImage,
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),

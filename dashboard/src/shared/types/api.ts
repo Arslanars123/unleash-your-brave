@@ -165,6 +165,8 @@ export interface PublicEvent {
   venueName: string;
   venueAddress: string;
   venueCity: string;
+  latitude: number | null;
+  longitude: number | null;
   coverImage: string;
   createdAt: string;
   updatedAt: string;
@@ -185,6 +187,8 @@ export interface EventPayload {
   venueName?: string;
   venueAddress?: string;
   venueCity?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   coverImage?: string;
 }
 
@@ -195,6 +199,8 @@ export interface ScheduleEventPayload {
   venueName?: string;
   venueAddress?: string;
   venueCity?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   coverImage?: string;
   copyDetailsFromPrevious?: boolean;
 }
