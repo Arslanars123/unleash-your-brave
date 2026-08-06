@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { Collection, Filter } from 'mongodb';
 import { fromDoc, fromDocs, toDoc, type MongoDoc } from '../map.js';
 import { containsCi, getDb } from '../mongo.js';
-import type {
-  AnnouncementRepository,
-  PaginatedResult,
+import {
+  isVisibleToUser,
+  type AnnouncementRepository,
+  type PaginatedResult,
 } from '../../modules/announcements/announcement.repository.js';
+import { normalizeAnnouncement } from '../../modules/announcements/announcement.mapper.js';
 import type {
   Announcement,
   ListAnnouncementsQuery,
@@ -17,11 +19,21 @@ export class MongoAnnouncementRepository implements AnnouncementRepository {
   }
 
   async findById(id: string): Promise<Announcement | null> {
-    return fromDoc<Announcement>(await this.collection.findOne({ _id: id }));
+    const doc = fromDoc<Announcement>(await this.collection.findOne({ _id: id }));
+    return doc ? normalizeAnnouncement(doc) : null;
+  }
+
+  async findBySystemKey(systemKey: string): Promise<Announcement | null> {
+    const doc = fromDoc<Announcement>(
+      await this.collection.findOne({ systemKey } as Filter<MongoDoc<Announcement>>),
+    );
+    return doc ? normalizeAnnouncement(doc) : null;
   }
 
   async list(query: ListAnnouncementsQuery): Promise<PaginatedResult<Announcement>> {
     const filter: Filter<MongoDoc<Announcement>> = {};
+    if (query.status) filter.status = query.status;
+    if (query.kind) filter.kind = query.kind;
     if (query.search?.trim()) {
       const search = query.search.trim();
       filter.$or = [containsCi('title', search), containsCi('description', search)];
@@ -30,12 +42,52 @@ export class MongoAnnouncementRepository implements AnnouncementRepository {
     const total = await this.collection.countDocuments(filter);
     const docs = await this.collection
       .find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ publishedAt: -1, createdAt: -1 })
       .skip((query.page - 1) * query.perPage)
       .limit(query.perPage)
       .toArray();
 
-    return { items: fromDocs<Announcement>(docs), total };
+    return {
+      items: fromDocs<Announcement>(docs).map(normalizeAnnouncement),
+      total,
+    };
+  }
+
+  async listPublishedForUser(input: {
+    userId: string;
+    roles: string[];
+    page: number;
+    perPage: number;
+  }): Promise<PaginatedResult<Announcement>> {
+    // Fetch a larger window then filter in memory for audience rules.
+    // Fine for event-scale attendee counts; keeps query simple across legacy docs.
+    const docs = await this.collection
+      .find({
+        $or: [{ status: 'published' }, { status: { $exists: false } }],
+      } as Filter<MongoDoc<Announcement>>)
+      .sort({ publishedAt: -1, createdAt: -1 })
+      .toArray();
+
+    const filtered = fromDocs<Announcement>(docs)
+      .map(normalizeAnnouncement)
+      .filter((item) => item.status === 'published')
+      .filter((item) => isVisibleToUser(item, input.userId, input.roles));
+
+    const start = (input.page - 1) * input.perPage;
+    return {
+      items: filtered.slice(start, start + input.perPage),
+      total: filtered.length,
+    };
+  }
+
+  async listDueScheduled(now: Date): Promise<Announcement[]> {
+    const docs = await this.collection
+      .find({
+        status: 'scheduled',
+        scheduledAt: { $lte: now },
+      } as Filter<MongoDoc<Announcement>>)
+      .toArray();
+    return fromDocs<Announcement>(docs).map(normalizeAnnouncement);
   }
 
   async create(

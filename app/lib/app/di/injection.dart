@@ -17,6 +17,8 @@ import 'package:unleash_your_brave/features/auth/domain/usecases/update_my_profi
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/agenda_local_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
+import 'package:unleash_your_brave/features/announcements/data/datasources/announcements_remote_datasource.dart';
+import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
 import 'package:unleash_your_brave/features/chat/data/datasources/chat_local_datasource.dart';
 import 'package:unleash_your_brave/features/chat/data/datasources/chat_remote_datasource.dart';
 import 'package:unleash_your_brave/features/chat/data/repositories/chat_repository_impl.dart';
@@ -62,10 +64,12 @@ Future<void> configureDependencies() async {
   // Push notifications
   sl.registerLazySingleton(() => PushNotificationService(sl()));
 
-  // Home / events / agenda
+  // Home / events / agenda / announcements
   sl.registerLazySingleton(() => EventsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => SessionsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => AgendaLocalDataSource(prefs));
+  sl.registerLazySingleton(() => AnnouncementsRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => CheckInRemoteDataSource(sl()));
 
   // Auth presentation — singleton so GoRouter and the widget tree share state
   sl.registerLazySingleton(

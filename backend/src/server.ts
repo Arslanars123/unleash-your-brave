@@ -3,10 +3,15 @@ import { createApp } from './app/create-app.js';
 import { env } from './config/env.js';
 import { logger } from './core/logger.js';
 import { closeMongo } from './db/mongo.js';
+import { startAnnouncementScheduler } from './modules/announcements/announcement.scheduler.js';
 
 async function bootstrap(): Promise<void> {
   const container = await createContainer();
   const app = createApp(container);
+
+  const stopAnnouncementScheduler = startAnnouncementScheduler(
+    container.services.announcementService,
+  );
 
   const server = app.listen(env.port, () => {
     logger.info({ port: env.port, env: env.nodeEnv }, 'API listening');
@@ -14,6 +19,7 @@ async function bootstrap(): Promise<void> {
 
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'Shutting down');
+    stopAnnouncementScheduler();
     server.close(() => {
       void closeMongo().finally(() => process.exit(0));
     });

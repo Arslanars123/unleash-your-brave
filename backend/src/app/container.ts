@@ -9,6 +9,9 @@ import { ChatHub } from '../modules/chat/chat.hub.js';
 import { createChatRouter } from '../modules/chat/chat.routes.js';
 import { ChatService } from '../modules/chat/chat.service.js';
 import { PushNotificationService } from '../modules/chat/push.service.js';
+import { CheckInController } from '../modules/checkins/checkin.controller.js';
+import { createCheckInRouter } from '../modules/checkins/checkin.routes.js';
+import { CheckInService } from '../modules/checkins/checkin.service.js';
 import { EventController } from '../modules/events/event.controller.js';
 import { createEventRouter } from '../modules/events/event.routes.js';
 import { EventService } from '../modules/events/event.service.js';
@@ -40,11 +43,14 @@ import { RealtimeHub } from '../modules/realtime/realtime.hub.js';
 import { createRealtimeRouter } from '../modules/realtime/realtime.routes.js';
 import { connectMongo } from '../db/mongo.js';
 import { MongoAnnouncementRepository } from '../db/repositories/mongo-announcement.repository.js';
+import { MongoAnnouncementReadRepository } from '../db/repositories/mongo-announcement-read.repository.js';
+import { MongoCountdownSettingsRepository } from '../db/repositories/mongo-countdown-settings.repository.js';
 import { MongoChatGroupRepository } from '../db/repositories/mongo-chat-group.repository.js';
 import { MongoChatMemberStateRepository } from '../db/repositories/mongo-chat-member-state.repository.js';
 import { MongoChatMessageRepository } from '../db/repositories/mongo-chat-message.repository.js';
 import { MongoChatReactionRepository } from '../db/repositories/mongo-chat-reaction.repository.js';
 import { MongoDeviceTokenRepository } from '../db/repositories/mongo-device-token.repository.js';
+import { MongoCheckInRepository } from '../db/repositories/mongo-checkin.repository.js';
 import { MongoEventRepository } from '../db/repositories/mongo-event.repository.js';
 import { MongoPostRepository } from '../db/repositories/mongo-post.repository.js';
 import { MongoSessionFeedbackRepository } from '../db/repositories/mongo-session-feedback.repository.js';
@@ -67,6 +73,10 @@ export async function createContainer() {
   const sessionFeedbackRepository = new MongoSessionFeedbackRepository();
   const sponsorRepository = new MongoSponsorRepository();
   const announcementRepository = new MongoAnnouncementRepository();
+  const announcementReadRepository = new MongoAnnouncementReadRepository();
+  const countdownSettingsRepository = new MongoCountdownSettingsRepository();
+  const checkInRepository = new MongoCheckInRepository();
+  await checkInRepository.ensureIndexes();
   const postRepository = new MongoPostRepository();
   const chatGroupRepository = new MongoChatGroupRepository();
   const chatMessageRepository = new MongoChatMessageRepository();
@@ -91,11 +101,19 @@ export async function createContainer() {
     userRepository,
   );
   const sponsorService = new SponsorService(sponsorRepository, eventService);
-  const announcementService = new AnnouncementService(announcementRepository);
+  const pushNotificationService = new PushNotificationService(deviceTokenRepository);
+  const announcementService = new AnnouncementService(
+    announcementRepository,
+    announcementReadRepository,
+    countdownSettingsRepository,
+    userRepository,
+    eventService,
+    pushNotificationService,
+  );
+  const checkInService = new CheckInService(checkInRepository, userRepository, eventService);
   const postService = new PostService(postRepository, userRepository);
   const realtimeHub = new RealtimeHub();
   const chatHub = new ChatHub();
-  const pushNotificationService = new PushNotificationService(deviceTokenRepository);
   const chatService = new ChatService(
     chatGroupRepository,
     chatMessageRepository,
@@ -115,6 +133,7 @@ export async function createContainer() {
   const sessionFeedbackController = new SessionFeedbackController(sessionFeedbackService);
   const sponsorController = new SponsorController(sponsorService);
   const announcementController = new AnnouncementController(announcementService);
+  const checkInController = new CheckInController(checkInService);
   const postController = new PostController(postService);
   const chatController = new ChatController(chatService, chatHub, pushNotificationService);
   const ghlWebhookController = new GhlWebhookController(ghlWebhookService);
@@ -143,6 +162,7 @@ export async function createContainer() {
       sessions: createSessionRouter(sessionController, sessionFeedbackController),
       sponsors: createSponsorRouter(sponsorController),
       announcements: createAnnouncementRouter(announcementController),
+      checkins: createCheckInRouter(checkInController),
       posts: createPostRouter(postController),
       uploads: createUploadRouter(uploadController),
       webhooks: createGhlWebhookRouter(ghlWebhookController),
@@ -158,6 +178,7 @@ export async function createContainer() {
       sessionFeedbackService,
       sponsorService,
       announcementService,
+      checkInService,
       postService,
       chatService,
       pushNotificationService,

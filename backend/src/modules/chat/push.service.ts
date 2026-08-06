@@ -72,71 +72,110 @@ export class PushNotificationService {
     await this.tokens.removeByUserAndToken(userId, token);
   }
 
-  /**
-   * Notify every registered device except the sender's user id.
-   * Invalid / unregistered FCM tokens are pruned automatically.
-   */
   async notifyNewChatMessage(params: {
     senderUserId: string;
     groupId: string;
     groupName: string;
     message: ChatMessageView;
   }): Promise<{ attempted: number; success: number; pruned: number }> {
-    if (!initFirebaseAdmin()) {
-      return { attempted: 0, success: 0, pruned: 0 };
-    }
-
     const devices = await this.tokens.listAllExceptUser(params.senderUserId);
-    if (devices.length === 0) {
-      return { attempted: 0, success: 0, pruned: 0 };
-    }
-
     const title = params.groupName;
     const body =
       params.message.type === 'gif'
         ? `${params.message.senderName} sent a GIF`
         : `${params.message.senderName}: ${params.message.body.slice(0, 140)}`;
 
-    const data = {
-      type: 'chat.message',
-      groupId: params.groupId,
-      messageId: params.message.id,
-      senderId: params.message.senderId,
-      click_action: 'FLUTTER_NOTIFICATION_CLICK',
-    };
+    return this.sendToDevices({
+      devices,
+      title,
+      body,
+      data: {
+        type: 'chat.message',
+        groupId: params.groupId,
+        messageId: params.message.id,
+        senderId: params.message.senderId,
+        click_action: 'FLUTTER_NOTIFICATION_CLICK',
+      },
+      androidChannelId: 'chat_messages',
+      androidTag: `chat_${params.groupId}`,
+      threadId: params.groupId,
+    });
+  }
+
+  /** Generic multicast to specific users (announcements, system notices, etc.). */
+  async notifyUsers(params: {
+    userIds: string[];
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+  }): Promise<{ attempted: number; success: number; pruned: number }> {
+    if (params.userIds.length === 0) {
+      return { attempted: 0, success: 0, pruned: 0 };
+    }
+    const devices = await this.tokens.listByUserIds(params.userIds);
+    return this.sendToDevices({
+      devices,
+      title: params.title,
+      body: params.body.slice(0, 180),
+      data: {
+        type: 'announcement',
+        click_action: 'FLUTTER_NOTIFICATION_CLICK',
+        ...(params.data ?? {}),
+      },
+      androidChannelId: 'announcements',
+      androidTag: params.data?.announcementId
+        ? `announcement_${params.data.announcementId}`
+        : 'announcement',
+      threadId: 'announcements',
+    });
+  }
+
+  private async sendToDevices(params: {
+    devices: Array<{ token: string }>;
+    title: string;
+    body: string;
+    data: Record<string, string>;
+    androidChannelId: string;
+    androidTag: string;
+    threadId: string;
+  }): Promise<{ attempted: number; success: number; pruned: number }> {
+    if (!initFirebaseAdmin()) {
+      return { attempted: 0, success: 0, pruned: 0 };
+    }
+    if (params.devices.length === 0) {
+      return { attempted: 0, success: 0, pruned: 0 };
+    }
 
     let success = 0;
     let pruned = 0;
 
-    // Send in chunks of 500 (FCM multicast limit).
-    for (let i = 0; i < devices.length; i += 500) {
-      const chunk = devices.slice(i, i + 500);
+    for (let i = 0; i < params.devices.length; i += 500) {
+      const chunk = params.devices.slice(i, i + 500);
       const response = await admin.messaging().sendEachForMulticast({
         tokens: chunk.map((d) => d.token),
-        notification: { title, body },
-        data,
+        notification: { title: params.title, body: params.body },
+        data: params.data,
         android: {
           priority: 'high',
           notification: {
-            channelId: 'chat_messages',
-            tag: `chat_${params.groupId}`,
+            channelId: params.androidChannelId,
+            tag: params.androidTag,
             clickAction: 'FLUTTER_NOTIFICATION_CLICK',
           },
         },
         apns: {
           payload: {
             aps: {
-              alert: { title, body },
+              alert: { title: params.title, body: params.body },
               sound: 'default',
               badge: 1,
-              threadId: params.groupId,
+              threadId: params.threadId,
             },
           },
         },
       });
 
       success += response.successCount;
-
       response.responses.forEach((result, index) => {
         if (result.success) return;
         const code = result.error?.code ?? '';
@@ -155,6 +194,6 @@ export class PushNotificationService {
       });
     }
 
-    return { attempted: devices.length, success, pruned };
+    return { attempted: params.devices.length, success, pruned };
   }
 }

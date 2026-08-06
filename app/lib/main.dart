@@ -9,12 +9,11 @@ import 'package:unleash_your_brave/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Firebase
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
   await dotenv.load(fileName: '.env');
   await configureDependencies();
 

@@ -405,7 +405,7 @@ class _PhotoEditor extends StatelessWidget {
     ImageProvider? image;
     if (localPhoto != null) {
       image = FileImage(localPhoto!);
-    } else if (remote.isNotEmpty) {
+    } else if (isLoadableMediaUrl(photoUrl)) {
       image = NetworkImage(remote);
     }
 

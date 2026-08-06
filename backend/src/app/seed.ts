@@ -239,11 +239,15 @@ export async function seedDemoData(
       title: 'Welcome to Unleash Your Brave',
       description:
         'Doors open at 8:30 AM. Grab your badge at registration and join us in the main ballroom for the opening keynote.',
+      delivery: 'immediate',
+      sendPush: false,
     });
     await announcementService.create({
       title: 'Networking lounge is open',
       description:
         'Meet fellow attendees in the Brave Lounge on Level 2. VIP seating is reserved near the terrace.',
+      delivery: 'immediate',
+      sendPush: false,
     });
     logger.info('Seeded demo announcements');
   }

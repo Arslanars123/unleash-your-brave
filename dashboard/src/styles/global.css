@@ -1885,3 +1885,159 @@ td strong {
     grid-template-columns: 1fr;
   }
 }
+
+.form-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem 1.1rem 1.15rem;
+  margin: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.form-fieldset legend {
+  padding: 0 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.radio-row,
+.checkbox-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.audience-picker {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.audience-list {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  display: grid;
+  gap: 0.45rem;
+  background: var(--bg);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.status-pill.status-scheduled {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-pill.status-draft {
+  background: #e9ecef;
+  color: #495057;
+}
+
+.status-pill.status-cancelled {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.status-pill.status-published {
+  background: #d4edda;
+  color: #155724;
+}
+
+.stack-gap {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 1.1rem 1.2rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--brand);
+  margin-bottom: 0.55rem;
+}
+
+.checkin-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 1.25rem;
+}
+
+.checkin-stats .panel {
+  padding: 0.9rem 1rem;
+  gap: 0.25rem;
+}
+
+.checkin-stats strong {
+  font-size: 1.25rem;
+}
+
+.checkin-scanner {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.checkin-video {
+  width: min(420px, 100%);
+  border-radius: 12px;
+  background: #111;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+@media (max-width: 900px) {
+  .checkin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+

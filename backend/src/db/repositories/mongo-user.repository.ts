@@ -10,6 +10,7 @@ import type {
 import {
   EMPTY_ATTENDEE_PROFILE,
   type User,
+  type UserRole,
   type UserStatus,
   type ListUsersQuery,
 } from '../../modules/users/user.types.js';
@@ -52,6 +53,15 @@ export class MongoUserRepository implements UserRepository {
       .toArray();
 
     return { items: fromDocs<User>(docs), total };
+  }
+
+  async listActiveIdsByRoles(roles: UserRole[]): Promise<string[]> {
+    if (roles.length === 0) return [];
+    const docs = await this.collection
+      .find({ status: 'active', role: { $in: roles } } as Filter<MongoDoc<User>>)
+      .project({ _id: 1 })
+      .toArray();
+    return docs.map((doc) => String(doc._id));
   }
 
   async create(data: CreateUserRecord): Promise<User> {

@@ -15,6 +15,7 @@ import 'package:unleash_your_brave/core/utils/media_url.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/domain/entities/session_entity.dart';
+import 'package:unleash_your_brave/features/agenda/domain/entities/session_feedback_entity.dart';
 
 class SessionDetailPage extends StatefulWidget {
   const SessionDetailPage({
@@ -37,11 +38,23 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   String? _errorMessage;
   bool _isOffline = false;
 
+  SessionFeedbackEntity? _myFeedback;
+  bool _feedbackLoading = false;
+  bool _feedbackSaving = false;
+  int _selectedRating = 0;
+  final _commentController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _session = widget.initialSession;
     unawaited(_load(isRefresh: _session != null));
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
   }
 
   Future<void> _load({required bool isRefresh}) async {
@@ -65,6 +78,15 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
         _errorMessage = null;
         _isOffline = false;
       });
+      if (session.feedbackEnabled) {
+        await _loadMyFeedback();
+      } else if (mounted) {
+        setState(() {
+          _myFeedback = null;
+          _selectedRating = 0;
+          _commentController.clear();
+        });
+      }
     } on NetworkException catch (error) {
       if (!mounted) return;
       _handleFailure(isOffline: true, message: error.message);
@@ -74,6 +96,98 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     } catch (_) {
       if (!mounted) return;
       _handleFailure(isOffline: false, message: 'Unexpected error');
+    }
+  }
+
+  Future<void> _loadMyFeedback() async {
+    setState(() => _feedbackLoading = true);
+    try {
+      final mine =
+          await sl<SessionsRemoteDataSource>().getMyFeedback(widget.sessionId);
+      if (!mounted) return;
+      setState(() {
+        _myFeedback = mine;
+        _selectedRating = mine?.rating ?? 0;
+        _commentController.text = mine?.comment ?? '';
+        _feedbackLoading = false;
+      });
+    } on NetworkException {
+      if (!mounted) return;
+      setState(() => _feedbackLoading = false);
+    } on ServerException {
+      if (!mounted) return;
+      setState(() => _feedbackLoading = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _feedbackLoading = false);
+    }
+  }
+
+  Future<void> _submitFeedback() async {
+    if (_feedbackSaving) return;
+    if (_selectedRating < 1 || _selectedRating > 5) {
+      AppToast.error('Choose a rating from 1 to 5 stars.');
+      return;
+    }
+
+    setState(() => _feedbackSaving = true);
+    try {
+      final wasUpdate = _myFeedback != null;
+      final saved = await sl<SessionsRemoteDataSource>().upsertFeedback(
+        sessionId: widget.sessionId,
+        rating: _selectedRating,
+        comment: _commentController.text,
+      );
+      if (!mounted) return;
+      setState(() {
+        _myFeedback = saved;
+        _feedbackSaving = false;
+      });
+      AppToast.success(wasUpdate ? 'Review updated.' : 'Review submitted.');
+      // Reload session so the average rating chip updates.
+      await _load(isRefresh: true);
+    } on NetworkException catch (error) {
+      if (!mounted) return;
+      setState(() => _feedbackSaving = false);
+      AppToast.error(error.message);
+    } on ServerException catch (error) {
+      if (!mounted) return;
+      setState(() => _feedbackSaving = false);
+      AppToast.error(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _feedbackSaving = false);
+      AppToast.error('Couldn’t save your review.');
+    }
+  }
+
+  Future<void> _removeFeedback() async {
+    if (_feedbackSaving || _myFeedback == null) return;
+
+    setState(() => _feedbackSaving = true);
+    try {
+      await sl<SessionsRemoteDataSource>().deleteMyFeedback(widget.sessionId);
+      if (!mounted) return;
+      setState(() {
+        _myFeedback = null;
+        _selectedRating = 0;
+        _commentController.clear();
+        _feedbackSaving = false;
+      });
+      AppToast.success('Review removed.');
+      await _load(isRefresh: true);
+    } on NetworkException catch (error) {
+      if (!mounted) return;
+      setState(() => _feedbackSaving = false);
+      AppToast.error(error.message);
+    } on ServerException catch (error) {
+      if (!mounted) return;
+      setState(() => _feedbackSaving = false);
+      AppToast.error(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _feedbackSaving = false);
+      AppToast.error('Couldn’t remove your review.');
     }
   }
 
@@ -300,6 +414,21 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                           ),
                         ),
                       ),
+                    if (session.feedbackEnabled) ...[
+                      const SizedBox(height: 32),
+                      _SessionReviewSection(
+                        loading: _feedbackLoading,
+                        saving: _feedbackSaving,
+                        hasExisting: _myFeedback != null,
+                        selectedRating: _selectedRating,
+                        commentController: _commentController,
+                        onRatingChanged: (rating) {
+                          setState(() => _selectedRating = rating);
+                        },
+                        onSubmit: _submitFeedback,
+                        onRemove: _myFeedback != null ? _removeFeedback : null,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -517,6 +646,154 @@ class _EmptyMaterials extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SessionReviewSection extends StatelessWidget {
+  const _SessionReviewSection({
+    required this.loading,
+    required this.saving,
+    required this.hasExisting,
+    required this.selectedRating,
+    required this.commentController,
+    required this.onRatingChanged,
+    required this.onSubmit,
+    this.onRemove,
+  });
+
+  final bool loading;
+  final bool saving;
+  final bool hasExisting;
+  final int selectedRating;
+  final TextEditingController commentController;
+  final ValueChanged<int> onRatingChanged;
+  final VoidCallback onSubmit;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'YOUR REVIEW',
+          style: AppTypography.microLabel.copyWith(letterSpacing: 1.4),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          hasExisting
+              ? 'Update your rating and comment for this session.'
+              : 'Rate this session and leave an optional comment.',
+          style: AppTypography.caption,
+        ),
+        const SizedBox(height: 14),
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: CircularProgressIndicator(color: AppColors.accentPink),
+            ),
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppColors.bgCard,
+              borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    final star = index + 1;
+                    final selected = star <= selectedRating;
+                    return IconButton(
+                      onPressed: saving ? null : () => onRatingChanged(star),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                      icon: Icon(
+                        selected ? Icons.star_rounded : Icons.star_outline_rounded,
+                        size: 32,
+                        color: selected
+                            ? AppColors.accentPink
+                            : AppColors.textTertiary,
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: commentController,
+                  enabled: !saving,
+                  maxLines: 4,
+                  maxLength: 2000,
+                  style: AppTypography.body.copyWith(fontSize: 15),
+                  decoration: InputDecoration(
+                    hintText: 'Optional comment…',
+                    hintStyle: AppTypography.body.copyWith(
+                      color: AppColors.textTertiary,
+                      fontSize: 15,
+                    ),
+                    filled: true,
+                    fillColor: AppColors.bgBase,
+                    counterStyle: AppTypography.caption.copyWith(fontSize: 11),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                      borderSide: const BorderSide(color: AppColors.borderSubtle),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                      borderSide: const BorderSide(color: AppColors.borderSubtle),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                      borderSide: const BorderSide(color: AppColors.accentPink),
+                    ),
+                    contentPadding: const EdgeInsets.all(14),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: saving ? null : onSubmit,
+                    child: saving
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.textPrimary,
+                            ),
+                          )
+                        : Text(hasExisting ? 'Update review' : 'Submit review'),
+                  ),
+                ),
+                if (onRemove != null) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 44,
+                    child: TextButton(
+                      onPressed: saving ? null : onRemove,
+                      child: Text(
+                        'Remove review',
+                        style: AppTypography.button.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

@@ -7,7 +7,9 @@ import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/features/agenda/domain/entities/session_entity.dart';
 import 'package:unleash_your_brave/features/agenda/presentation/pages/agenda_page.dart';
 import 'package:unleash_your_brave/features/agenda/presentation/pages/session_detail_page.dart';
+import 'package:unleash_your_brave/features/announcements/presentation/pages/notifications_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:unleash_your_brave/features/checkin/presentation/pages/checkin_qr_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/login_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/set_password_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/signup_page.dart';
@@ -70,6 +72,19 @@ class AppRouter {
               GoRoute(
                 path: '/',
                 builder: (context, state) => const HomePage(),
+                routes: [
+                  GoRoute(
+                    path: 'notifications',
+                    builder: (context, state) {
+                      final highlightId = state.uri.queryParameters['id'];
+                      return NotificationsPage(highlightId: highlightId);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'check-in',
+                    builder: (context, state) => const CheckInQrPage(),
+                  ),
+                ],
               ),
             ],
           ),

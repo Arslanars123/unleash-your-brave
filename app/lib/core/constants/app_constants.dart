@@ -10,6 +10,10 @@ class ApiConstants {
   static const uploadImage = '/uploads/images';
   static const currentEvent = '/events/current';
   static const sessions = '/sessions';
+  static const announcements = '/announcements';
+  static const announcementsFeed = '/announcements/feed';
+  static const announcementsUnreadCount = '/announcements/unread-count';
+  static const checkInMyQr = '/checkins/my-qr';
 
   // Chat endpoints
   static const chatGroup = '/chat/group';

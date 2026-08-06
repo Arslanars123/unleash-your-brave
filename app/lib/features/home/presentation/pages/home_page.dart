@@ -262,10 +262,10 @@ class _HomeContent extends StatelessWidget {
                       children: [
                         Expanded(
                           child: QuickActionCard(
-                            icon: Icons.card_giftcard_outlined,
-                            title: 'Gifts',
-                            subtitle: 'Explore offerings',
-                            onTap: () {},
+                            icon: Icons.qr_code_2,
+                            title: 'Check-in',
+                            subtitle: 'Your event QR',
+                            onTap: () => context.push('/check-in'),
                           ),
                         ),
                         const SizedBox(width: 12),

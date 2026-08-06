@@ -24,6 +24,12 @@ export interface PaginationMeta {
   perPage: number;
   total: number;
   totalPages: number;
+  unreadCount?: number;
+  stats?: {
+    eventId: string;
+    checkedInCount: number;
+    attendeeCount: number;
+  };
 }
 
 export function sendSuccess<T>(res: Response, data: T, statusCode = 200): Response {

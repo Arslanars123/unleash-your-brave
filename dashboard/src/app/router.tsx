@@ -5,6 +5,8 @@ import { getHomePathForUser, useAuth } from '@/features/auth/context/AuthProvide
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { OverviewPage } from '@/features/dashboard/pages/OverviewPage';
 import { AnnouncementsPage } from '@/features/announcements/pages/AnnouncementsPage';
+import { CountdownSettingsPage } from '@/features/announcements/pages/CountdownSettingsPage';
+import { CheckInsPage } from '@/features/checkins/pages/CheckInsPage';
 import { EventsPage } from '@/features/events/pages/EventsPage';
 import { SpeakerProfilePage } from '@/features/portal/pages/SpeakerProfilePage';
 import { SpeakerSessionsPage } from '@/features/portal/pages/SpeakerSessionsPage';
@@ -43,8 +45,10 @@ export function AppRouter() {
               <Route path="speakers" element={<SpeakersPage />} />
               <Route path="sponsors" element={<SponsorsPage />} />
               <Route path="announcements" element={<AnnouncementsPage />} />
+              <Route path="announcements/countdown" element={<CountdownSettingsPage />} />
               <Route path="posts" element={<PostsPage />} />
               <Route path="users" element={<UsersPage />} />
+              <Route path="checkins" element={<CheckInsPage />} />
             </Route>
 
             <Route element={<ProtectedRoute roles={['speaker', 'sponsor']} />}>

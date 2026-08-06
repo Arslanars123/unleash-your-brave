@@ -71,6 +71,7 @@ export function createApp(container: Container): Express {
   app.use('/api/v1/sessions', container.routers.sessions);
   app.use('/api/v1/sponsors', container.routers.sponsors);
   app.use('/api/v1/announcements', container.routers.announcements);
+  app.use('/api/v1/checkins', container.routers.checkins);
   app.use('/api/v1/posts', container.routers.posts);
   app.use('/api/v1/uploads', container.routers.uploads);
   app.use('/api/v1/webhooks', container.routers.webhooks);

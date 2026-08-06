@@ -313,21 +313,28 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMine) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: AppColors.accentPink.withValues(alpha: 0.2),
-              backgroundImage: message.senderPhotoUrl != null
-                  ? CachedNetworkImageProvider(resolveMediaUrl(message.senderPhotoUrl!))
-                  : null,
-              child: message.senderPhotoUrl == null
-                  ? Text(
-                      message.senderName.isNotEmpty ? message.senderName[0].toUpperCase() : '?',
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.accentPink,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    )
-                  : null,
+            Builder(
+              builder: (context) {
+                final photo = resolveMediaUrl(message.senderPhotoUrl);
+                final hasPhoto = isLoadableMediaUrl(message.senderPhotoUrl);
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AppColors.accentPink.withValues(alpha: 0.2),
+                  backgroundImage:
+                      hasPhoto ? CachedNetworkImageProvider(photo) : null,
+                  child: hasPhoto
+                      ? null
+                      : Text(
+                          message.senderName.isNotEmpty
+                              ? message.senderName[0].toUpperCase()
+                              : '?',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.accentPink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                );
+              },
             ),
             const SizedBox(width: 8),
           ],
@@ -372,11 +379,12 @@ class _MessageBubble extends StatelessWidget {
                           fontSize: 15,
                         ),
                       )
-                    else if (message.type == ChatMessageType.gif && message.gifUrl != null)
+                    else if (message.type == ChatMessageType.gif &&
+                        isLoadableMediaUrl(message.gifUrl))
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: CachedNetworkImage(
-                          imageUrl: message.gifUrl!,
+                          imageUrl: resolveMediaUrl(message.gifUrl),
                           width: 200,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(

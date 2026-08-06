@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/core/network/dio_client.dart';
+import 'package:unleash_your_brave/features/agenda/data/models/session_feedback_model.dart';
 import 'package:unleash_your_brave/features/agenda/data/models/session_model.dart';
 
 class SessionsRemoteDataSource {
@@ -40,6 +41,53 @@ class SessionsRemoteDataSource {
       final response = await _dioClient.client.get('${ApiConstants.sessions}/$id');
       final data = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
       return SessionModel.fromJson(data);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  /// Returns the current user's review, or `null` when they have not reviewed yet.
+  Future<SessionFeedbackModel?> getMyFeedback(String sessionId) async {
+    try {
+      final response = await _dioClient.client.get(
+        '${ApiConstants.sessions}/$sessionId/feedback/me',
+      );
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?;
+      if (data == null) return null;
+      return SessionFeedbackModel.fromJson(data);
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) return null;
+      throwMappedDioError(error);
+    }
+  }
+
+  Future<SessionFeedbackModel> upsertFeedback({
+    required String sessionId,
+    required int rating,
+    String comment = '',
+  }) async {
+    try {
+      final response = await _dioClient.client.post(
+        '${ApiConstants.sessions}/$sessionId/feedback',
+        data: {
+          'rating': rating,
+          'comment': comment.trim(),
+        },
+      );
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return SessionFeedbackModel.fromJson(data);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  Future<void> deleteMyFeedback(String sessionId) async {
+    try {
+      await _dioClient.client.delete(
+        '${ApiConstants.sessions}/$sessionId/feedback/me',
+      );
     } on DioException catch (error) {
       throwMappedDioError(error);
     }

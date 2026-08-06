@@ -115,6 +115,42 @@ export interface PaginationMeta {
   perPage: number;
   total: number;
   totalPages: number;
+  unreadCount?: number;
+  stats?: CheckInStats;
+}
+
+export interface CheckInStats {
+  eventId: string;
+  checkedInCount: number;
+  attendeeCount: number;
+}
+
+export interface PublicCheckInRow {
+  id: string;
+  eventId: string;
+  userId: string;
+  checkedInAt: string;
+  checkedInBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  checkedIn: boolean;
+  user?: PublicUser | null;
+}
+
+export interface CheckInScanResult {
+  checkIn: PublicCheckInRow;
+  alreadyCheckedIn: boolean;
+  user: PublicUser;
+}
+
+export interface MyCheckInQr {
+  eventId: string;
+  eventName: string;
+  eventStatus: EventEditionStatus;
+  userId: string;
+  token: string;
+  checkedIn: boolean;
+  checkedInAt: string | null;
 }
 
 export interface SuccessEnvelope<T> {
@@ -359,17 +395,62 @@ export interface SponsorPayload {
   offers?: SponsorOfferPayload[];
 }
 
+export type AnnouncementKind = 'manual' | 'system';
+export type AnnouncementStatus = 'draft' | 'scheduled' | 'published' | 'cancelled';
+export type AudienceType = 'all' | 'roles' | 'users';
+export type AnnouncementDelivery = 'immediate' | 'scheduled' | 'draft';
+export type CountdownCadence = 'once' | 'daily' | 'weekly';
+
 export interface PublicAnnouncement {
   id: string;
   title: string;
   description: string;
+  kind: AnnouncementKind;
+  status: AnnouncementStatus;
+  audienceType: AudienceType;
+  audienceRoles: UserRole[];
+  audienceUserIds: string[];
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  sendPush: boolean;
+  systemKey: string | null;
   createdAt: string;
   updatedAt: string;
+  isRead?: boolean;
 }
 
 export interface AnnouncementPayload {
   title: string;
   description?: string;
+  delivery: AnnouncementDelivery;
+  audienceType?: AudienceType;
+  audienceRoles?: UserRole[];
+  audienceUserIds?: string[];
+  scheduledAt?: string | null;
+  sendPush?: boolean;
+  status?: AnnouncementStatus;
+}
+
+export interface CountdownRule {
+  id: string;
+  label: string;
+  enabled: boolean;
+  offsetDays: number;
+  cadence: CountdownCadence;
+  titleTemplate: string;
+  bodyTemplate: string;
+}
+
+export interface CountdownSettings {
+  id: string;
+  enabled: boolean;
+  rules: CountdownRule[];
+  updatedAt: string;
+}
+
+export interface UpdateCountdownSettingsPayload {
+  enabled?: boolean;
+  rules?: CountdownRule[];
 }
 
 export interface PublicPostAuthor {

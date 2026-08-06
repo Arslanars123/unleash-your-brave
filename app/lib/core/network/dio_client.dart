@@ -59,7 +59,11 @@ class DioClient {
 
     try {
       final response = await Dio(
-        BaseOptions(baseUrl: _dio.options.baseUrl),
+        BaseOptions(
+          baseUrl: _dio.options.baseUrl,
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
       ).post(ApiConstants.refresh, data: {'refreshToken': refresh});
 
       final data = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;

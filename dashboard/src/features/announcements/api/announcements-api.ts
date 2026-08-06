@@ -1,15 +1,21 @@
 import { apiClient } from '@/shared/api/client';
 import type {
+  AnnouncementKind,
   AnnouncementPayload,
+  AnnouncementStatus,
+  CountdownSettings,
   PaginationMeta,
   PublicAnnouncement,
   SuccessEnvelope,
+  UpdateCountdownSettingsPayload,
 } from '@/shared/types/api';
 
 export interface ListAnnouncementsParams {
   page?: number;
   perPage?: number;
   search?: string;
+  status?: AnnouncementStatus;
+  kind?: AnnouncementKind;
 }
 
 export interface ListAnnouncementsResult {
@@ -47,5 +53,22 @@ export const announcementsApi = {
 
   async remove(id: string): Promise<void> {
     await apiClient.delete(`/announcements/${id}`);
+  },
+
+  async getCountdownSettings(): Promise<CountdownSettings> {
+    const { data } = await apiClient.get<SuccessEnvelope<CountdownSettings>>(
+      '/announcements/countdown-settings',
+    );
+    return data.data;
+  },
+
+  async updateCountdownSettings(
+    payload: UpdateCountdownSettingsPayload,
+  ): Promise<CountdownSettings> {
+    const { data } = await apiClient.patch<SuccessEnvelope<CountdownSettings>>(
+      '/announcements/countdown-settings',
+      payload,
+    );
+    return data.data;
   },
 };

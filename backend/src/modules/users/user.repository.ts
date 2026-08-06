@@ -52,6 +52,8 @@ export interface UserRepository {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
   list(query: ListUsersQuery): Promise<PaginatedResult<User>>;
+  /** Active users matching any of the given roles (for announcement audiences). */
+  listActiveIdsByRoles(roles: UserRole[]): Promise<string[]>;
   create(data: CreateUserRecord): Promise<User>;
   update(id: string, data: Partial<Omit<User, 'id' | 'createdAt'>>): Promise<User | null>;
   delete(id: string): Promise<boolean>;
@@ -99,6 +101,13 @@ export class InMemoryUserRepository implements UserRepository {
       items: filtered.slice(start, start + query.perPage),
       total: filtered.length,
     };
+  }
+
+  async listActiveIdsByRoles(roles: UserRole[]): Promise<string[]> {
+    if (roles.length === 0) return [];
+    return [...this.users.values()]
+      .filter((user) => user.status === 'active' && roles.includes(user.role))
+      .map((user) => user.id);
   }
 
   async create(data: CreateUserRecord): Promise<User> {

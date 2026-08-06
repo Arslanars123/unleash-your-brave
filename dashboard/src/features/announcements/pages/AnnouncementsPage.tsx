@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
-import { Megaphone, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Bell, Megaphone, Pencil, Plus, Trash2 } from 'lucide-react';
 import { announcementsApi } from '@/features/announcements/api/announcements-api';
 import { AnnouncementFormModal } from '@/features/announcements/components/AnnouncementFormModal';
 import { getApiErrorMessage } from '@/shared/api/client';
@@ -9,6 +10,30 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
+
+function statusLabel(item: PublicAnnouncement): string {
+  if (item.kind === 'system') return 'System';
+  return item.status.charAt(0).toUpperCase() + item.status.slice(1);
+}
+
+function audienceLabel(item: PublicAnnouncement): string {
+  if (item.audienceType === 'all') return 'All attendees';
+  if (item.audienceType === 'roles') {
+    return (item.audienceRoles ?? []).join(', ') || 'Groups';
+  }
+  const count = item.audienceUserIds?.length ?? 0;
+  return `${count} attendee${count === 1 ? '' : 's'}`;
+}
+
+function whenLabel(item: PublicAnnouncement): string {
+  if (item.status === 'scheduled' && item.scheduledAt) {
+    return `Scheduled ${new Date(item.scheduledAt).toLocaleString()}`;
+  }
+  if (item.publishedAt) {
+    return new Date(item.publishedAt).toLocaleString();
+  }
+  return new Date(item.updatedAt).toLocaleString();
+}
 
 export function AnnouncementsPage() {
   const [search, setSearch] = useState('');
@@ -88,12 +113,23 @@ export function AnnouncementsPage() {
       <header className="page-header">
         <div>
           <h1>Announcements</h1>
-          <p className="muted">Simple title + description notices for attendees. No likes or comments.</p>
+          <p className="muted">
+            Publish or schedule notices with push delivery. Manual and automatic countdown notices
+            share one attendee feed.
+          </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus size={16} />
-          Create announcement
-        </Button>
+        <div className="page-header-actions">
+          <Link to="/announcements/countdown">
+            <Button variant="secondary" type="button">
+              <Bell size={16} />
+              Countdown settings
+            </Button>
+          </Link>
+          <Button onClick={openCreate}>
+            <Plus size={16} />
+            Create announcement
+          </Button>
+        </div>
       </header>
 
       <div className="toolbar">
@@ -127,8 +163,9 @@ export function AnnouncementsPage() {
               <thead>
                 <tr>
                   <th>Title</th>
-                  <th>Description</th>
-                  <th>Updated</th>
+                  <th>Status</th>
+                  <th>Audience</th>
+                  <th>When</th>
                   <th />
                 </tr>
               </thead>
@@ -137,16 +174,29 @@ export function AnnouncementsPage() {
                   <tr key={item.id}>
                     <td>
                       <strong>{item.title}</strong>
+                      {item.description ? (
+                        <div className="cell-clamp muted">{item.description}</div>
+                      ) : null}
                     </td>
                     <td>
-                      <span className="cell-clamp">{item.description || '—'}</span>
+                      <span className={`status-pill status-${item.status}`}>
+                        {statusLabel(item)}
+                      </span>
+                      {item.sendPush && item.status !== 'draft' ? (
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                          Push on
+                        </div>
+                      ) : null}
                     </td>
-                    <td>{new Date(item.updatedAt).toLocaleDateString()}</td>
+                    <td>{audienceLabel(item)}</td>
+                    <td>{whenLabel(item)}</td>
                     <td className="actions">
-                      <Button variant="secondary" onClick={() => openEdit(item)}>
-                        <Pencil size={14} />
-                        Edit
-                      </Button>
+                      {item.kind !== 'system' ? (
+                        <Button variant="secondary" onClick={() => openEdit(item)}>
+                          <Pencil size={14} />
+                          Edit
+                        </Button>
+                      ) : null}
                       <Button
                         variant="danger"
                         disabled={deleteMutation.isPending}

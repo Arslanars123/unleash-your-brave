@@ -8,6 +8,7 @@ import {
   LogOut,
   Megaphone,
   Mic2,
+  QrCode,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -64,6 +65,10 @@ export function AppShell() {
               <NavLink to="/users">
                 <Users size={18} />
                 Attendees
+              </NavLink>
+              <NavLink to="/checkins">
+                <QrCode size={18} />
+                Check-in
               </NavLink>
             </>
           ) : null}

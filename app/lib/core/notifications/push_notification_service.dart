@@ -34,6 +34,13 @@ class PushNotificationService {
     importance: Importance.high,
   );
 
+  static const _announcementsChannel = AndroidNotificationChannel(
+    'announcements',
+    'Announcements',
+    description: 'Event announcements and countdown reminders',
+    importance: Importance.high,
+  );
+
   StreamSubscription<String>? _tokenRefreshSub;
   bool _initialized = false;
 
@@ -54,10 +61,11 @@ class PushNotificationService {
       onDidReceiveNotificationResponse: _onLocalNotificationTap,
     );
 
-    await _local
+    final androidPlugin = _local
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_androidChannel);
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.createNotificationChannel(_androidChannel);
+    await androidPlugin?.createNotificationChannel(_announcementsChannel);
 
     await _messaging.setForegroundNotificationPresentationOptions(
       alert: true,
@@ -87,48 +95,77 @@ class PushNotificationService {
 
     await registerTokenWithBackend();
     _tokenRefreshSub = _messaging.onTokenRefresh.listen((token) async {
-      await _chatRepository.registerDevice(
-        token: token,
-        platform: Platform.isIOS ? 'ios' : 'android',
-      );
+      try {
+        await _chatRepository.registerDevice(
+          token: token,
+          platform: Platform.isIOS ? 'ios' : 'android',
+        );
+      } catch (error) {
+        debugPrint('Failed to refresh FCM token registration: $error');
+      }
     });
   }
 
   Future<void> registerTokenWithBackend() async {
     try {
-      // On iOS without APNs this may return null — that's expected until
-      // Apple Developer + APNs are configured.
+      if (Platform.isIOS) {
+        // Without an Apple Developer APNs key, getToken() throws.
+        final apns = await _messaging.getAPNSToken();
+        if (apns == null || apns.isEmpty) {
+          debugPrint(
+            'Skipping FCM registration: APNs token not set yet '
+            '(expected until Apple Developer push is configured).',
+          );
+          return;
+        }
+      }
+
       final token = await _messaging.getToken();
       if (token == null || token.isEmpty) {
-        debugPrint('FCM token unavailable (APNs may be missing on iOS)');
+        debugPrint('FCM token unavailable');
         return;
       }
       await _chatRepository.registerDevice(
         token: token,
         platform: Platform.isIOS ? 'ios' : 'android',
       );
-    } catch (error, stack) {
-      debugPrint('Failed to register FCM token: $error\n$stack');
+    } on FirebaseException catch (error) {
+      if (error.code == 'apns-token-not-set') {
+        debugPrint(
+          'Skipping FCM registration: APNs not configured yet.',
+        );
+        return;
+      }
+      debugPrint('Failed to register FCM token: ${error.message}');
+    } catch (error) {
+      debugPrint('Failed to register FCM token: $error');
     }
   }
 
   Future<void> unregisterCurrentToken() async {
-    final token = _chatRepository.getFCMToken() ?? await _messaging.getToken();
-    if (token == null) return;
-    await _chatRepository.unregisterDevice(token);
     try {
+      if (Platform.isIOS) {
+        final apns = await _messaging.getAPNSToken();
+        if (apns == null || apns.isEmpty) return;
+      }
+      final token = _chatRepository.getFCMToken() ?? await _messaging.getToken();
+      if (token == null) return;
+      await _chatRepository.unregisterDevice(token);
       await _messaging.deleteToken();
     } catch (_) {}
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
     final notification = message.notification;
+    final isAnnouncement = message.data['type'] == 'announcement';
     final title = notification?.title ??
         (message.data['title'] as String?) ??
-        'New message';
+        (isAnnouncement ? 'Announcement' : 'New message');
     final body = notification?.body ??
         (message.data['body'] as String?) ??
-        'Open the group chat';
+        (isAnnouncement ? 'Open notifications' : 'Open the group chat');
+
+    final channel = isAnnouncement ? _announcementsChannel : _androidChannel;
 
     await _local.show(
       message.hashCode,
@@ -136,13 +173,15 @@ class PushNotificationService {
       body,
       NotificationDetails(
         android: AndroidNotificationDetails(
-          _androidChannel.id,
-          _androidChannel.name,
-          channelDescription: _androidChannel.description,
+          channel.id,
+          channel.name,
+          channelDescription: channel.description,
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
-          tag: message.data['groupId'] as String? ?? 'chat',
+          tag: isAnnouncement
+              ? (message.data['announcementId'] as String? ?? 'announcement')
+              : (message.data['groupId'] as String? ?? 'chat'),
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
@@ -155,12 +194,39 @@ class PushNotificationService {
   }
 
   void _onLocalNotificationTap(NotificationResponse response) {
-    AppRouter.router.go('/network/chat');
+    _navigateFromPayload(response.payload);
   }
 
   void _handleMessageOpen(RemoteMessage message) {
-    final type = message.data['type'];
-    if (type == 'chat.message' || message.data['groupId'] != null) {
+    _navigateFromData(message.data);
+  }
+
+  void _navigateFromPayload(String? payload) {
+    if (payload == null || payload.isEmpty) {
+      AppRouter.router.go('/network/chat');
+      return;
+    }
+    final data = <String, String>{};
+    for (final part in payload.split('&')) {
+      final idx = part.indexOf('=');
+      if (idx <= 0) continue;
+      data[part.substring(0, idx)] = part.substring(idx + 1);
+    }
+    _navigateFromData(data);
+  }
+
+  void _navigateFromData(Map<String, dynamic> data) {
+    final type = data['type'];
+    if (type == 'announcement') {
+      final id = data['announcementId'];
+      if (id != null && id.toString().isNotEmpty) {
+        AppRouter.router.go('/notifications?id=$id');
+      } else {
+        AppRouter.router.go('/notifications');
+      }
+      return;
+    }
+    if (type == 'chat.message' || data['groupId'] != null) {
       AppRouter.router.go('/network/chat');
     }
   }
