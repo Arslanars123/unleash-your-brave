@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { MessageCircle, Send, Trash2, Users } from 'lucide-react';
 import { chatApi, type ChatMessageView } from '@/features/chat/api/chat-api';
 import { useChatRealtime } from '@/features/chat/hooks/useChatRealtime';

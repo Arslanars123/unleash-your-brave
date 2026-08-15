@@ -167,8 +167,8 @@ export function SponsorsPage() {
               id: sponsor.id,
               title: sponsor.name,
               subtitle: sponsor.description?.slice(0, 60) || undefined,
-              leading: sponsor.logo ? (
-                <img src={resolveMediaUrl(sponsor.logo)} alt="" />
+              leading: sponsor.image ? (
+                <img src={resolveMediaUrl(sponsor.image)} alt="" />
               ) : (
                 <span>{sponsor.name.charAt(0).toUpperCase()}</span>
               ),
