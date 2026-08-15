@@ -54,6 +54,9 @@ jobs:
           IMAGE_URI: ${{ steps.build.outputs.image }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           ACCESS_ROLE: arn:aws:iam::773063618702:role/AppRunnerECRAccessRoleUnleash
         run: |
           set -euo pipefail
@@ -63,7 +66,7 @@ jobs:
             --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables' \
             --output json)
 
-          SOURCE=$(CURRENT_ENV="$CURRENT" IMAGE_URI="$IMAGE_URI" MONGODB_URI="$MONGODB_URI" FIREBASE_SERVICE_ACCOUNT_JSON="$FIREBASE_SERVICE_ACCOUNT_JSON" ACCESS_ROLE="$ACCESS_ROLE" python3 - <<'PY'
+          SOURCE=$(CURRENT_ENV="$CURRENT" IMAGE_URI="$IMAGE_URI" MONGODB_URI="$MONGODB_URI" FIREBASE_SERVICE_ACCOUNT_JSON="$FIREBASE_SERVICE_ACCOUNT_JSON" STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK_SECRET" STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY" ACCESS_ROLE="$ACCESS_ROLE" python3 - <<'PY'
           import json, os
           env = json.loads(os.environ.get("CURRENT_ENV") or "{}") or {}
           mongo = (os.environ.get("MONGODB_URI") or "").strip()
@@ -74,6 +77,29 @@ jobs:
           firebase = (os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
           if firebase:
               env["FIREBASE_SERVICE_ACCOUNT_JSON"] = firebase
+          for key in ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PUBLISHABLE_KEY"):
+              value = (os.environ.get(key) or "").strip()
+              if value:
+                  env[key] = value
+          cors = env.get("CORS_ORIGINS", "")
+          needed = [
+              "http://unleash-admin-dashboard-773063618702.s3-website-ap-southeast-2.amazonaws.com",
+              "http://localhost:5173",
+              "https://fittoprofit.com",
+              "https://www.fittoprofit.com",
+              "https://fittoprofit-a93f9.web.app",
+          ]
+          parts = [p.strip() for p in cors.split(",") if p.strip()]
+          for origin in needed:
+              if origin not in parts:
+                  parts.append(origin)
+          env["CORS_ORIGINS"] = ",".join(parts)
+          env.setdefault("STRIPE_CURRENCY", "usd")
+          env.setdefault(
+              "STRIPE_SUCCESS_URL",
+              "https://www.fittoprofit.com/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+          )
+          env.setdefault("STRIPE_CANCEL_URL", "https://www.fittoprofit.com/checkout")
           print(json.dumps({
               "AuthenticationConfiguration": {
                   "AccessRoleArn": os.environ["ACCESS_ROLE"]
