@@ -12,6 +12,9 @@ import { PushNotificationService } from '../modules/chat/push.service.js';
 import { CheckInController } from '../modules/checkins/checkin.controller.js';
 import { createCheckInRouter } from '../modules/checkins/checkin.routes.js';
 import { CheckInService } from '../modules/checkins/checkin.service.js';
+import { CheckoutController } from '../modules/checkout/checkout.controller.js';
+import { createCheckoutRouter } from '../modules/checkout/checkout.routes.js';
+import { CheckoutService } from '../modules/checkout/checkout.service.js';
 import { EventController } from '../modules/events/event.controller.js';
 import { createEventRouter } from '../modules/events/event.routes.js';
 import { EventService } from '../modules/events/event.service.js';
@@ -30,7 +33,11 @@ import { SpeakerService } from '../modules/speakers/speaker.service.js';
 import { SponsorController } from '../modules/sponsors/sponsor.controller.js';
 import { createSponsorRouter } from '../modules/sponsors/sponsor.routes.js';
 import { SponsorService } from '../modules/sponsors/sponsor.service.js';
+import { MembershipController } from '../modules/memberships/membership.controller.js';
+import { createMembershipRouter } from '../modules/memberships/membership.routes.js';
+import { MembershipService } from '../modules/memberships/membership.service.js';
 import { UploadController } from '../modules/uploads/upload.controller.js';
+import { MediaStorageService } from '../modules/uploads/media-storage.service.js';
 import { createUploadRouter } from '../modules/uploads/upload.routes.js';
 import { UserController } from '../modules/users/user.controller.js';
 import { createUserRouter } from '../modules/users/user.routes.js';
@@ -57,6 +64,8 @@ import { MongoSessionFeedbackRepository } from '../db/repositories/mongo-session
 import { MongoSessionRepository } from '../db/repositories/mongo-session.repository.js';
 import { MongoSpeakerRepository } from '../db/repositories/mongo-speaker.repository.js';
 import { MongoSponsorRepository } from '../db/repositories/mongo-sponsor.repository.js';
+import { MongoMembershipRepository } from '../db/repositories/mongo-membership.repository.js';
+import { MongoMembershipPurchaseRepository } from '../db/repositories/mongo-membership-purchase.repository.js';
 import { MongoUserRepository } from '../db/repositories/mongo-user.repository.js';
 import { seedDemoData } from './seed.js';
 
@@ -72,6 +81,9 @@ export async function createContainer() {
   const sessionRepository = new MongoSessionRepository();
   const sessionFeedbackRepository = new MongoSessionFeedbackRepository();
   const sponsorRepository = new MongoSponsorRepository();
+  const membershipRepository = new MongoMembershipRepository();
+  const membershipPurchaseRepository = new MongoMembershipPurchaseRepository();
+  await membershipPurchaseRepository.ensureIndexes();
   const announcementRepository = new MongoAnnouncementRepository();
   const announcementReadRepository = new MongoAnnouncementReadRepository();
   const countdownSettingsRepository = new MongoCountdownSettingsRepository();
@@ -85,22 +97,30 @@ export async function createContainer() {
   const deviceTokenRepository = new MongoDeviceTokenRepository();
   const mailService = new MailService();
 
-  const userService = new UserService(userRepository, speakerRepository, sponsorRepository);
-  const authService = new AuthService(userRepository, userService);
+  const userService = new UserService(
+    userRepository,
+    speakerRepository,
+    sponsorRepository,
+    membershipRepository,
+  );
+  const authService = new AuthService(userRepository, userService, mailService);
   const eventService = new EventService(eventRepository);
-  const speakerService = new SpeakerService(speakerRepository, eventService);
+  const speakerService = new SpeakerService(speakerRepository, eventService, userService, mailService);
   const sessionService = new SessionService(
     sessionRepository,
     speakerRepository,
     eventService,
     sessionFeedbackRepository,
+    userRepository,
+    membershipRepository,
   );
   const sessionFeedbackService = new SessionFeedbackService(
     sessionFeedbackRepository,
     sessionRepository,
     userRepository,
   );
-  const sponsorService = new SponsorService(sponsorRepository, eventService);
+  const sponsorService = new SponsorService(sponsorRepository, eventService, userService, mailService);
+  const membershipService = new MembershipService(membershipRepository, eventService);
   const pushNotificationService = new PushNotificationService(deviceTokenRepository);
   const announcementService = new AnnouncementService(
     announcementRepository,
@@ -110,9 +130,24 @@ export async function createContainer() {
     eventService,
     pushNotificationService,
   );
-  const checkInService = new CheckInService(checkInRepository, userRepository, eventService);
-  const postService = new PostService(postRepository, userRepository);
   const realtimeHub = new RealtimeHub();
+  const checkoutService = new CheckoutService(
+    membershipPurchaseRepository,
+    membershipRepository,
+    userRepository,
+    userService,
+    eventService,
+    mailService,
+    realtimeHub,
+  );
+  const checkInService = new CheckInService(
+    checkInRepository,
+    userRepository,
+    eventService,
+    membershipRepository,
+    checkoutService,
+  );
+  const postService = new PostService(postRepository, userRepository);
   const chatHub = new ChatHub();
   const chatService = new ChatService(
     chatGroupRepository,
@@ -125,20 +160,23 @@ export async function createContainer() {
   );
   const ghlWebhookService = new GhlWebhookService(userService, realtimeHub, mailService);
 
-  const userController = new UserController(userService);
+  const userController = new UserController(userService, checkoutService);
   const authController = new AuthController(authService);
   const eventController = new EventController(eventService);
   const speakerController = new SpeakerController(speakerService);
   const sessionController = new SessionController(sessionService);
   const sessionFeedbackController = new SessionFeedbackController(sessionFeedbackService);
   const sponsorController = new SponsorController(sponsorService);
+  const membershipController = new MembershipController(membershipService);
+  const checkoutController = new CheckoutController(checkoutService);
   const announcementController = new AnnouncementController(announcementService);
   const checkInController = new CheckInController(checkInService);
   const postController = new PostController(postService);
   const chatController = new ChatController(chatService, chatHub, pushNotificationService);
   const ghlWebhookController = new GhlWebhookController(ghlWebhookService);
   const realtimeController = new RealtimeController(realtimeHub);
-  const uploadController = new UploadController();
+  const mediaStorage = new MediaStorageService();
+  const uploadController = new UploadController(mediaStorage);
 
   await seedDemoData(
     userService,
@@ -146,6 +184,7 @@ export async function createContainer() {
     speakerService,
     sessionService,
     sponsorService,
+    membershipService,
     sessionFeedbackService,
     announcementService,
     postService,
@@ -154,6 +193,9 @@ export async function createContainer() {
   await chatService.ensureGroup();
 
   return {
+    controllers: {
+      checkout: checkoutController,
+    },
     routers: {
       auth: createAuthRouter(authController),
       users: createUserRouter(userController),
@@ -161,6 +203,8 @@ export async function createContainer() {
       speakers: createSpeakerRouter(speakerController),
       sessions: createSessionRouter(sessionController, sessionFeedbackController),
       sponsors: createSponsorRouter(sponsorController),
+      memberships: createMembershipRouter(membershipController),
+      checkout: createCheckoutRouter(checkoutController),
       announcements: createAnnouncementRouter(announcementController),
       checkins: createCheckInRouter(checkInController),
       posts: createPostRouter(postController),
@@ -177,6 +221,8 @@ export async function createContainer() {
       sessionService,
       sessionFeedbackService,
       sponsorService,
+      membershipService,
+      checkoutService,
       announcementService,
       checkInService,
       postService,

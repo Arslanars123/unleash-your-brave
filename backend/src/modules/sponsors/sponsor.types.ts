@@ -45,6 +45,8 @@ export interface Sponsor {
   id: string;
   eventId: string;
   name: string;
+  /** Portal login email (optional; linked user account when set). */
+  email: string;
   description: string;
   image: string;
   offers: SponsorOffer[];
@@ -56,6 +58,7 @@ export interface PublicSponsor {
   id: string;
   eventId: string;
   name: string;
+  email: string;
   description: string;
   image: string;
   offers: PublicSponsorOffer[];
@@ -66,6 +69,7 @@ export interface PublicSponsor {
 export interface CreateSponsorInput {
   eventId: string;
   name: string;
+  email?: string;
   description?: string;
   image?: string;
   offers?: SponsorOfferInput[];
@@ -73,6 +77,7 @@ export interface CreateSponsorInput {
 
 export interface UpdateSponsorInput {
   name?: string;
+  email?: string;
   description?: string;
   image?: string;
   offers?: SponsorOfferInput[];

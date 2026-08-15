@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:keyboard_actions/keyboard_actions.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
 import 'package:unleash_your_brave/core/responsive/responsive.dart';
@@ -112,11 +114,36 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       final url = await sl<UploadsRemoteDataSource>().uploadImage(_localPhoto!);
       if (!mounted) return;
-      setState(() {
-        _photoUrl = url;
-        _uploadingPhoto = false;
-      });
-      AppToast.success('Photo uploaded');
+      final resolved = resolveMediaUrl(url);
+      if (resolved.isNotEmpty) {
+        await CachedNetworkImage.evictFromCache(resolved);
+      }
+      if (!mounted) return;
+
+      // Persist immediately so leaving the screen doesn't lose the photo.
+      final photoResult = await sl<UpdateMyProfileUseCase>()(
+        UpdateMyProfileParams({'photoUrl': url}),
+      );
+      if (!mounted) return;
+
+      await photoResult.fold(
+        (failure) async {
+          setState(() {
+            _photoUrl = url;
+            _uploadingPhoto = false;
+          });
+          AppToast.error(failure.message);
+        },
+        (user) async {
+          context.read<AuthBloc>().add(AuthUserUpdated(user));
+          setState(() {
+            _photoUrl = user.photoUrl.isNotEmpty ? user.photoUrl : url;
+            _uploadingPhoto = false;
+            _localPhoto = null;
+          });
+          AppToast.success('Photo saved');
+        },
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() => _uploadingPhoto = false);
@@ -213,14 +240,22 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     if (!mounted) return;
 
-    result.fold(
-      (failure) {
+    await result.fold(
+      (failure) async {
         setState(() => _saving = false);
         AppToast.error(failure.message);
       },
-      (user) {
+      (user) async {
+        final resolved = resolveMediaUrl(user.photoUrl);
+        if (resolved.isNotEmpty) {
+          await CachedNetworkImage.evictFromCache(resolved);
+        }
+        if (!mounted) return;
         context.read<AuthBloc>().add(AuthUserUpdated(user));
-        setState(() => _saving = false);
+        setState(() {
+          _saving = false;
+          _localPhoto = null;
+        });
         AppToast.success('Profile updated');
         context.pop();
       },
@@ -240,10 +275,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: _saving ? null : () => context.pop(),
+          onPressed: _saving ? null : () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/profile');
+            }
+          },
         ),
       ),
-      body: AdaptiveScrollBody(
+      body: KeyboardActions.done(
+        child: AdaptiveScrollBody(
         child: Form(
           key: _formKey,
           child: Column(
@@ -382,6 +424,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -401,12 +444,43 @@ class _PhotoEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final remote = resolveMediaUrl(photoUrl);
-    ImageProvider? image;
-    if (localPhoto != null) {
-      image = FileImage(localPhoto!);
-    } else if (isLoadableMediaUrl(photoUrl)) {
-      image = NetworkImage(remote);
+    const size = 104.0;
+    final bg = AppColors.accentPink.withValues(alpha: 0.15);
+
+    Widget fallback() => Container(
+          width: size,
+          height: size,
+          color: bg,
+          alignment: Alignment.center,
+          child: uploading
+              ? const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(
+                  Icons.person_outline,
+                  size: 40,
+                  color: AppColors.accentPink,
+                ),
+        );
+
+    Widget avatar() {
+      if (uploading) return fallback();
+      if (localPhoto != null) {
+        return Image.file(localPhoto!, width: size, height: size, fit: BoxFit.cover);
+      }
+      if (isLoadableMediaUrl(photoUrl)) {
+        return CachedNetworkImage(
+          imageUrl: resolveMediaUrl(photoUrl),
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => fallback(),
+          errorWidget: (_, __, ___) => fallback(),
+        );
+      }
+      return fallback();
     }
 
     return Center(
@@ -415,24 +489,7 @@ class _PhotoEditor extends StatelessWidget {
         child: Stack(
           alignment: Alignment.bottomRight,
           children: [
-            CircleAvatar(
-              radius: 52,
-              backgroundColor: AppColors.accentPink.withValues(alpha: 0.15),
-              backgroundImage: uploading ? null : image,
-              child: uploading
-                  ? const SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : image == null
-                      ? const Icon(
-                          Icons.person_outline,
-                          size: 40,
-                          color: AppColors.accentPink,
-                        )
-                      : null,
-            ),
+            ClipOval(child: SizedBox(width: size, height: size, child: avatar())),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(

@@ -11,6 +11,7 @@ export function toPublicUser(user: User): PublicUser {
     status: user.status,
     speakerId: user.speakerId,
     sponsorId: user.sponsorId,
+    membershipId: user.membershipId ?? null,
     photoUrl: user.photoUrl,
     title: user.title,
     business: user.business,

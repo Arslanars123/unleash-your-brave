@@ -10,6 +10,7 @@ import 'package:unleash_your_brave/features/agenda/presentation/pages/session_de
 import 'package:unleash_your_brave/features/announcements/presentation/pages/notifications_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/pages/checkin_qr_page.dart';
+import 'package:unleash_your_brave/features/auth/presentation/pages/forgot_password_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/login_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/set_password_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/signup_page.dart';
@@ -19,28 +20,41 @@ import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_
 import 'package:unleash_your_brave/features/chat/presentation/pages/chat_list_page.dart';
 import 'package:unleash_your_brave/features/chat/presentation/pages/chat_room_page.dart';
 import 'package:unleash_your_brave/features/home/presentation/pages/home_page.dart';
+import 'package:unleash_your_brave/features/legal/presentation/pages/legal_document_page.dart';
 import 'package:unleash_your_brave/features/map/presentation/pages/map_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/edit_profile_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/main_shell.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/profile_page.dart';
+import 'package:unleash_your_brave/features/splash/presentation/pages/splash_page.dart';
 
 class AppRouter {
   const AppRouter._();
 
+  static final GlobalKey<NavigatorState> rootNavigatorKey =
+      GlobalKey<NavigatorState>(debugLabel: 'root');
+
   static final GoRouter router = GoRouter(
-    initialLocation: '/login',
+    navigatorKey: rootNavigatorKey,
+    initialLocation: '/splash',
     refreshListenable: GoRouterRefreshStream(sl<AuthBloc>().stream),
     redirect: (context, state) {
       final authState = sl<AuthBloc>().state;
       final location = state.matchedLocation;
+      final onSplash = location == '/splash';
       final onAuthGate = location == '/login' ||
           location == '/signup' ||
-          location == '/verify-code';
+          location == '/verify-code' ||
+          location == '/forgot-password';
       final onSetPassword = location == '/set-password';
 
-      if (authState is AuthInitial || authState is AuthLoading) {
+      // Cold start / session restore only — never bounce form submits to splash.
+      if (authState is AuthInitial || authState is AuthCheckingSession) {
+        if (!onSplash) return '/splash';
         return null;
       }
+
+      // Splash decides when to leave after its animation hold.
+      if (onSplash) return null;
 
       final signedIn = authState is AuthAuthenticated;
       final mustChange = authState is AuthAuthenticated &&
@@ -52,11 +66,16 @@ class AppRouter {
       return null;
     },
     routes: [
+      GoRoute(path: '/splash', builder: (context, state) => const SplashPage()),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(path: '/signup', builder: (context, state) => const SignupPage()),
       GoRoute(
         path: '/verify-code',
         builder: (context, state) => const VerifyCodePage(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordPage(),
       ),
       GoRoute(
         path: '/set-password',
@@ -72,19 +91,6 @@ class AppRouter {
               GoRoute(
                 path: '/',
                 builder: (context, state) => const HomePage(),
-                routes: [
-                  GoRoute(
-                    path: 'notifications',
-                    builder: (context, state) {
-                      final highlightId = state.uri.queryParameters['id'];
-                      return NotificationsPage(highlightId: highlightId);
-                    },
-                  ),
-                  GoRoute(
-                    path: 'check-in',
-                    builder: (context, state) => const CheckInQrPage(),
-                  ),
-                ],
               ),
             ],
           ),
@@ -166,6 +172,30 @@ class AppRouter {
             ],
           ),
         ],
+      ),
+      // Full-screen overlays above the tab shell — Back returns to the prior screen.
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/check-in',
+        builder: (context, state) => const CheckInQrPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/notifications',
+        builder: (context, state) {
+          final highlightId = state.uri.queryParameters['id'];
+          return NotificationsPage(highlightId: highlightId);
+        },
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/privacy-policy',
+        builder: (context, state) => LegalDocumentPage.privacy(),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/terms',
+        builder: (context, state) => LegalDocumentPage.terms(),
       ),
     ],
   );

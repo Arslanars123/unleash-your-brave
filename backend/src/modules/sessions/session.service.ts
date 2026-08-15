@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
 import type { EventService } from '../events/event.service.js';
+import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
+import type { UserRepository } from '../users/user.repository.js';
+import type { UserRole } from '../users/user.types.js';
 import { buildFeedbackSummary } from './feedback/session-feedback.mapper.js';
 import type { SessionFeedbackRepository } from './feedback/session-feedback.repository.js';
 import { toPublicSession } from './session.mapper.js';
@@ -26,28 +29,62 @@ function normalizeMaterials(materials: SessionMaterialInput[] | undefined): Sess
   }));
 }
 
+export interface SessionViewerContext {
+  userId: string;
+  role: UserRole;
+}
+
+function isSessionAccessible(session: Session, membershipId: string | null): boolean {
+  const allowed = session.membershipIds ?? [];
+  if (allowed.length === 0) return true;
+  if (!membershipId) return false;
+  return allowed.includes(membershipId);
+}
+
 export class SessionService {
   constructor(
     private readonly sessions: SessionRepository,
     private readonly speakers: SpeakerRepository,
     private readonly events: EventService,
     private readonly feedback: SessionFeedbackRepository,
+    private readonly users?: UserRepository,
+    private readonly memberships?: MembershipRepository,
   ) {}
 
-  async list(query: ListSessionsQuery): Promise<PaginatedResult<PublicSession>> {
-    const { items, total } = await this.sessions.list(query);
+  async list(
+    query: ListSessionsQuery,
+    viewer?: SessionViewerContext,
+  ): Promise<PaginatedResult<PublicSession>> {
+    let listQuery = query;
+
+    if (viewer?.role === 'member') {
+      const membershipId = await this.resolveMembershipId(viewer.userId);
+      listQuery = { ...query, accessibleToMembershipId: membershipId };
+    }
+
+    const { items, total } = await this.sessions.list(listQuery);
     const mapped = await Promise.all(items.map((session) => this.toPublic(session)));
     return { items: mapped, total };
   }
 
-  async getById(id: string): Promise<PublicSession> {
-    return this.toPublic(await this.requireSession(id));
+  async getById(id: string, viewer?: SessionViewerContext): Promise<PublicSession> {
+    const session = await this.requireSession(id);
+
+    if (viewer?.role === 'member') {
+      const membershipId = await this.resolveMembershipId(viewer.userId);
+      if (!isSessionAccessible(session, membershipId)) {
+        throw new ForbiddenError('You do not have access to this session');
+      }
+    }
+
+    return this.toPublic(session);
   }
 
   async create(input: CreateSessionInput): Promise<PublicSession> {
     await this.events.requireEvent(input.eventId);
     await this.requireSpeakerForEvent(input.speakerId, input.eventId);
     await this.assertValidEventDay(input.eventId, input.eventDayNumber);
+    await this.assertMembershipsForEvent(input.membershipIds ?? [], input.eventId);
 
     const created = await this.sessions.create({
       eventId: input.eventId,
@@ -58,6 +95,7 @@ export class SessionService {
       startTime: input.startTime ?? '',
       endTime: input.endTime ?? '',
       location: input.location ?? '',
+      membershipIds: input.membershipIds ?? [],
       materials: normalizeMaterials(input.materials),
       feedbackEnabled: input.feedbackEnabled ?? true,
     });
@@ -77,6 +115,9 @@ export class SessionService {
     if (input.eventDayNumber !== undefined) {
       await this.assertValidEventDay(existing.eventId, eventDayNumber);
     }
+    if (input.membershipIds !== undefined) {
+      await this.assertMembershipsForEvent(input.membershipIds, existing.eventId);
+    }
 
     const updated = await this.sessions.update(id, {
       ...(input.name !== undefined ? { name: input.name } : {}),
@@ -86,6 +127,7 @@ export class SessionService {
       ...(input.startTime !== undefined ? { startTime: input.startTime } : {}),
       ...(input.endTime !== undefined ? { endTime: input.endTime } : {}),
       ...(input.location !== undefined ? { location: input.location } : {}),
+      ...(input.membershipIds !== undefined ? { membershipIds: input.membershipIds } : {}),
       ...(input.materials !== undefined ? { materials: normalizeMaterials(input.materials) } : {}),
       ...(input.feedbackEnabled !== undefined ? { feedbackEnabled: input.feedbackEnabled } : {}),
     });
@@ -99,6 +141,12 @@ export class SessionService {
       throw new NotFoundError('Session');
     }
     await this.feedback.deleteBySession(id);
+  }
+
+  private async resolveMembershipId(userId: string): Promise<string | null> {
+    if (!this.users) return null;
+    const user = await this.users.findById(userId);
+    return user?.membershipId ?? null;
   }
 
   private async toPublic(session: Session): Promise<PublicSession> {
@@ -124,7 +172,13 @@ export class SessionService {
   private async requireSession(id: string): Promise<Session> {
     const session = await this.sessions.findById(id);
     if (!session) throw new NotFoundError('Session');
-    return session;
+    // Legacy docs may omit membershipIds / feedbackEnabled.
+    return {
+      ...session,
+      membershipIds: session.membershipIds ?? [],
+      materials: session.materials ?? [],
+      feedbackEnabled: session.feedbackEnabled !== false,
+    };
   }
 
   private async requireSpeakerForEvent(speakerId: string, eventId: string): Promise<void> {
@@ -132,6 +186,23 @@ export class SessionService {
     if (!speaker) throw new BadRequestError('Selected speaker was not found');
     if (speaker.eventId !== eventId) {
       throw new BadRequestError('Speaker must belong to the same event edition');
+    }
+  }
+
+  private async assertMembershipsForEvent(
+    membershipIds: string[],
+    eventId: string,
+  ): Promise<void> {
+    if (membershipIds.length === 0) return;
+    if (!this.memberships) return;
+    for (const membershipId of membershipIds) {
+      const membership = await this.memberships.findById(membershipId);
+      if (!membership) {
+        throw new BadRequestError('Selected membership was not found');
+      }
+      if (membership.eventId !== eventId) {
+        throw new BadRequestError('Membership must belong to the same event edition');
+      }
     }
   }
 

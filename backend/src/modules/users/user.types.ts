@@ -65,6 +65,8 @@ export interface User {
   speakerId: string | null;
   /** Linked sponsor profile when role is `sponsor`. */
   sponsorId: string | null;
+  /** Membership tier for `member` role. */
+  membershipId: string | null;
   photoUrl: string;
   title: string;
   business: string;
@@ -84,6 +86,9 @@ export interface User {
   /** Hashed one-time invite / login code from purchase email. */
   inviteCodeHash: string | null;
   inviteCodeExpiresAt: Date | null;
+  /** Hashed 6-digit OTP for forgot-password flow. */
+  passwordResetOtpHash: string | null;
+  passwordResetOtpExpiresAt: Date | null;
   /** True until the attendee sets their own password after invite login. */
   mustChangePassword: boolean;
   /** GoHighLevel contact id when created/updated via purchase webhook. */
@@ -104,6 +109,7 @@ export interface PublicUser {
   status: UserStatus;
   speakerId: string | null;
   sponsorId: string | null;
+  membershipId: string | null;
   photoUrl: string;
   title: string;
   business: string;
@@ -134,6 +140,7 @@ export interface CreateUserInput {
   role?: UserRole;
   speakerId?: string | null;
   sponsorId?: string | null;
+  membershipId?: string | null;
   photoUrl?: string;
   title?: string;
   business?: string;
@@ -160,6 +167,7 @@ export interface UpdateUserInput {
   status?: UserStatus;
   speakerId?: string | null;
   sponsorId?: string | null;
+  membershipId?: string | null;
   photoUrl?: string;
   title?: string;
   business?: string;

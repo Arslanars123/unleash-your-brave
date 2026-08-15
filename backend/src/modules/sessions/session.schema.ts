@@ -82,6 +82,7 @@ export const createSessionSchema = z
     startTime: timeHmSchema.optional().default(''),
     endTime: timeHmSchema.optional().default(''),
     location: z.string().trim().max(160).optional().default(''),
+    membershipIds: z.array(z.string().uuid()).max(20).optional().default([]),
     materials: z.array(materialSchema).max(40).optional().default([]),
     feedbackEnabled: z.boolean().optional().default(true),
   })
@@ -96,6 +97,7 @@ export const updateSessionSchema = z
     startTime: timeHmSchema.optional(),
     endTime: timeHmSchema.optional(),
     location: z.string().trim().max(160).optional(),
+    membershipIds: z.array(z.string().uuid()).max(20).optional(),
     materials: z.array(materialSchema).max(40).optional(),
     feedbackEnabled: z.boolean().optional(),
   })

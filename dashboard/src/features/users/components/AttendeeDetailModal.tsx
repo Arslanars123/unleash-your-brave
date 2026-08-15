@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Pencil, X } from 'lucide-react';
+import { usersApi } from '@/features/users/api/users-api';
 import type { PublicUser } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
+import { Spinner } from '@/shared/ui/Spinner';
 
 function display(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '—';
@@ -13,6 +16,17 @@ function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString();
+}
+
+function money(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+    }).format(amount);
+  } catch {
+    return `${amount} ${currency}`;
+  }
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -46,9 +60,16 @@ export function AttendeeDetailModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  const purchasesQuery = useQuery({
+    queryKey: ['users', 'purchases', user?.id],
+    enabled: open && Boolean(user?.id),
+    queryFn: () => usersApi.getPurchases(user!.id),
+  });
+
   if (!open || !user) return null;
 
   const fromGhl = Boolean(user.ghlContactId) || Boolean(user.title);
+  const summary = purchasesQuery.data;
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -106,17 +127,73 @@ export function AttendeeDetailModal({
           </section>
 
           <section className="attendee-detail-section">
-            <h3>Purchase / GHL</h3>
-            <dl className="attendee-detail-grid">
+            <h3>Membership & purchases</h3>
+            {purchasesQuery.isLoading ? <Spinner /> : null}
+            {purchasesQuery.isError ? (
+              <p className="form-error">Could not load purchase history.</p>
+            ) : null}
+            {summary ? (
+              <>
+                <dl className="attendee-detail-grid">
+                  <DetailRow
+                    label="Current membership"
+                    value={display(summary.currentMembershipName)}
+                  />
+                  <DetailRow
+                    label="Original membership"
+                    value={display(summary.originalMembershipName)}
+                  />
+                  <DetailRow
+                    label="Latest purchase"
+                    value={
+                      summary.latestPurchase
+                        ? `${summary.latestPurchase.membershipName} · ${money(
+                            summary.latestPurchase.price,
+                            summary.latestPurchase.currency,
+                          )} · ${formatDate(summary.latestPurchase.purchasedAt)}`
+                        : '—'
+                    }
+                  />
+                </dl>
+                {summary.purchases.length > 0 ? (
+                  <ul style={{ margin: '12px 0 0', paddingLeft: 18 }}>
+                    {summary.purchases.map((item) => (
+                      <li key={item.id}>
+                        {item.kind === 'upgrade'
+                          ? `${item.previousMembershipName ?? '?'} → ${item.membershipName}`
+                          : item.membershipName}
+                        {' · '}
+                        {money(item.price, item.currency)}
+                        {' · '}
+                        {item.paymentStatus}
+                        {' · '}
+                        {formatDate(item.purchasedAt)}
+                        {item.stripePaymentIntentId
+                          ? ` · ${item.stripePaymentIntentId}`
+                          : ''}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted" style={{ marginTop: 8 }}>
+                    No Stripe purchases recorded yet.
+                  </p>
+                )}
+              </>
+            ) : null}
+            <dl className="attendee-detail-grid" style={{ marginTop: 16 }}>
               <DetailRow
-                label="Source"
-                value={user.ghlContactId ? 'GoHighLevel webhook' : fromGhl ? 'Likely purchase / GHL' : 'Manual / admin'}
+                label="Legacy source"
+                value={
+                  user.ghlContactId
+                    ? 'GoHighLevel webhook'
+                    : fromGhl
+                      ? 'Likely purchase / GHL'
+                      : 'Manual / admin / Stripe'
+                }
               />
               <DetailRow label="GHL contact ID" value={display(user.ghlContactId)} />
-              <DetailRow
-                label="Product / title"
-                value={display(user.title)}
-              />
+              <DetailRow label="Product / title" value={display(user.title)} />
             </dl>
           </section>
 

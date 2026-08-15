@@ -28,6 +28,14 @@ export class MongoUserRepository implements UserRepository {
     return fromDoc<User>(await this.collection.findOne({ email: email.toLowerCase() }));
   }
 
+  async findBySpeakerId(speakerId: string): Promise<User | null> {
+    return fromDoc<User>(await this.collection.findOne({ speakerId }));
+  }
+
+  async findBySponsorId(sponsorId: string): Promise<User | null> {
+    return fromDoc<User>(await this.collection.findOne({ sponsorId }));
+  }
+
   async list(query: ListUsersQuery): Promise<PaginatedResult<User>> {
     const filter: Filter<MongoDoc<User>> = {};
     if (query.role) filter.role = query.role;
@@ -75,6 +83,7 @@ export class MongoUserRepository implements UserRepository {
       status: data.status,
       speakerId: data.speakerId ?? null,
       sponsorId: data.sponsorId ?? null,
+      membershipId: data.membershipId ?? null,
       photoUrl: data.photoUrl ?? EMPTY_ATTENDEE_PROFILE.photoUrl,
       title: data.title ?? EMPTY_ATTENDEE_PROFILE.title,
       business: data.business ?? EMPTY_ATTENDEE_PROFILE.business,
@@ -92,6 +101,8 @@ export class MongoUserRepository implements UserRepository {
       profileCompleted: data.profileCompleted ?? EMPTY_ATTENDEE_PROFILE.profileCompleted,
       inviteCodeHash: data.inviteCodeHash ?? null,
       inviteCodeExpiresAt: data.inviteCodeExpiresAt ?? null,
+      passwordResetOtpHash: data.passwordResetOtpHash ?? null,
+      passwordResetOtpExpiresAt: data.passwordResetOtpExpiresAt ?? null,
       mustChangePassword: data.mustChangePassword ?? false,
       ghlContactId: data.ghlContactId ?? null,
       firstName: data.firstName ?? '',

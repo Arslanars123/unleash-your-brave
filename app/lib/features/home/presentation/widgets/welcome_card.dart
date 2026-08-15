@@ -9,12 +9,10 @@ class WelcomeCard extends StatelessWidget {
   const WelcomeCard({
     super.key,
     required this.user,
-    this.points = 125,
     this.onTap,
   });
 
   final UserEntity user;
-  final int points;
   final VoidCallback? onTap;
 
   @override
@@ -82,7 +80,7 @@ class WelcomeCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$points points · $roleLabel',
+                      roleLabel,
                       style: AppTypography.caption,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

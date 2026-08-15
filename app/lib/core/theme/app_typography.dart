@@ -4,14 +4,14 @@ import 'package:unleash_your_brave/core/theme/app_colors.dart';
 
 /// Typography + shared text styles. Spec: docs/DESIGN_SYSTEM.md
 ///
-/// Display: Playfair Display (400–500)
-/// UI / body: Inter
+/// Display: Playfair Display
+/// UI / body: Plus Jakarta Sans
 abstract final class AppTypography {
   /// All-caps micro-labels (section headers, nav-adjacent labels).
-  static TextStyle get microLabel => GoogleFonts.inter(
+  static TextStyle get microLabel => GoogleFonts.plusJakartaSans(
         fontSize: 11,
-        fontWeight: FontWeight.w500,
-        letterSpacing: 1.65, // ~0.15em at 11px
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.65,
         color: AppColors.textSecondary,
         height: 1.2,
       );
@@ -39,21 +39,21 @@ abstract final class AppTypography {
         color: AppColors.accentPink,
       );
 
-  static TextStyle get body => GoogleFonts.inter(
+  static TextStyle get body => GoogleFonts.plusJakartaSans(
         fontSize: 16,
         fontWeight: FontWeight.w400,
         height: 1.5,
         color: AppColors.textPrimary,
       );
 
-  static TextStyle get caption => GoogleFonts.inter(
+  static TextStyle get caption => GoogleFonts.plusJakartaSans(
         fontSize: 13,
         fontWeight: FontWeight.w400,
         height: 1.4,
         color: AppColors.textSecondary,
       );
 
-  static TextStyle get button => GoogleFonts.inter(
+  static TextStyle get button => GoogleFonts.plusJakartaSans(
         fontSize: 15,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.2,

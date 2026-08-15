@@ -15,6 +15,11 @@ export interface RefreshTokenPayload {
   type: 'refresh';
 }
 
+export interface ResetTokenPayload {
+  sub: string;
+  type: 'reset';
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -81,6 +86,20 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
   const payload = jwt.verify(token, env.jwt.refreshSecret) as RefreshTokenPayload;
   if (payload.type !== 'refresh') {
+    throw new Error('Invalid token type');
+  }
+  return payload;
+}
+
+export function signResetToken(userId: string): string {
+  return jwt.sign({ sub: userId, type: 'reset' } satisfies ResetTokenPayload, env.jwt.accessSecret, {
+    expiresIn: env.jwt.resetTtl as jwt.SignOptions['expiresIn'],
+  });
+}
+
+export function verifyResetToken(token: string): ResetTokenPayload {
+  const payload = jwt.verify(token, env.jwt.accessSecret) as ResetTokenPayload;
+  if (payload.type !== 'reset') {
     throw new Error('Invalid token type');
   }
   return payload;

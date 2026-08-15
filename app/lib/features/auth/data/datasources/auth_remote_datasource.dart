@@ -69,6 +69,49 @@ class AuthRemoteDataSource {
     }
   }
 
+  Future<String> forgotPassword({required String email}) async {
+    try {
+      final response = await _dioClient.client.post(
+        ApiConstants.forgotPassword,
+        data: {'email': email},
+      );
+      final data = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return data['message'] as String? ?? 'If an account exists, a code was sent.';
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  Future<String> verifyResetOtp({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      final response = await _dioClient.client.post(
+        ApiConstants.verifyResetOtp,
+        data: {'email': email, 'otp': otp},
+      );
+      final data = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return data['resetToken'] as String;
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  Future<void> resetPassword({
+    required String resetToken,
+    required String newPassword,
+  }) async {
+    try {
+      await _dioClient.client.post(
+        ApiConstants.resetPassword,
+        data: {'resetToken': resetToken, 'newPassword': newPassword},
+      );
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
   Future<UserModel> updateMyProfile(Map<String, dynamic> payload) async {
     try {
       final response = await _dioClient.client.patch(

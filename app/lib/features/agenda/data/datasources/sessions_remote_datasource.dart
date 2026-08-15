@@ -46,6 +46,31 @@ class SessionsRemoteDataSource {
     }
   }
 
+  Future<List<SessionFeedbackModel>> listFeedback(
+    String sessionId, {
+    int page = 1,
+    int perPage = 50,
+  }) async {
+    try {
+      final response = await _dioClient.client.get(
+        '${ApiConstants.sessions}/$sessionId/feedback',
+        queryParameters: {
+          'page': page,
+          'perPage': perPage,
+        },
+      );
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as List<dynamic>? ??
+              const [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(SessionFeedbackModel.fromJson)
+          .toList(growable: false);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
   /// Returns the current user's review, or `null` when they have not reviewed yet.
   Future<SessionFeedbackModel?> getMyFeedback(String sessionId) async {
     try {

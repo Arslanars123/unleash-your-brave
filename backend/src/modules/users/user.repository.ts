@@ -21,6 +21,7 @@ export interface CreateUserRecord {
   status: UserStatus;
   speakerId?: string | null;
   sponsorId?: string | null;
+  membershipId?: string | null;
   photoUrl?: string;
   title?: string;
   business?: string;
@@ -38,6 +39,8 @@ export interface CreateUserRecord {
   profileCompleted?: boolean;
   inviteCodeHash?: string | null;
   inviteCodeExpiresAt?: Date | null;
+  passwordResetOtpHash?: string | null;
+  passwordResetOtpExpiresAt?: Date | null;
   mustChangePassword?: boolean;
   ghlContactId?: string | null;
   firstName?: string;
@@ -51,6 +54,8 @@ export interface CreateUserRecord {
 export interface UserRepository {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
+  findBySpeakerId(speakerId: string): Promise<User | null>;
+  findBySponsorId(sponsorId: string): Promise<User | null>;
   list(query: ListUsersQuery): Promise<PaginatedResult<User>>;
   /** Active users matching any of the given roles (for announcement audiences). */
   listActiveIdsByRoles(roles: UserRole[]): Promise<string[]>;
@@ -71,6 +76,20 @@ export class InMemoryUserRepository implements UserRepository {
     const normalized = email.toLowerCase();
     for (const user of this.users.values()) {
       if (user.email === normalized) return user;
+    }
+    return null;
+  }
+
+  async findBySpeakerId(speakerId: string): Promise<User | null> {
+    for (const user of this.users.values()) {
+      if (user.speakerId === speakerId) return user;
+    }
+    return null;
+  }
+
+  async findBySponsorId(sponsorId: string): Promise<User | null> {
+    for (const user of this.users.values()) {
+      if (user.sponsorId === sponsorId) return user;
     }
     return null;
   }
@@ -121,6 +140,7 @@ export class InMemoryUserRepository implements UserRepository {
       status: data.status,
       speakerId: data.speakerId ?? null,
       sponsorId: data.sponsorId ?? null,
+      membershipId: data.membershipId ?? null,
       photoUrl: data.photoUrl ?? EMPTY_ATTENDEE_PROFILE.photoUrl,
       title: data.title ?? EMPTY_ATTENDEE_PROFILE.title,
       business: data.business ?? EMPTY_ATTENDEE_PROFILE.business,
@@ -138,6 +158,8 @@ export class InMemoryUserRepository implements UserRepository {
       profileCompleted: data.profileCompleted ?? EMPTY_ATTENDEE_PROFILE.profileCompleted,
       inviteCodeHash: data.inviteCodeHash ?? null,
       inviteCodeExpiresAt: data.inviteCodeExpiresAt ?? null,
+      passwordResetOtpHash: data.passwordResetOtpHash ?? null,
+      passwordResetOtpExpiresAt: data.passwordResetOtpExpiresAt ?? null,
       mustChangePassword: data.mustChangePassword ?? false,
       ghlContactId: data.ghlContactId ?? null,
       firstName: data.firstName ?? '',

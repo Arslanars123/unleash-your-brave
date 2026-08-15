@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Mic2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Mic2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
 import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { speakersApi } from '@/features/speakers/api/speakers-api';
@@ -8,24 +8,44 @@ import { SpeakerFormModal } from '@/features/speakers/components/SpeakerFormModa
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { PublicSpeaker, SpeakerPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
+import { ListPagination } from '@/shared/ui/ListPagination';
+import { SearchSuggest } from '@/shared/ui/SearchSuggest';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
+const PER_PAGE = 20;
+
 export function SpeakersPage() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicSpeaker | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const { eventId, isPastEdition, workspaceQuery } = useEditionScope();
 
   const speakersQuery = useQuery({
-    queryKey: ['speakers', 'list', eventId, search],
+    queryKey: ['speakers', 'list', eventId, search, page],
     queryFn: () =>
-      speakersApi.list({ search: search || undefined, perPage: 50, eventId }),
+      speakersApi.list({
+        search: search || undefined,
+        page,
+        perPage: PER_PAGE,
+        eventId,
+      }),
     enabled: Boolean(eventId),
   });
+
+  function applySearch(next: string) {
+    setSearch(next);
+    setPage(1);
+  }
+
+  useEffect(() => {
+    setPage(1);
+  }, [eventId]);
 
   const createMutation = useMutation({
     mutationFn: (payload: SpeakerPayload) => speakersApi.create(payload),
@@ -74,6 +94,13 @@ export function SpeakersPage() {
 
   async function handleSubmit(payload: SpeakerPayload) {
     if (editing) {
+      const ok = await confirm({
+        title: 'Save speaker changes?',
+        message: `Update “${editing.name}”?`,
+        confirmLabel: 'Save changes',
+        tone: 'primary',
+      });
+      if (!ok) return;
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
@@ -85,8 +112,13 @@ export function SpeakersPage() {
   }
 
   async function handleDelete(speaker: PublicSpeaker) {
-    const confirmed = window.confirm(`Delete “${speaker.name}”? This cannot be undone.`);
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Delete speaker?',
+      message: `Delete “${speaker.name}”? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await deleteMutation.mutateAsync(speaker.id);
   }
 
@@ -98,6 +130,7 @@ export function SpeakersPage() {
     <div className="page">
       <header className="page-header">
         <div>
+          <span className="page-kicker">Stage</span>
           <h1>Speakers</h1>
           <p className="muted">
             {isPastEdition
@@ -116,13 +149,40 @@ export function SpeakersPage() {
       <EditionSwitcher />
 
       <div className="toolbar">
-        <Input
+        <SearchSuggest
           label="Search"
           placeholder="Name, title, or bio"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={applySearch}
+          disabled={!eventId}
+          loadSuggestions={async (draft) => {
+            if (!eventId) return [];
+            const result = await speakersApi.list({
+              search: draft,
+              perPage: 6,
+              eventId,
+            });
+            return result.items.map((speaker) => ({
+              id: speaker.id,
+              title: speaker.name,
+              subtitle: speaker.title || undefined,
+              leading: speaker.photo ? (
+                <img src={speaker.photo} alt="" />
+              ) : (
+                <span>{speaker.name.charAt(0).toUpperCase()}</span>
+              ),
+            }));
+          }}
         />
       </div>
+      {search ? (
+        <div className="active-filter-chip">
+          Showing results for “{search}”
+          <button type="button" aria-label="Clear filter" onClick={() => applySearch('')}>
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
 
       {bootstrapLoading ? <Spinner /> : null}
       {workspaceQuery.isError ? (
@@ -206,9 +266,14 @@ export function SpeakersPage() {
                 ))}
               </tbody>
             </table>
-            <p className="muted table-meta">
-              Showing {speakersQuery.data.items.length} of {speakersQuery.data.meta.total} speakers
-            </p>
+            <ListPagination
+              page={speakersQuery.data.meta.page}
+              totalPages={speakersQuery.data.meta.totalPages}
+              total={speakersQuery.data.meta.total}
+              perPage={speakersQuery.data.meta.perPage}
+              onPageChange={setPage}
+              label="speakers"
+            />
           </div>
         )
       ) : null}

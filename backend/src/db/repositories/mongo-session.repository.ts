@@ -8,6 +8,21 @@ import type {
 } from '../../modules/sessions/session.repository.js';
 import type { ListSessionsQuery, Session } from '../../modules/sessions/session.types.js';
 
+function membershipAccessFilter(membershipId: string | null): Record<string, unknown> {
+  if (membershipId) {
+    return {
+      $or: [
+        { membershipIds: { $size: 0 } },
+        { membershipIds: { $exists: false } },
+        { membershipIds: membershipId },
+      ],
+    };
+  }
+  return {
+    $or: [{ membershipIds: { $size: 0 } }, { membershipIds: { $exists: false } }],
+  };
+}
+
 export class MongoSessionRepository implements SessionRepository {
   private get collection(): Collection<MongoDoc<Session>> {
     return getDb().collection<MongoDoc<Session>>('sessions');
@@ -22,9 +37,19 @@ export class MongoSessionRepository implements SessionRepository {
     if (query.eventId) filter.eventId = query.eventId;
     if (query.speakerId) filter.speakerId = query.speakerId;
     if (query.eventDayNumber) filter.eventDayNumber = query.eventDayNumber;
+
+    const andClauses: Record<string, unknown>[] = [];
+    if (query.accessibleToMembershipId !== undefined) {
+      andClauses.push(membershipAccessFilter(query.accessibleToMembershipId));
+    }
     if (query.search?.trim()) {
       const search = query.search.trim();
-      filter.$or = [containsCi('name', search), containsCi('description', search)];
+      andClauses.push({ $or: [containsCi('name', search), containsCi('description', search)] });
+    }
+    if (andClauses.length === 1) {
+      Object.assign(filter, andClauses[0]);
+    } else if (andClauses.length > 1) {
+      filter.$and = andClauses;
     }
 
     const docs = await this.collection.find(filter).toArray();

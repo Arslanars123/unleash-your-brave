@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/utils/media_url.dart';
+import 'package:unleash_your_brave/core/widgets/app_circle_avatar.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/chat/domain/entities/chat_message_entity.dart';
 import 'package:unleash_your_brave/features/chat/presentation/chat_assets.dart';
@@ -73,34 +74,37 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.bgCard,
-      builder: (context) => _EmojiSheet(
+      builder: (sheetContext) => _EmojiSheet(
         onEmojiTap: (emoji) {
           final text = _messageController.text;
           final selection = _messageController.selection;
-          final newText = text.replaceRange(
-            selection.start,
-            selection.end,
-            emoji,
+          final start = selection.isValid
+              ? selection.start.clamp(0, text.length)
+              : text.length;
+          final end = selection.isValid
+              ? selection.end.clamp(start, text.length)
+              : text.length;
+          final newText = text.replaceRange(start, end, emoji);
+          _messageController.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(offset: start + emoji.length),
           );
-          _messageController.text = newText;
-          _messageController.selection = TextSelection.collapsed(
-            offset: selection.start + emoji.length,
-          );
-          Navigator.pop(context);
+          Navigator.pop(sheetContext);
         },
       ),
     );
   }
 
   void _showGifSheet() {
+    final cubit = context.read<ChatRoomCubit>();
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.bgCard,
       isScrollControlled: true,
-      builder: (context) => _GifSheet(
+      builder: (sheetContext) => _GifSheet(
         onGifTap: (gifUrl) {
-          context.read<ChatRoomCubit>().sendGif(gifUrl);
-          Navigator.pop(context);
+          cubit.sendGif(gifUrl);
+          Navigator.pop(sheetContext);
           _scrollToBottom();
         },
       ),
@@ -114,7 +118,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.bgCard,
-      builder: (context) => _MembersSheet(groupName: group.name, memberCount: group.memberCount),
+      builder: (sheetContext) => _MembersSheet(
+        groupName: group.name,
+        memberCount: group.memberCount,
+      ),
     );
   }
 
@@ -144,13 +151,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       Text(
                         group?.name ?? 'Group Chat',
                         style: AppTypography.body.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
                         ),
                       ),
                       if (group != null)
                         Text(
-                          '${group.memberCount} members',
+                          '${group.memberCount} members · tap for info',
                           style: AppTypography.caption.copyWith(
                             color: AppColors.textTertiary,
                             fontSize: 12,
@@ -216,7 +223,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                           return _MessageBubble(
                             message: message,
                             onReactionTap: (emoji) => _addReaction(message.id, emoji),
-                            onRemoveReaction: () => _removeReaction(message.id),
                           );
                         },
                       ),
@@ -283,22 +289,16 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   void _addReaction(String messageId, String emoji) {
     context.read<ChatRoomCubit>().addReaction(messageId, emoji);
   }
-
-  void _removeReaction(String messageId) {
-    context.read<ChatRoomCubit>().removeReaction(messageId);
-  }
 }
 
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.onReactionTap,
-    required this.onRemoveReaction,
   });
 
   final ChatMessageEntity message;
   final Function(String) onReactionTap;
-  final VoidCallback onRemoveReaction;
 
   @override
   Widget build(BuildContext context) {
@@ -313,28 +313,19 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMine) ...[
-            Builder(
-              builder: (context) {
-                final photo = resolveMediaUrl(message.senderPhotoUrl);
-                final hasPhoto = isLoadableMediaUrl(message.senderPhotoUrl);
-                return CircleAvatar(
-                  radius: 16,
-                  backgroundColor: AppColors.accentPink.withValues(alpha: 0.2),
-                  backgroundImage:
-                      hasPhoto ? CachedNetworkImageProvider(photo) : null,
-                  child: hasPhoto
-                      ? null
-                      : Text(
-                          message.senderName.isNotEmpty
-                              ? message.senderName[0].toUpperCase()
-                              : '?',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.accentPink,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                );
-              },
+            AppCircleAvatar(
+              radius: 16,
+              photoUrl: message.senderPhotoUrl,
+              backgroundColor: AppColors.accentPink.withValues(alpha: 0.2),
+              fallback: Text(
+                message.senderName.isNotEmpty
+                    ? message.senderName[0].toUpperCase()
+                    : '?',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.accentPink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             const SizedBox(width: 8),
           ],
@@ -359,16 +350,49 @@ class _MessageBubble extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isMine)
+                    if (!isMine || message.isAdminSender)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          message.senderName,
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.accentPink,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              message.senderName,
+                              style: AppTypography.caption.copyWith(
+                                color: isMine
+                                    ? Colors.white.withValues(alpha: 0.9)
+                                    : AppColors.accentPink,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            if (message.isAdminSender) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isMine
+                                      ? Colors.white.withValues(alpha: 0.2)
+                                      : AppColors.accentPink.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  'ADMIN',
+                                  style: AppTypography.microLabel.copyWith(
+                                    color: isMine
+                                        ? Colors.white
+                                        : AppColors.accentPink,
+                                    fontSize: 9,
+                                    letterSpacing: 0.8,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     if (message.type == ChatMessageType.text && message.body != null)
@@ -456,9 +480,11 @@ class _MessageBubble extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.bgCard,
-      builder: (context) => _ReactionSheet(
-        onReactionTap: onReactionTap,
-        onRemoveReaction: onRemoveReaction,
+      builder: (sheetContext) => _ReactionSheet(
+        onReactionTap: (emoji) {
+          onReactionTap(emoji);
+          Navigator.pop(sheetContext);
+        },
       ),
     );
   }
@@ -556,11 +582,9 @@ class _MessageComposer extends StatelessWidget {
 class _ReactionSheet extends StatelessWidget {
   const _ReactionSheet({
     required this.onReactionTap,
-    required this.onRemoveReaction,
   });
 
   final Function(String) onReactionTap;
-  final VoidCallback onRemoveReaction;
 
   @override
   Widget build(BuildContext context) {
@@ -579,10 +603,7 @@ class _ReactionSheet extends StatelessWidget {
             runSpacing: 16,
             children: kChatReactionEmojis.map((emoji) {
               return GestureDetector(
-                onTap: () {
-                  onReactionTap(emoji);
-                  Navigator.pop(context);
-                },
+                onTap: () => onReactionTap(emoji),
                 child: Container(
                   width: 48,
                   height: 48,

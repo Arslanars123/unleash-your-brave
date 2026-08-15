@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 
 export type ChatRealtimeEventType =
   | 'message.created'
+  | 'message.deleted'
   | 'reaction.updated'
   | 'receipt.delivered'
   | 'receipt.read'

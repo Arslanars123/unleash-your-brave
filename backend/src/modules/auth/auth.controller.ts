@@ -3,9 +3,12 @@ import { sendSuccess } from '../../core/http/response.js';
 import type { AuthService } from './auth.service.js';
 import type {
   ChangePasswordInput,
+  ForgotPasswordInput,
   LoginInput,
   RefreshInput,
   RegisterInput,
+  ResetPasswordInput,
+  VerifyResetOtpInput,
 } from './auth.schema.js';
 
 export class AuthController {
@@ -33,5 +36,17 @@ export class AuthController {
 
   me = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.me(req.auth!.userId));
+  };
+
+  forgotPassword = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.service.forgotPassword(req.body as ForgotPasswordInput));
+  };
+
+  verifyResetOtp = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.service.verifyResetOtp(req.body as VerifyResetOtpInput));
+  };
+
+  resetPassword = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.service.resetPassword(req.body as ResetPasswordInput));
   };
 }

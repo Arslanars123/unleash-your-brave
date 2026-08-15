@@ -57,6 +57,7 @@ export const createUserSchema = z
     status: z.enum(USER_STATUSES).optional().default('active'),
     speakerId: z.string().uuid().nullable().optional(),
     sponsorId: z.string().uuid().nullable().optional(),
+    membershipId: z.string().uuid().nullable().optional(),
     ...profileFields,
   })
   .superRefine((value, ctx) => {
@@ -99,6 +100,7 @@ export const updateUserSchema = z
     status: z.enum(USER_STATUSES).optional(),
     speakerId: z.string().uuid().nullable().optional(),
     sponsorId: z.string().uuid().nullable().optional(),
+    membershipId: z.string().uuid().nullable().optional(),
     photoUrl: z
       .string()
       .trim()
@@ -201,3 +203,8 @@ export const updateMyProfileSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to update',
   });
+
+/** Attendee self-service membership upgrade (higher price only). */
+export const upgradeMyMembershipSchema = z.object({
+  membershipId: z.string().uuid(),
+});

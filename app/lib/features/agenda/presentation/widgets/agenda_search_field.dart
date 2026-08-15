@@ -3,6 +3,7 @@ import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 
+/// Prefer [SuggestSearchField] for Instagram-style suggestions.
 class AgendaSearchField extends StatelessWidget {
   const AgendaSearchField({
     super.key,

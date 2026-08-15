@@ -6,6 +6,9 @@ class ApiConstants {
   static const me = '/auth/me';
   static const refresh = '/auth/refresh';
   static const changePassword = '/auth/change-password';
+  static const forgotPassword = '/auth/forgot-password';
+  static const verifyResetOtp = '/auth/verify-reset-otp';
+  static const resetPassword = '/auth/reset-password';
   static const updateMyProfile = '/users/me';
   static const uploadImage = '/uploads/images';
   static const currentEvent = '/events/current';
@@ -14,6 +17,9 @@ class ApiConstants {
   static const announcementsFeed = '/announcements/feed';
   static const announcementsUnreadCount = '/announcements/unread-count';
   static const checkInMyQr = '/checkins/my-qr';
+  static const posts = '/posts';
+  static const memberships = '/memberships';
+  static const upgradeMyMembership = '/users/me/membership';
 
   // Chat endpoints
   static const chatGroup = '/chat/group';
@@ -23,6 +29,7 @@ class ApiConstants {
   static const chatRead = '/chat/read';
   static const chatSync = '/chat/sync';
   static const chatStream = '/chat/stream';
+  static const chatWs = '/chat/ws';
   static const chatDevices = '/chat/devices';
 }
 
@@ -41,4 +48,5 @@ class StorageKeys {
   static const chatUnreadCount = 'chat_unread_count';
   static const chatLastSync = 'chat_last_sync';
   static const fcmToken = 'fcm_token';
+  static const pushNotificationsEnabled = 'push_notifications_enabled';
 }

@@ -163,11 +163,31 @@ class _MapPageState extends State<MapPage> {
           setState(() {
             _mountMap = false;
             _mapReady = false;
+            _mapFailed = false;
             _mapGeneration += 1;
           });
         });
       }
       return const ColoredBox(color: AppColors.bgBase);
+    }
+
+    // Tab became active again — remount the native map if we have a pin.
+    if (!_mountMap &&
+        !_mapFailed &&
+        !_loading &&
+        _event != null &&
+        _event!.hasMapPin &&
+        _hasMapsKey) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !TickerMode.of(context)) return;
+        if (_mountMap || _mapFailed) return;
+        setState(() {
+          _mapGeneration += 1;
+          _mountMap = true;
+          _mapReady = false;
+        });
+        _startMapWatchdog();
+      });
     }
 
     if (_loading && _event == null) {

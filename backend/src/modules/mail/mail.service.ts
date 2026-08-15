@@ -86,6 +86,100 @@ export class MailService {
 
     return this.send({ to: input.to, subject, text, html });
   }
+
+  async sendMembershipPurchaseConfirmation(input: {
+    to: string;
+    name: string;
+    eventName: string;
+    membershipName: string;
+    previousMembershipName: string | null;
+    kind: 'purchase' | 'upgrade';
+    priceLabel: string;
+    purchasedAt: Date;
+    stripePaymentIntentId: string | null;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const when = input.purchasedAt.toUTCString();
+    const isUpgrade = input.kind === 'upgrade' && input.previousMembershipName;
+    const upgradeLine = isUpgrade
+      ? `${input.previousMembershipName} → ${input.membershipName}`
+      : input.membershipName;
+
+    const subject = isUpgrade
+      ? `Membership upgraded: ${upgradeLine}`
+      : `Membership confirmed: ${input.membershipName}`;
+
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      isUpgrade
+        ? `Your ${env.appName} membership has been upgraded.`
+        : `Thank you for your ${env.appName} membership purchase.`,
+      '',
+      isUpgrade ? `Upgrade: ${upgradeLine}` : `Membership: ${input.membershipName}`,
+      `Event: ${input.eventName}`,
+      `Amount: ${input.priceLabel}`,
+      `Date: ${when}`,
+      input.stripePaymentIntentId ? `Transaction: ${input.stripePaymentIntentId}` : null,
+      '',
+      'If you have any questions, reply to this email.',
+    ]
+      .filter((line) => line !== null)
+      .join('\n');
+
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>${
+        isUpgrade
+          ? `Your <strong>${escapeHtml(env.appName)}</strong> membership has been upgraded.`
+          : `Thank you for your <strong>${escapeHtml(env.appName)}</strong> membership purchase.`
+      }</p>
+      <p style="font-size:18px;font-weight:700">${escapeHtml(upgradeLine)}</p>
+      <ul>
+        <li><strong>Event:</strong> ${escapeHtml(input.eventName)}</li>
+        <li><strong>Amount:</strong> ${escapeHtml(input.priceLabel)}</li>
+        <li><strong>Date:</strong> ${escapeHtml(when)}</li>
+        ${
+          input.stripePaymentIntentId
+            ? `<li><strong>Transaction:</strong> ${escapeHtml(input.stripePaymentIntentId)}</li>`
+            : ''
+        }
+      </ul>
+      <p>If you have any questions, reply to this email.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
+
+  async sendPasswordResetOtp(input: {
+    to: string;
+    name: string;
+    otp: string;
+    expiresInMinutes: number;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const subject = `Your ${env.appName} password reset code`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `We received a request to reset your ${env.appName} password.`,
+      '',
+      `Your verification code is: ${input.otp}`,
+      '',
+      `This code expires in ${input.expiresInMinutes} minutes.`,
+      '',
+      'If you did not request this, you can ignore this email.',
+    ].join('\n');
+
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>We received a request to reset your <strong>${escapeHtml(env.appName)}</strong> password.</p>
+      <p>Your verification code is:</p>
+      <p style="font-size:24px;font-weight:700;letter-spacing:4px">${escapeHtml(input.otp)}</p>
+      <p>This code expires in ${input.expiresInMinutes} minutes.</p>
+      <p>If you did not request this, you can ignore this email.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
 }
 
 function escapeHtml(value: string): string {

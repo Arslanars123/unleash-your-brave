@@ -5,6 +5,7 @@ export function toPublicSpeaker(speaker: Speaker): PublicSpeaker {
     id: speaker.id,
     eventId: speaker.eventId,
     name: speaker.name,
+    email: speaker.email ?? '',
     title: speaker.title,
     description: speaker.description,
     photo: speaker.photo,

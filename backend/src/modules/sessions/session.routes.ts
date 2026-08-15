@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../core/http/async-handler.js';
-import { authenticate, authorize } from '../../middleware/authenticate.js';
+import { authenticate, authorize, optionalAuthenticate } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
 import type { SessionFeedbackController } from './feedback/session-feedback.controller.js';
 import {
@@ -25,7 +25,12 @@ export function createSessionRouter(
 ): Router {
   const router = Router();
 
-  router.get('/', validate({ query: listSessionsQuerySchema }), asyncHandler(controller.list));
+  router.get(
+    '/',
+    optionalAuthenticate,
+    validate({ query: listSessionsQuerySchema }),
+    asyncHandler(controller.list),
+  );
 
   router.get(
     '/:id/feedback/summary',
@@ -43,7 +48,7 @@ export function createSessionRouter(
   router.get(
     '/:id/feedback',
     authenticate,
-    authorize('admin', 'speaker'),
+    authorize('admin', 'speaker', 'member'),
     validate({ params: sessionFeedbackParamSchema, query: listSessionFeedbackQuerySchema }),
     asyncHandler(feedbackController.list),
   );
@@ -79,7 +84,12 @@ export function createSessionRouter(
     asyncHandler(feedbackController.removeById),
   );
 
-  router.get('/:id', validate({ params: sessionIdParamSchema }), asyncHandler(controller.getById));
+  router.get(
+    '/:id',
+    optionalAuthenticate,
+    validate({ params: sessionIdParamSchema }),
+    asyncHandler(controller.getById),
+  );
 
   router.post(
     '/',

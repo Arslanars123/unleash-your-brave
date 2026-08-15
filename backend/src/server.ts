@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 import { logger } from './core/logger.js';
 import { closeMongo } from './db/mongo.js';
 import { startAnnouncementScheduler } from './modules/announcements/announcement.scheduler.js';
+import { attachChatWebSocket } from './modules/chat/chat.ws.js';
 
 async function bootstrap(): Promise<void> {
   const container = await createContainer();
@@ -17,9 +18,15 @@ async function bootstrap(): Promise<void> {
     logger.info({ port: env.port, env: env.nodeEnv }, 'API listening');
   });
 
+  const chatWss = attachChatWebSocket(server, {
+    hub: container.services.chatHub,
+    chatService: container.services.chatService,
+  });
+
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'Shutting down');
     stopAnnouncementScheduler();
+    chatWss.close();
     server.close(() => {
       void closeMongo().finally(() => process.exit(0));
     });

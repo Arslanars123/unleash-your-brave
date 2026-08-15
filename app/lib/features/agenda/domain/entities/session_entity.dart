@@ -50,7 +50,7 @@ class SessionEntity {
     this.location = '',
     this.speaker,
     this.materials = const [],
-    this.feedbackEnabled = false,
+    this.feedbackEnabled = true,
     this.feedbackSummary,
   });
 

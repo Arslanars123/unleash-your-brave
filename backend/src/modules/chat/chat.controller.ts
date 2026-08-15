@@ -39,6 +39,13 @@ export class ChatController {
     );
   };
 
+  deleteMessage = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(
+      res,
+      await this.service.deleteMessage(req.auth!.userId, req.params.id as string),
+    );
+  };
+
   markDelivered = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(
       res,

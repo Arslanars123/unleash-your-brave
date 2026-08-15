@@ -11,6 +11,8 @@ export function toPublicCheckIn(
     userId: checkIn.userId,
     checkedInAt: checkIn.checkedInAt.toISOString(),
     checkedInBy: checkIn.checkedInBy,
+    membershipIdAtCheckIn: checkIn.membershipIdAtCheckIn ?? null,
+    membershipNameAtCheckIn: checkIn.membershipNameAtCheckIn ?? null,
     createdAt: checkIn.createdAt.toISOString(),
     updatedAt: checkIn.updatedAt.toISOString(),
     ...(user !== undefined ? { user } : {}),

@@ -43,9 +43,19 @@ export const listSponsorsQuerySchema = z.object({
   eventId: z.string().uuid().optional(),
 });
 
+const optionalEmail = z
+  .string()
+  .trim()
+  .email('Enter a valid email')
+  .toLowerCase()
+  .optional()
+  .or(z.literal(''))
+  .transform((value) => value || undefined);
+
 export const createSponsorSchema = z.object({
   eventId: z.string().uuid('Event is required'),
   name: z.string().trim().min(2, 'Sponsor name is required').max(160),
+  email: optionalEmail,
   description: z.string().trim().max(5000).optional().default(''),
   image: optionalMedia,
   offers: z.array(offerSchema).max(30).optional().default([]),
@@ -54,6 +64,7 @@ export const createSponsorSchema = z.object({
 export const updateSponsorSchema = z
   .object({
     name: z.string().trim().min(2).max(160).optional(),
+    email: optionalEmail,
     description: z.string().trim().max(5000).optional(),
     image: z
       .string()

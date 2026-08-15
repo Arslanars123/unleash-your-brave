@@ -29,6 +29,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthRegisterRequested>(_onRegister);
     on<AuthChangePasswordRequested>(_onChangePassword);
     on<AuthUserUpdated>(_onUserUpdated);
+    on<AuthRefreshRequested>(_onRefresh);
     on<AuthLogoutRequested>(_onLogout);
   }
 
@@ -39,7 +40,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final ChangePasswordUseCase _changePasswordUseCase;
 
   Future<void> _onStarted(AuthStarted event, Emitter<AuthState> emit) async {
-    emit(const AuthLoading());
+    emit(const AuthCheckingSession());
     final result = await _getCurrentUserUseCase(const NoParams());
     result.fold(
       (_) => emit(const AuthUnauthenticated()),
@@ -97,6 +98,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthAuthenticated(event.user));
+  }
+
+  Future<void> _onRefresh(
+    AuthRefreshRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    final result = await _getCurrentUserUseCase(const NoParams());
+    result.fold(
+      (_) {
+        // Keep the existing session if refresh fails (offline, etc.).
+      },
+      (user) => emit(AuthAuthenticated(user)),
+    );
   }
 
   Future<void> _onLogout(AuthLogoutRequested event, Emitter<AuthState> emit) async {

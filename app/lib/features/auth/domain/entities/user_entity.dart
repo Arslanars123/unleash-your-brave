@@ -21,6 +21,7 @@ class UserEntity extends Equatable {
     this.instagramUrl = '',
     this.websiteUrl = '',
     this.profileCompleted = false,
+    this.membershipId,
   });
 
   final String id;
@@ -29,6 +30,7 @@ class UserEntity extends Equatable {
   final String role;
   final String status;
   final bool mustChangePassword;
+  final String? membershipId;
   final String photoUrl;
   final String title;
   final String business;
@@ -63,6 +65,7 @@ class UserEntity extends Equatable {
     String? instagramUrl,
     String? websiteUrl,
     bool? profileCompleted,
+    String? membershipId,
   }) {
     return UserEntity(
       id: id ?? this.id,
@@ -84,6 +87,7 @@ class UserEntity extends Equatable {
       instagramUrl: instagramUrl ?? this.instagramUrl,
       websiteUrl: websiteUrl ?? this.websiteUrl,
       profileCompleted: profileCompleted ?? this.profileCompleted,
+      membershipId: membershipId ?? this.membershipId,
     );
   }
 
@@ -95,6 +99,7 @@ class UserEntity extends Equatable {
         role,
         status,
         mustChangePassword,
+        membershipId,
         photoUrl,
         title,
         business,

@@ -1,20 +1,25 @@
 import type { Request, Response } from 'express';
 import { ForbiddenError, UnauthorizedError } from '../../core/errors/app-error.js';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
-import type { SessionService } from './session.service.js';
+import type { SessionService, SessionViewerContext } from './session.service.js';
 import type { CreateSessionInput, ListSessionsQuery, UpdateSessionInput } from './session.types.js';
+
+function viewerFromRequest(req: Request): SessionViewerContext | undefined {
+  if (!req.auth) return undefined;
+  return { userId: req.auth.userId, role: req.auth.role };
+}
 
 export class SessionController {
   constructor(private readonly service: SessionService) {}
 
   list = async (req: Request, res: Response): Promise<void> => {
     const query = req.query as unknown as ListSessionsQuery;
-    const { items, total } = await this.service.list(query);
+    const { items, total } = await this.service.list(query, viewerFromRequest(req));
     sendPaginated(res, items, buildPaginationMeta(query.page, query.perPage, total));
   };
 
   getById = async (req: Request, res: Response): Promise<void> => {
-    sendSuccess(res, await this.service.getById(req.params.id as string));
+    sendSuccess(res, await this.service.getById(req.params.id as string, viewerFromRequest(req)));
   };
 
   create = async (req: Request, res: Response): Promise<void> => {

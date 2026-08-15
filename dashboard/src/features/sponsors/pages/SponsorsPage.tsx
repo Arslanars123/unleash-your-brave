@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Handshake, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Handshake, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
 import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { sponsorsApi } from '@/features/sponsors/api/sponsors-api';
@@ -9,24 +9,44 @@ import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type { PublicSponsor, SponsorPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
+import { ListPagination } from '@/shared/ui/ListPagination';
+import { SearchSuggest } from '@/shared/ui/SearchSuggest';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
+const PER_PAGE = 20;
+
 export function SponsorsPage() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicSponsor | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const { eventId, isPastEdition, workspaceQuery } = useEditionScope();
 
   const sponsorsQuery = useQuery({
-    queryKey: ['sponsors', 'list', eventId, search],
+    queryKey: ['sponsors', 'list', eventId, search, page],
     queryFn: () =>
-      sponsorsApi.list({ search: search || undefined, perPage: 50, eventId }),
+      sponsorsApi.list({
+        search: search || undefined,
+        page,
+        perPage: PER_PAGE,
+        eventId,
+      }),
     enabled: Boolean(eventId),
   });
+
+  function applySearch(next: string) {
+    setSearch(next);
+    setPage(1);
+  }
+
+  useEffect(() => {
+    setPage(1);
+  }, [eventId]);
 
   const createMutation = useMutation({
     mutationFn: (payload: SponsorPayload) => sponsorsApi.create(payload),
@@ -75,6 +95,13 @@ export function SponsorsPage() {
 
   async function handleSubmit(payload: SponsorPayload) {
     if (editing) {
+      const ok = await confirm({
+        title: 'Save sponsor changes?',
+        message: `Update “${editing.name}”?`,
+        confirmLabel: 'Save changes',
+        tone: 'primary',
+      });
+      if (!ok) return;
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
@@ -86,8 +113,13 @@ export function SponsorsPage() {
   }
 
   async function handleDelete(sponsor: PublicSponsor) {
-    const confirmed = window.confirm(`Delete “${sponsor.name}”? This cannot be undone.`);
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Delete sponsor?',
+      message: `Delete “${sponsor.name}”? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await deleteMutation.mutateAsync(sponsor.id);
   }
 
@@ -99,6 +131,7 @@ export function SponsorsPage() {
     <div className="page">
       <header className="page-header">
         <div>
+          <span className="page-kicker">Partners</span>
           <h1>Sponsors</h1>
           <p className="muted">
             {isPastEdition
@@ -117,13 +150,40 @@ export function SponsorsPage() {
       <EditionSwitcher />
 
       <div className="toolbar">
-        <Input
+        <SearchSuggest
           label="Search"
           placeholder="Sponsor name or description"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={applySearch}
+          disabled={!eventId}
+          loadSuggestions={async (draft) => {
+            if (!eventId) return [];
+            const result = await sponsorsApi.list({
+              search: draft,
+              perPage: 6,
+              eventId,
+            });
+            return result.items.map((sponsor) => ({
+              id: sponsor.id,
+              title: sponsor.name,
+              subtitle: sponsor.description?.slice(0, 60) || undefined,
+              leading: sponsor.logo ? (
+                <img src={resolveMediaUrl(sponsor.logo)} alt="" />
+              ) : (
+                <span>{sponsor.name.charAt(0).toUpperCase()}</span>
+              ),
+            }));
+          }}
         />
       </div>
+      {search ? (
+        <div className="active-filter-chip">
+          Showing results for “{search}”
+          <button type="button" aria-label="Clear filter" onClick={() => applySearch('')}>
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
 
       {bootstrapLoading ? <Spinner /> : null}
       {workspaceQuery.isError ? (
@@ -212,9 +272,14 @@ export function SponsorsPage() {
                 ))}
               </tbody>
             </table>
-            <p className="muted table-meta">
-              Showing {sponsorsQuery.data.items.length} of {sponsorsQuery.data.meta.total} sponsors
-            </p>
+            <ListPagination
+              page={sponsorsQuery.data.meta.page}
+              totalPages={sponsorsQuery.data.meta.totalPages}
+              total={sponsorsQuery.data.meta.total}
+              perPage={sponsorsQuery.data.meta.perPage}
+              onPageChange={setPage}
+              label="sponsors"
+            />
           </div>
         )
       ) : null}

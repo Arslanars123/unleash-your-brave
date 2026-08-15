@@ -15,6 +15,7 @@ import type {
   ScheduleEventPayload,
 } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
@@ -41,6 +42,7 @@ export function EventsPage() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const workspaceQuery = useQuery({
     queryKey: ['events', 'workspace'],
@@ -76,10 +78,24 @@ export function EventsPage() {
   async function handleEditSubmit(payload: EventPayload | ScheduleEventPayload) {
     const event = workspaceQuery.data?.current;
     if (!event) return;
+    const ok = await confirm({
+      title: 'Save event changes?',
+      message: `Update “${event.name}”?`,
+      confirmLabel: 'Save changes',
+      tone: 'primary',
+    });
+    if (!ok) return;
     await updateMutation.mutateAsync({ id: event.id, payload: payload as EventPayload });
   }
 
   async function handleScheduleSubmit(payload: EventPayload | ScheduleEventPayload) {
+    const ok = await confirm({
+      title: 'Schedule new edition?',
+      message: 'Create a new event edition with the details you entered?',
+      confirmLabel: 'Schedule',
+      tone: 'primary',
+    });
+    if (!ok) return;
     await scheduleMutation.mutateAsync(payload as ScheduleEventPayload);
   }
 

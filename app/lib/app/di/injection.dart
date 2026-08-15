@@ -25,6 +25,8 @@ import 'package:unleash_your_brave/features/chat/data/repositories/chat_reposito
 import 'package:unleash_your_brave/features/chat/domain/repositories/chat_repository.dart';
 import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_cubit.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
+import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
+import 'package:unleash_your_brave/features/posts/data/datasources/posts_remote_datasource.dart';
 
 final sl = GetIt.instance;
 
@@ -62,7 +64,7 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => ChatUnreadCubit(sl()));
 
   // Push notifications
-  sl.registerLazySingleton(() => PushNotificationService(sl()));
+  sl.registerLazySingleton(() => PushNotificationService(sl(), prefs));
 
   // Home / events / agenda / announcements
   sl.registerLazySingleton(() => EventsRemoteDataSource(sl()));
@@ -70,6 +72,8 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => AgendaLocalDataSource(prefs));
   sl.registerLazySingleton(() => AnnouncementsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => CheckInRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => PostsRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => MembershipsRemoteDataSource(sl()));
 
   // Auth presentation — singleton so GoRouter and the widget tree share state
   sl.registerLazySingleton(

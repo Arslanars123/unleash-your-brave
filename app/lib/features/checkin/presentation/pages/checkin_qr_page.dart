@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'package:unleash_your_brave/app/di/injection.dart';
-import 'package:unleash_your_brave/core/error/exceptions.dart';
+import 'package:flutter/services.dart';
 import 'package:unleash_your_brave/core/responsive/responsive.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
+import 'package:unleash_your_brave/core/utils/app_toast.dart';
 import 'package:unleash_your_brave/core/widgets/adaptive_page.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
-import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
+import 'package:unleash_your_brave/core/widgets/subpage_app_bar.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/checkin_qr_entity.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:unleash_your_brave/app/di/injection.dart';
+import 'package:unleash_your_brave/core/error/exceptions.dart';
+import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
 
 class CheckInQrPage extends StatefulWidget {
   const CheckInQrPage({super.key});
@@ -68,6 +71,11 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
 
     return Scaffold(
       backgroundColor: AppColors.bgBase,
+      appBar: buildSubpageAppBar(
+        context,
+        title: 'Check-in QR',
+        fallbackLocation: '/profile',
+      ),
       body: RefreshIndicator(
         color: AppColors.accentPink,
         onRefresh: _load,
@@ -76,14 +84,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Check-in QR',
-                style: AppTypography.headline.copyWith(
-                  fontSize: context.headlineSize,
-                ),
-              ),
-              SizedBox(height: context.sectionGap * 0.5),
-              Text(
-                'Show this code at the door. It only works for the current event — a new edition gets a new QR.',
+                'Show this QR at the door, or share the code below if staff need to paste it into the admin check-in screen.',
                 style: AppTypography.body.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -164,6 +165,74 @@ class _QrCard extends StatelessWidget {
                 color: Color(0xFF120F0F),
               ),
             ),
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'CHECK-IN CODE',
+              style: AppTypography.microLabel.copyWith(
+                color: AppColors.textTertiary,
+                letterSpacing: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Material(
+            color: AppColors.bgBase,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () async {
+                await Clipboard.setData(ClipboardData(text: qr.token));
+                AppToast.success('Check-in code copied');
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        qr.token,
+                        style: AppTypography.caption.copyWith(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          height: 1.4,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Copy code',
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: qr.token));
+                        AppToast.success('Check-in code copied');
+                      },
+                      icon: const Icon(
+                        Icons.copy_rounded,
+                        size: 18,
+                        color: AppColors.accentPink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Staff can paste this into “Or paste QR token” on the admin Check-in page.',
+            style: AppTypography.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           if (qr.checkedIn)

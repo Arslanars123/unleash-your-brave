@@ -12,6 +12,7 @@ import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/utils/app_toast.dart';
 import 'package:unleash_your_brave/core/utils/datetime_format.dart';
 import 'package:unleash_your_brave/core/utils/media_url.dart';
+import 'package:unleash_your_brave/core/widgets/app_circle_avatar.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/domain/entities/session_entity.dart';
@@ -39,10 +40,11 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   bool _isOffline = false;
 
   SessionFeedbackEntity? _myFeedback;
+  List<SessionFeedbackEntity> _reviews = const [];
   bool _feedbackLoading = false;
   bool _feedbackSaving = false;
-  int _selectedRating = 0;
   final _commentController = TextEditingController();
+  final _reviewSectionKey = GlobalKey();
 
   @override
   void initState() {
@@ -79,11 +81,11 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
         _isOffline = false;
       });
       if (session.feedbackEnabled) {
-        await _loadMyFeedback();
+        await _loadFeedback();
       } else if (mounted) {
         setState(() {
           _myFeedback = null;
-          _selectedRating = 0;
+          _reviews = const [];
           _commentController.clear();
         });
       }
@@ -99,15 +101,20 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     }
   }
 
-  Future<void> _loadMyFeedback() async {
+  Future<void> _loadFeedback() async {
     setState(() => _feedbackLoading = true);
     try {
-      final mine =
-          await sl<SessionsRemoteDataSource>().getMyFeedback(widget.sessionId);
+      final remote = sl<SessionsRemoteDataSource>();
+      final results = await Future.wait([
+        remote.getMyFeedback(widget.sessionId),
+        remote.listFeedback(widget.sessionId),
+      ]);
       if (!mounted) return;
+      final mine = results[0] as SessionFeedbackEntity?;
+      final reviews = results[1] as List<SessionFeedbackEntity>;
       setState(() {
         _myFeedback = mine;
-        _selectedRating = mine?.rating ?? 0;
+        _reviews = reviews;
         _commentController.text = mine?.comment ?? '';
         _feedbackLoading = false;
       });
@@ -123,71 +130,136 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     }
   }
 
-  Future<void> _submitFeedback() async {
-    if (_feedbackSaving) return;
-    if (_selectedRating < 1 || _selectedRating > 5) {
+  Future<void> _openReviewForm() async {
+    var rating = _myFeedback?.rating ?? 0;
+    _commentController.text = _myFeedback?.comment ?? '';
+    var saving = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return _ReviewFormSheet(
+                hasExisting: _myFeedback != null,
+                selectedRating: rating,
+                commentController: _commentController,
+                saving: saving,
+                onRatingChanged: (value) {
+                  setModalState(() => rating = value);
+                },
+                onSubmit: () async {
+                  if (saving) return;
+                  if (rating < 1 || rating > 5) {
+                    AppToast.error('Choose a rating from 1 to 5 stars.');
+                    return;
+                  }
+                  setModalState(() => saving = true);
+                  final ok = await _submitFeedback(rating: rating);
+                  if (!sheetContext.mounted) return;
+                  setModalState(() => saving = false);
+                  if (ok) Navigator.pop(sheetContext);
+                },
+                onRemove: _myFeedback == null
+                    ? null
+                    : () async {
+                        if (saving) return;
+                        setModalState(() => saving = true);
+                        final ok = await _removeFeedback();
+                        if (!sheetContext.mounted) return;
+                        setModalState(() => saving = false);
+                        if (ok) Navigator.pop(sheetContext);
+                      },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool> _submitFeedback({required int rating}) async {
+    if (_feedbackSaving) return false;
+    if (rating < 1 || rating > 5) {
       AppToast.error('Choose a rating from 1 to 5 stars.');
-      return;
+      return false;
     }
 
-    setState(() => _feedbackSaving = true);
+    setState(() {
+      _feedbackSaving = true;
+    });
     try {
       final wasUpdate = _myFeedback != null;
       final saved = await sl<SessionsRemoteDataSource>().upsertFeedback(
         sessionId: widget.sessionId,
-        rating: _selectedRating,
+        rating: rating,
         comment: _commentController.text,
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _myFeedback = saved;
         _feedbackSaving = false;
       });
       AppToast.success(wasUpdate ? 'Review updated.' : 'Review submitted.');
-      // Reload session so the average rating chip updates.
       await _load(isRefresh: true);
+      return true;
     } on NetworkException catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _feedbackSaving = false);
       AppToast.error(error.message);
+      return false;
     } on ServerException catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _feedbackSaving = false);
       AppToast.error(error.message);
+      return false;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _feedbackSaving = false);
       AppToast.error('Couldn’t save your review.');
+      return false;
     }
   }
 
-  Future<void> _removeFeedback() async {
-    if (_feedbackSaving || _myFeedback == null) return;
+  Future<bool> _removeFeedback() async {
+    if (_feedbackSaving || _myFeedback == null) return false;
 
     setState(() => _feedbackSaving = true);
     try {
       await sl<SessionsRemoteDataSource>().deleteMyFeedback(widget.sessionId);
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _myFeedback = null;
-        _selectedRating = 0;
         _commentController.clear();
         _feedbackSaving = false;
       });
       AppToast.success('Review removed.');
       await _load(isRefresh: true);
+      return true;
     } on NetworkException catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _feedbackSaving = false);
       AppToast.error(error.message);
+      return false;
     } on ServerException catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _feedbackSaving = false);
       AppToast.error(error.message);
+      return false;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _feedbackSaving = false);
       AppToast.error('Couldn’t remove your review.');
+      return false;
     }
   }
 
@@ -198,11 +270,17 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
         _refreshing = false;
         _isOffline = isOffline;
       });
-      AppToast.info(
-        isOffline
-            ? 'You’re offline. Showing saved session details.'
-            : 'Couldn’t refresh. Showing saved session details.',
-      );
+      // Avoid a confusing toast when we already have usable cached details and
+      // the failure is a transient server error during refresh.
+      if (isOffline) {
+        AppToast.info('You’re offline. Showing saved session details.');
+      } else {
+        AppToast.info(
+          message.trim().isEmpty
+              ? 'Couldn’t refresh. Showing saved session details.'
+              : message,
+        );
+      }
       return;
     }
 
@@ -416,17 +494,14 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                       ),
                     if (session.feedbackEnabled) ...[
                       const SizedBox(height: 32),
-                      _SessionReviewSection(
-                        loading: _feedbackLoading,
-                        saving: _feedbackSaving,
-                        hasExisting: _myFeedback != null,
-                        selectedRating: _selectedRating,
-                        commentController: _commentController,
-                        onRatingChanged: (rating) {
-                          setState(() => _selectedRating = rating);
-                        },
-                        onSubmit: _submitFeedback,
-                        onRemove: _myFeedback != null ? _removeFeedback : null,
+                      KeyedSubtree(
+                        key: _reviewSectionKey,
+                        child: _SessionReviewsSection(
+                          loading: _feedbackLoading,
+                          reviews: _reviews,
+                          hasMyReview: _myFeedback != null,
+                          onAddOrEdit: _openReviewForm,
+                        ),
                       ),
                     ],
                   ],
@@ -483,28 +558,24 @@ class _SpeakerBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final photoUrl = resolveMediaUrl(speaker.photo);
     final title = speaker.title.trim();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        CircleAvatar(
+        AppCircleAvatar(
           radius: 26,
+          photoUrl: speaker.photo,
           backgroundColor: AppColors.bgMaroon,
-          backgroundImage:
-              photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-          child: photoUrl.isEmpty
-              ? Text(
-                  speaker.name.trim().isNotEmpty
-                      ? speaker.name.trim()[0].toUpperCase()
-                      : '?',
-                  style: AppTypography.body.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.accentPink,
-                  ),
-                )
-              : null,
+          fallback: Text(
+            speaker.name.trim().isNotEmpty
+                ? speaker.name.trim()[0].toUpperCase()
+                : '?',
+            style: AppTypography.body.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppColors.accentPink,
+            ),
+          ),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -650,150 +721,324 @@ class _EmptyMaterials extends StatelessWidget {
   }
 }
 
-class _SessionReviewSection extends StatelessWidget {
-  const _SessionReviewSection({
+class _SessionReviewsSection extends StatelessWidget {
+  const _SessionReviewsSection({
     required this.loading,
-    required this.saving,
-    required this.hasExisting,
-    required this.selectedRating,
-    required this.commentController,
-    required this.onRatingChanged,
-    required this.onSubmit,
-    this.onRemove,
+    required this.reviews,
+    required this.hasMyReview,
+    required this.onAddOrEdit,
   });
 
   final bool loading;
-  final bool saving;
-  final bool hasExisting;
-  final int selectedRating;
-  final TextEditingController commentController;
-  final ValueChanged<int> onRatingChanged;
-  final VoidCallback onSubmit;
-  final VoidCallback? onRemove;
+  final List<SessionFeedbackEntity> reviews;
+  final bool hasMyReview;
+  final VoidCallback onAddOrEdit;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'YOUR REVIEW',
-          style: AppTypography.microLabel.copyWith(letterSpacing: 1.4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'REVIEWS',
+                style: AppTypography.microLabel.copyWith(letterSpacing: 1.4),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onAddOrEdit,
+              icon: Icon(
+                hasMyReview ? Icons.edit_outlined : Icons.rate_review_outlined,
+                size: 18,
+                color: AppColors.accentPink,
+              ),
+              label: Text(
+                hasMyReview ? 'Edit review' : 'Add review',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.accentPink,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 6),
         Text(
-          hasExisting
-              ? 'Update your rating and comment for this session.'
-              : 'Rate this session and leave an optional comment.',
+          hasMyReview
+              ? 'See what attendees thought — or update yours.'
+              : 'See what attendees thought — or add yours.',
           style: AppTypography.caption,
         ),
         const SizedBox(height: 14),
         if (loading)
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
+            padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
               child: CircularProgressIndicator(color: AppColors.accentPink),
             ),
           )
-        else
+        else if (reviews.isEmpty)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
             decoration: BoxDecoration(
               color: AppColors.bgCard,
               borderRadius: BorderRadius.circular(AppTheme.radiusCard),
               border: Border.all(color: AppColors.borderSubtle),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (index) {
-                    final star = index + 1;
-                    final selected = star <= selectedRating;
-                    return IconButton(
-                      onPressed: saving ? null : () => onRatingChanged(star),
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                      icon: Icon(
-                        selected ? Icons.star_rounded : Icons.star_outline_rounded,
-                        size: 32,
-                        color: selected
-                            ? AppColors.accentPink
-                            : AppColors.textTertiary,
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: commentController,
-                  enabled: !saving,
-                  maxLines: 4,
-                  maxLength: 2000,
-                  style: AppTypography.body.copyWith(fontSize: 15),
-                  decoration: InputDecoration(
-                    hintText: 'Optional comment…',
-                    hintStyle: AppTypography.body.copyWith(
-                      color: AppColors.textTertiary,
-                      fontSize: 15,
-                    ),
-                    filled: true,
-                    fillColor: AppColors.bgBase,
-                    counterStyle: AppTypography.caption.copyWith(fontSize: 11),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                      borderSide: const BorderSide(color: AppColors.borderSubtle),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                      borderSide: const BorderSide(color: AppColors.borderSubtle),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                      borderSide: const BorderSide(color: AppColors.accentPink),
-                    ),
-                    contentPadding: const EdgeInsets.all(14),
+                Text(
+                  'No reviews yet',
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 6),
+                Text(
+                  'Be the first to rate this session.',
+                  style: AppTypography.caption,
+                ),
+                const SizedBox(height: 14),
                 SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: saving ? null : onSubmit,
-                    child: saving
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.textPrimary,
-                            ),
-                          )
-                        : Text(hasExisting ? 'Update review' : 'Submit review'),
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton(
+                    onPressed: onAddOrEdit,
+                    child: const Text('Add review'),
                   ),
                 ),
-                if (onRemove != null) ...[
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 44,
-                    child: TextButton(
-                      onPressed: saving ? null : onRemove,
-                      child: Text(
-                        'Remove review',
-                        style: AppTypography.button.copyWith(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
+          )
+        else
+          ...reviews.map(
+            (review) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ReviewTile(review: review),
+            ),
           ),
+        if (!loading && reviews.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: onAddOrEdit,
+              child: Text(hasMyReview ? 'Edit your review' : 'Add review'),
+            ),
+          ),
+        ],
       ],
+    );
+  }
+}
+
+class _ReviewTile extends StatelessWidget {
+  const _ReviewTile({required this.review});
+
+  final SessionFeedbackEntity review;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = review.userName.trim().isEmpty ? 'Attendee' : review.userName.trim();
+    final comment = review.comment.trim();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(5, (index) {
+                  final filled = index < review.rating;
+                  return Icon(
+                    filled ? Icons.star_rounded : Icons.star_outline_rounded,
+                    size: 16,
+                    color: filled
+                        ? AppColors.accentPink
+                        : AppColors.textTertiary,
+                  );
+                }),
+              ),
+            ],
+          ),
+          if (comment.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              comment,
+              style: AppTypography.body.copyWith(
+                fontSize: 14,
+                height: 1.45,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewFormSheet extends StatelessWidget {
+  const _ReviewFormSheet({
+    required this.hasExisting,
+    required this.selectedRating,
+    required this.commentController,
+    required this.saving,
+    required this.onRatingChanged,
+    required this.onSubmit,
+    this.onRemove,
+  });
+
+  final bool hasExisting;
+  final int selectedRating;
+  final TextEditingController commentController;
+  final bool saving;
+  final ValueChanged<int> onRatingChanged;
+  final VoidCallback onSubmit;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.borderSubtle,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              hasExisting ? 'Edit your review' : 'Add review',
+              style: AppTypography.body.copyWith(
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Rate this session and leave an optional comment.',
+              style: AppTypography.caption,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                final star = index + 1;
+                final selected = star <= selectedRating;
+                return IconButton(
+                  onPressed: saving ? null : () => onRatingChanged(star),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  icon: Icon(
+                    selected ? Icons.star_rounded : Icons.star_outline_rounded,
+                    size: 32,
+                    color: selected
+                        ? AppColors.accentPink
+                        : AppColors.textTertiary,
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: commentController,
+              enabled: !saving,
+              maxLines: 4,
+              maxLength: 2000,
+              style: AppTypography.body.copyWith(fontSize: 15),
+              decoration: InputDecoration(
+                hintText: 'Optional comment…',
+                hintStyle: AppTypography.body.copyWith(
+                  color: AppColors.textTertiary,
+                  fontSize: 15,
+                ),
+                filled: true,
+                fillColor: AppColors.bgBase,
+                counterStyle: AppTypography.caption.copyWith(fontSize: 11),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                  borderSide: const BorderSide(color: AppColors.borderSubtle),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                  borderSide: const BorderSide(color: AppColors.borderSubtle),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                  borderSide: const BorderSide(color: AppColors.accentPink),
+                ),
+                contentPadding: const EdgeInsets.all(14),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: saving ? null : onSubmit,
+                child: saving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.textPrimary,
+                        ),
+                      )
+                    : Text(hasExisting ? 'Update review' : 'Submit review'),
+              ),
+            ),
+            if (onRemove != null) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 44,
+                child: TextButton(
+                  onPressed: saving ? null : onRemove,
+                  child: Text(
+                    'Remove review',
+                    style: AppTypography.button.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

@@ -25,9 +25,19 @@ export const listSpeakersQuerySchema = z.object({
   eventId: z.string().uuid().optional(),
 });
 
+const optionalEmail = z
+  .string()
+  .trim()
+  .email('Enter a valid email')
+  .toLowerCase()
+  .optional()
+  .or(z.literal(''))
+  .transform((value) => value || undefined);
+
 export const createSpeakerSchema = z.object({
   eventId: z.string().uuid('Event is required'),
   name: z.string().trim().min(2, 'Name is required').max(160),
+  email: optionalEmail,
   title: optionalText,
   description: optionalLongText,
   photo: photoSchema,
@@ -36,6 +46,7 @@ export const createSpeakerSchema = z.object({
 export const updateSpeakerSchema = z
   .object({
     name: z.string().trim().min(2).max(160).optional(),
+    email: optionalEmail,
     title: z.string().trim().max(500).optional(),
     description: z.string().trim().max(5000).optional(),
     photo: z

@@ -69,6 +69,7 @@ export interface ChatMessageView {
   groupId: string;
   senderId: string;
   senderName: string;
+  senderRole: string;
   senderPhotoUrl: string;
   clientId: string;
   type: ChatMessageType;

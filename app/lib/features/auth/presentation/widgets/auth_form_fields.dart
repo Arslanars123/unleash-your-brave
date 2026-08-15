@@ -5,6 +5,7 @@ import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/utils/validators.dart';
+import 'package:unleash_your_brave/core/widgets/brand_logo.dart';
 
 class AuthTextField extends StatelessWidget {
   const AuthTextField({
@@ -44,8 +45,6 @@ class AuthTextField extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscureText,
-      textInputAction: textInputAction,
-      onFieldSubmitted: onFieldSubmitted,
       onChanged: onChanged,
       autofillHints: autofillHints,
       inputFormatters: inputFormatters,
@@ -53,6 +52,10 @@ class AuthTextField extends StatelessWidget {
       style: AppTypography.body,
       cursorColor: AppColors.accentPink,
       validator: validator,
+      textInputAction: textInputAction ?? TextInputAction.done,
+      onFieldSubmitted: onFieldSubmitted ??
+          (_) => FocusManager.instance.primaryFocus?.unfocus(),
+      onEditingComplete: () => FocusManager.instance.primaryFocus?.unfocus(),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: AppTypography.caption,
@@ -175,40 +178,34 @@ class AuthBrandHeader extends StatelessWidget {
   const AuthBrandHeader({
     super.key,
     required this.title,
-    required this.emphasis,
-    required this.subtitle,
+    this.subtitle,
   });
 
   final String title;
-  final String emphasis;
-  final String subtitle;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
     final headlineSize = context.headlineSize;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text('ACCOUNT', style: AppTypography.microLabel),
-        SizedBox(height: context.isShortViewport ? 10 : 16),
-        Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: '$title\n',
-                style: AppTypography.headline.copyWith(fontSize: headlineSize),
-              ),
-              TextSpan(
-                text: emphasis,
-                style:
-                    AppTypography.headlineEmphasis.copyWith(fontSize: headlineSize),
-              ),
-            ],
-          ),
+        const BrandLogo(height: 72, alignment: Alignment.center),
+        SizedBox(height: context.isShortViewport ? 18 : 28),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: AppTypography.headline.copyWith(fontSize: headlineSize),
         ),
-        const SizedBox(height: 12),
-        Text(subtitle, style: AppTypography.caption),
+        if (subtitle != null && subtitle!.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            subtitle!,
+            textAlign: TextAlign.center,
+            style: AppTypography.caption,
+          ),
+        ],
       ],
     );
   }

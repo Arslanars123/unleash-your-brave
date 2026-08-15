@@ -6,6 +6,7 @@ import { getApiErrorMessage } from '@/shared/api/client';
 import type { SpeakerPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
+import { MediaImageField } from '@/shared/ui/MediaImageField';
 import { Spinner } from '@/shared/ui/Spinner';
 import { TextArea } from '@/shared/ui/TextArea';
 import { useToast } from '@/shared/ui/toast';
@@ -85,17 +86,12 @@ export function SpeakerProfilePage() {
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Tell attendees about your work…"
         />
-        <Input
-          label="Photo URL"
+        <MediaImageField
+          label="Photo"
           value={photo}
-          onChange={(e) => setPhoto(e.target.value)}
-          placeholder="https://…"
+          disabled={saveMutation.isPending}
+          onChange={setPhoto}
         />
-        {photo ? (
-          <div className="speaker-photo-preview">
-            <img src={photo} alt="" />
-          </div>
-        ) : null}
         <div className="portal-form-actions">
           <Button type="submit" loading={saveMutation.isPending}>
             Save profile

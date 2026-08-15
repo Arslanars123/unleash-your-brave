@@ -116,6 +116,57 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<Either<Failure, String>> forgotPassword({required String email}) async {
+    try {
+      final message = await _remote.forgotPassword(email: email);
+      return Right(message);
+    } on ServerException catch (error) {
+      return Left(AuthFailure(error.message));
+    } on NetworkException catch (error) {
+      return Left(NetworkFailure(error.message));
+    } catch (_) {
+      return const Left(UnexpectedFailure());
+    }
+  }
+
+  @override
+  Future<Either<Failure, String>> verifyResetOtp({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      final token = await _remote.verifyResetOtp(email: email, otp: otp);
+      return Right(token);
+    } on ServerException catch (error) {
+      return Left(AuthFailure(error.message));
+    } on NetworkException catch (error) {
+      return Left(NetworkFailure(error.message));
+    } catch (_) {
+      return const Left(UnexpectedFailure());
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> resetPassword({
+    required String resetToken,
+    required String newPassword,
+  }) async {
+    try {
+      await _remote.resetPassword(
+        resetToken: resetToken,
+        newPassword: newPassword,
+      );
+      return const Right(null);
+    } on ServerException catch (error) {
+      return Left(AuthFailure(error.message));
+    } on NetworkException catch (error) {
+      return Left(NetworkFailure(error.message));
+    } catch (_) {
+      return const Left(UnexpectedFailure());
+    }
+  }
+
+  @override
   Future<Either<Failure, UserEntity>> updateMyProfile(
     Map<String, dynamic> payload,
   ) async {

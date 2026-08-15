@@ -38,6 +38,11 @@ export function createChatRouter(controller: ChatController): Router {
     validate({ body: createMessageSchema }),
     asyncHandler(controller.sendMessage),
   );
+  router.delete(
+    '/messages/:id',
+    validate({ params: messageIdParamSchema }),
+    asyncHandler(controller.deleteMessage),
+  );
   router.post(
     '/delivered',
     validate({ body: receiptSchema }),

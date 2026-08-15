@@ -5,7 +5,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unleash_your_brave/app/router/app_router.dart';
+import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/features/chat/domain/repositories/chat_repository.dart';
 import 'package:unleash_your_brave/firebase_options.dart';
 
@@ -20,9 +22,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 class PushNotificationService {
-  PushNotificationService(this._chatRepository);
+  PushNotificationService(this._chatRepository, this._prefs);
 
   final ChatRepository _chatRepository;
+  final SharedPreferences _prefs;
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
@@ -42,10 +45,21 @@ class PushNotificationService {
   );
 
   StreamSubscription<String>? _tokenRefreshSub;
+  StreamSubscription<RemoteMessage>? _onMessageSub;
+  StreamSubscription<RemoteMessage>? _onOpenedSub;
   bool _initialized = false;
 
+  /// User preference — defaults to on.
+  bool get isEnabled =>
+      _prefs.getBool(StorageKeys.pushNotificationsEnabled) ?? true;
+
   Future<void> initialize() async {
-    if (_initialized) return;
+    if (_initialized) {
+      if (isEnabled) {
+        await registerTokenWithBackend();
+      }
+      return;
+    }
     _initialized = true;
 
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -73,28 +87,16 @@ class PushNotificationService {
       sound: true,
     );
 
-    final settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
-
-    if (settings.authorizationStatus == AuthorizationStatus.denied) {
-      debugPrint('Push permission denied');
-      return;
-    }
-
-    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpen);
+    _onMessageSub = FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+    _onOpenedSub = FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpen);
 
     final initial = await _messaging.getInitialMessage();
     if (initial != null) {
       _handleMessageOpen(initial);
     }
 
-    await registerTokenWithBackend();
     _tokenRefreshSub = _messaging.onTokenRefresh.listen((token) async {
+      if (!isEnabled) return;
       try {
         await _chatRepository.registerDevice(
           token: token,
@@ -104,9 +106,53 @@ class PushNotificationService {
         debugPrint('Failed to refresh FCM token registration: $error');
       }
     });
+
+    if (isEnabled) {
+      await _requestPermissionAndRegister();
+    }
+  }
+
+  /// Persists the preference and registers/unregisters the device token.
+  Future<bool> setEnabled(bool enabled) async {
+    await _prefs.setBool(StorageKeys.pushNotificationsEnabled, enabled);
+
+    if (enabled) {
+      if (!_initialized) {
+        await initialize();
+      } else {
+        final allowed = await _requestPermissionAndRegister();
+        if (!allowed) {
+          await _prefs.setBool(StorageKeys.pushNotificationsEnabled, false);
+          return false;
+        }
+      }
+      return isEnabled;
+    }
+
+    await unregisterCurrentToken(deleteToken: false);
+    return false;
+  }
+
+  Future<bool> _requestPermissionAndRegister() async {
+    final settings = await _messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.denied) {
+      debugPrint('Push permission denied');
+      return false;
+    }
+
+    await registerTokenWithBackend();
+    return true;
   }
 
   Future<void> registerTokenWithBackend() async {
+    if (!isEnabled) return;
+
     try {
       if (Platform.isIOS) {
         // Without an Apple Developer APNs key, getToken() throws.
@@ -142,7 +188,7 @@ class PushNotificationService {
     }
   }
 
-  Future<void> unregisterCurrentToken() async {
+  Future<void> unregisterCurrentToken({bool deleteToken = true}) async {
     try {
       if (Platform.isIOS) {
         final apns = await _messaging.getAPNSToken();
@@ -151,11 +197,15 @@ class PushNotificationService {
       final token = _chatRepository.getFCMToken() ?? await _messaging.getToken();
       if (token == null) return;
       await _chatRepository.unregisterDevice(token);
-      await _messaging.deleteToken();
+      if (deleteToken) {
+        await _messaging.deleteToken();
+      }
     } catch (_) {}
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
+    if (!isEnabled) return;
+
     final notification = message.notification;
     final isAnnouncement = message.data['type'] == 'announcement';
     final title = notification?.title ??
@@ -219,11 +269,10 @@ class PushNotificationService {
     final type = data['type'];
     if (type == 'announcement') {
       final id = data['announcementId'];
-      if (id != null && id.toString().isNotEmpty) {
-        AppRouter.router.go('/notifications?id=$id');
-      } else {
-        AppRouter.router.go('/notifications');
-      }
+      final path = (id != null && id.toString().isNotEmpty)
+          ? '/notifications?id=$id'
+          : '/notifications';
+      AppRouter.router.push(path);
       return;
     }
     if (type == 'chat.message' || data['groupId'] != null) {
@@ -237,5 +286,7 @@ class PushNotificationService {
 
   Future<void> dispose() async {
     await _tokenRefreshSub?.cancel();
+    await _onMessageSub?.cancel();
+    await _onOpenedSub?.cancel();
   }
 }

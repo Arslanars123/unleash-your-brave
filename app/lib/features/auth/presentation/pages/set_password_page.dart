@@ -70,8 +70,7 @@ class _SetPasswordPageState extends State<SetPasswordPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const AuthBrandHeader(
-                    title: 'Set your',
-                    emphasis: 'password',
+                    title: 'Set password',
                     subtitle:
                         'Create a password for your account. Use this password for all future sign-ins.',
                   ),

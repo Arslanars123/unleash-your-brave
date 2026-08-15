@@ -1,33 +1,59 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Eye, Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { Eye, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
 import { usersApi } from '@/features/users/api/users-api';
+import { membershipsApi } from '@/features/memberships/api/memberships-api';
+import { useEditionScope } from '@/features/events/hooks/useEditionScope';
+import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
 import { AttendeeDetailModal } from '@/features/users/components/AttendeeDetailModal';
 import { AttendeeFormModal } from '@/features/users/components/AttendeeFormModal';
 import { useAttendeeRealtime } from '@/features/users/hooks/useAttendeeRealtime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { CreateUserPayload, PublicUser, UpdateUserPayload, UserStatus } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
+import { ListPagination } from '@/shared/ui/ListPagination';
+import { SearchSuggest } from '@/shared/ui/SearchSuggest';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
+const PER_PAGE = 20;
+
 export function UsersPage() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicUser | null>(null);
   const [viewing, setViewing] = useState<PublicUser | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
+  const { eventId } = useEditionScope();
 
   useAttendeeRealtime(true);
 
+  const membershipsQuery = useQuery({
+    queryKey: ['memberships', 'list', eventId, 'all'],
+    queryFn: () => membershipsApi.list({ perPage: 100, eventId }),
+    enabled: Boolean(eventId),
+  });
+
   const usersQuery = useQuery({
-    queryKey: ['users', 'list', 'member', search],
+    queryKey: ['users', 'list', 'member', search, page],
     queryFn: () =>
-      usersApi.list({ search: search || undefined, perPage: 50, role: 'member' }),
+      usersApi.list({
+        search: search || undefined,
+        page,
+        perPage: PER_PAGE,
+        role: 'member',
+      }),
     refetchInterval: 15_000,
   });
+
+  function applySearch(next: string) {
+    setSearch(next);
+    setPage(1);
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateUserPayload) => usersApi.create(payload),
@@ -59,11 +85,14 @@ export function UsersPage() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: UserStatus }) =>
       usersApi.updateStatus(id, status),
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['users', 'list'] }),
         queryClient.invalidateQueries({ queryKey: ['users', 'stats'] }),
       ]);
+      toast.success(
+        variables.status === 'suspended' ? 'Attendee suspended' : 'Attendee activated',
+      );
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to update status')),
   });
@@ -102,6 +131,14 @@ export function UsersPage() {
 
   async function handleSubmit(payload: CreateUserPayload | UpdateUserPayload) {
     if (editing) {
+      const label = editing.fullName || editing.name || editing.email;
+      const ok = await confirm({
+        title: 'Save attendee changes?',
+        message: `Update “${label}”?`,
+        confirmLabel: 'Save changes',
+        tone: 'primary',
+      });
+      if (!ok) return;
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
@@ -109,17 +146,41 @@ export function UsersPage() {
   }
 
   async function handleDelete(user: PublicUser) {
-    const confirmed = window.confirm(`Delete “${user.fullName || user.name}”? This cannot be undone.`);
-    if (!confirmed) return;
+    const label = user.fullName || user.name || user.email;
+    const ok = await confirm({
+      title: 'Delete attendee?',
+      message: `Delete “${label}”? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await deleteMutation.mutateAsync(user.id);
   }
 
+  async function handleStatusToggle(user: PublicUser) {
+    const nextStatus: UserStatus = user.status === 'suspended' ? 'active' : 'suspended';
+    const label = user.fullName || user.name || user.email;
+    const ok = await confirm({
+      title: nextStatus === 'suspended' ? 'Suspend attendee?' : 'Activate attendee?',
+      message:
+        nextStatus === 'suspended'
+          ? `Suspend “${label}”? They will not be able to sign in until activated again.`
+          : `Activate “${label}”? They will be able to sign in again.`,
+      confirmLabel: nextStatus === 'suspended' ? 'Suspend' : 'Activate',
+      tone: nextStatus === 'suspended' ? 'danger' : 'primary',
+    });
+    if (!ok) return;
+    await statusMutation.mutateAsync({ id: user.id, status: nextStatus });
+  }
+
   const saving = createMutation.isPending || updateMutation.isPending;
+  const memberships = membershipsQuery.data?.items ?? [];
 
   return (
     <div className="page">
       <header className="page-header">
         <div>
+          <span className="page-kicker">People</span>
           <h1>Attendees</h1>
           <p className="muted">Create and manage member profiles for the event.</p>
         </div>
@@ -129,14 +190,41 @@ export function UsersPage() {
         </Button>
       </header>
 
+      <EditionSwitcher />
+
       <div className="toolbar">
-        <Input
+        <SearchSuggest
           label="Search"
-          placeholder="Name, email, title, business..."
+          placeholder="Name, email, title, business…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={applySearch}
+          loadSuggestions={async (draft) => {
+            const result = await usersApi.list({
+              search: draft,
+              perPage: 6,
+              role: 'member',
+            });
+            return result.items.map((user) => ({
+              id: user.id,
+              title: user.fullName || user.name,
+              subtitle: [user.title, user.email].filter(Boolean).join(' · '),
+              leading: user.photoUrl ? (
+                <img src={user.photoUrl} alt="" />
+              ) : (
+                <span>{(user.fullName || user.name).charAt(0).toUpperCase()}</span>
+              ),
+            }));
+          }}
         />
       </div>
+      {search ? (
+        <div className="active-filter-chip">
+          Showing results for “{search}”
+          <button type="button" aria-label="Clear filter" onClick={() => applySearch('')}>
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
 
       {usersQuery.isLoading ? <Spinner /> : null}
       {usersQuery.isError ? (
@@ -213,12 +301,7 @@ export function UsersPage() {
                       <Button
                         variant="secondary"
                         disabled={statusMutation.isPending}
-                        onClick={() =>
-                          statusMutation.mutate({
-                            id: user.id,
-                            status: user.status === 'active' ? 'suspended' : 'active',
-                          })
-                        }
+                        onClick={() => void handleStatusToggle(user)}
                       >
                         {user.status === 'active' ? 'Suspend' : 'Activate'}
                       </Button>
@@ -235,9 +318,14 @@ export function UsersPage() {
                 ))}
               </tbody>
             </table>
-            <p className="muted table-meta">
-              Showing {usersQuery.data.items.length} of {usersQuery.data.meta.total} attendees
-            </p>
+            <ListPagination
+              page={usersQuery.data.meta.page}
+              totalPages={usersQuery.data.meta.totalPages}
+              total={usersQuery.data.meta.total}
+              perPage={usersQuery.data.meta.perPage}
+              onPageChange={setPage}
+              label="attendees"
+            />
           </div>
         )
       ) : null}
@@ -253,6 +341,7 @@ export function UsersPage() {
         open={modalOpen}
         mode={editing ? 'edit' : 'create'}
         initialUser={editing}
+        memberships={memberships}
         loading={saving}
         onClose={closeModal}
         onSubmit={handleSubmit}

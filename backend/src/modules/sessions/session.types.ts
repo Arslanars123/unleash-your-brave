@@ -42,6 +42,8 @@ export interface Session {
   endTime: string;
   /** Room / area label, e.g. "Main Ballroom". */
   location: string;
+  /** Empty = visible to all memberships; non-empty = restricted to these tiers. */
+  membershipIds: string[];
   materials: SessionMaterial[];
   /** When true, members can leave a rating/review for this session. */
   feedbackEnabled: boolean;
@@ -65,6 +67,7 @@ export interface PublicSession {
   startTime: string;
   endTime: string;
   location: string;
+  membershipIds: string[];
   materials: PublicSessionMaterial[];
   feedbackEnabled: boolean;
   feedbackSummary: SessionFeedbackSummary;
@@ -81,6 +84,7 @@ export interface CreateSessionInput {
   startTime?: string;
   endTime?: string;
   location?: string;
+  membershipIds?: string[];
   materials?: SessionMaterialInput[];
   feedbackEnabled?: boolean;
 }
@@ -93,6 +97,7 @@ export interface UpdateSessionInput {
   startTime?: string;
   endTime?: string;
   location?: string;
+  membershipIds?: string[];
   materials?: SessionMaterialInput[];
   feedbackEnabled?: boolean;
 }
@@ -104,4 +109,6 @@ export interface ListSessionsQuery {
   eventId?: string;
   speakerId?: string;
   eventDayNumber?: number;
+  /** When set, only sessions open to this membership (or unrestricted) are returned. */
+  accessibleToMembershipId?: string | null;
 }

@@ -3,12 +3,14 @@ import { X } from 'lucide-react';
 import type {
   CreateUserPayload,
   NetworkingPref,
+  PublicMembership,
   PublicUser,
   UpdateUserPayload,
 } from '@/shared/types/api';
 import { NETWORKING_PREFS } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
+import { MediaImageField } from '@/shared/ui/MediaImageField';
 import { TextArea } from '@/shared/ui/TextArea';
 
 export interface AttendeeFormValues {
@@ -31,6 +33,7 @@ export interface AttendeeFormValues {
   points: string;
   profileCompleted: boolean;
   status: 'active' | 'suspended';
+  membershipId: string;
 }
 
 type FieldErrors = Partial<Record<keyof AttendeeFormValues | 'userId', string>>;
@@ -55,6 +58,7 @@ const emptyForm: AttendeeFormValues = {
   points: '0',
   profileCompleted: false,
   status: 'active',
+  membershipId: '',
 };
 
 function userToForm(user: PublicUser): AttendeeFormValues {
@@ -78,12 +82,16 @@ function userToForm(user: PublicUser): AttendeeFormValues {
     points: String(user.points ?? 0),
     profileCompleted: Boolean(user.profileCompleted),
     status: user.status,
+    membershipId: user.membershipId ?? '',
   };
 }
 
 function isOptionalUrl(value: string): boolean {
   const trimmed = value.trim();
-  return trimmed === '' || /^https?:\/\//i.test(trimmed);
+  if (!trimmed) return true;
+  if (/^https?:\/\//i.test(trimmed)) return true;
+  if (trimmed.startsWith('/uploads/')) return true;
+  return false;
 }
 
 function validate(values: AttendeeFormValues, mode: 'create' | 'edit'): FieldErrors {
@@ -137,6 +145,7 @@ export function toCreatePayload(values: AttendeeFormValues): CreateUserPayload {
     isVip: values.isVip,
     points: Number(values.points) || 0,
     profileCompleted: values.profileCompleted,
+    membershipId: values.membershipId || null,
   };
 }
 
@@ -161,6 +170,7 @@ export function toUpdatePayload(values: AttendeeFormValues): UpdateUserPayload {
     isVip: values.isVip,
     points: Number(values.points) || 0,
     profileCompleted: values.profileCompleted,
+    membershipId: values.membershipId || null,
   };
 }
 
@@ -234,6 +244,7 @@ interface AttendeeFormModalProps {
   open: boolean;
   mode: 'create' | 'edit';
   initialUser?: PublicUser | null;
+  memberships?: PublicMembership[];
   loading?: boolean;
   onClose: () => void;
   onSubmit: (payload: CreateUserPayload | UpdateUserPayload) => Promise<void> | void;
@@ -243,6 +254,7 @@ export function AttendeeFormModal({
   open,
   mode,
   initialUser,
+  memberships = [],
   loading = false,
   onClose,
   onSubmit,
@@ -330,13 +342,12 @@ export function AttendeeFormModal({
             onChange={(e) => update('password', e.target.value)}
           />
 
-          <Input
-            label="photo_url"
-            name="photo_url"
+          <MediaImageField
+            label="Photo"
             value={values.photoUrl}
             error={errors.photoUrl}
-            onChange={(e) => update('photoUrl', e.target.value)}
-            placeholder="https://..."
+            disabled={loading}
+            onChange={(url) => update('photoUrl', url)}
           />
 
           <Input
@@ -345,6 +356,22 @@ export function AttendeeFormModal({
             value={values.title}
             onChange={(e) => update('title', e.target.value)}
           />
+
+          <label className="field">
+            <span className="field-label">Membership</span>
+            <select
+              className="field-input"
+              value={values.membershipId}
+              onChange={(e) => update('membershipId', e.target.value)}
+            >
+              <option value="">No membership assigned</option>
+              {memberships.map((membership) => (
+                <option key={membership.id} value={membership.id}>
+                  {membership.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <Input
             label="business"

@@ -38,6 +38,10 @@ export class MongoChatReactionRepository implements ChatReactionRepository {
     } as Filter<MongoDoc<ChatReaction>>);
   }
 
+  async removeForMessage(messageId: string): Promise<void> {
+    await this.collection.deleteMany({ messageId } as Filter<MongoDoc<ChatReaction>>);
+  }
+
   async listForMessages(messageIds: string[]): Promise<ChatReaction[]> {
     if (messageIds.length === 0) return [];
     const docs = await this.collection

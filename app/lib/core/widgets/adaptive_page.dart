@@ -29,8 +29,8 @@ class AdaptiveCenteredBody extends StatelessWidget {
         builder: (context, constraints) {
           return SingleChildScrollView(
             padding: resolvedPadding,
-            // Keeps the submit button reachable while the keyboard is open.
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            // Keeps the submit button reachable while the keyboard is open.
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight: constraints.maxHeight -
@@ -59,25 +59,29 @@ class AdaptiveScrollBody extends StatelessWidget {
     required this.child,
     this.maxWidth,
     this.padding,
+    this.useSafeArea = true,
   });
 
   final Widget child;
   final double? maxWidth;
   final EdgeInsets? padding;
+  final bool useSafeArea;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: padding ?? context.pagePadding,
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth ?? context.maxContentWidth),
-            child: child,
-          ),
+    final scroll = SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: padding ?? context.pagePadding,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth ?? context.maxContentWidth),
+          child: child,
         ),
       ),
     );
+
+    if (!useSafeArea) return scroll;
+    return SafeArea(child: scroll);
   }
 }

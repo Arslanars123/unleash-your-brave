@@ -1,11 +1,15 @@
 import type { Request, Response } from 'express';
 import { UnauthorizedError } from '../../core/errors/app-error.js';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
+import type { CheckoutService } from '../checkout/checkout.service.js';
 import type { UserService } from './user.service.js';
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from './user.types.js';
 
 export class UserController {
-  constructor(private readonly service: UserService) {}
+  constructor(
+    private readonly service: UserService,
+    private readonly checkout: CheckoutService,
+  ) {}
 
   list = async (req: Request, res: Response): Promise<void> => {
     const query = req.query as unknown as ListUsersQuery;
@@ -15,6 +19,12 @@ export class UserController {
 
   getById = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.getById(req.params.id as string));
+  };
+
+  listPurchases = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.params.id as string;
+    await this.service.getById(userId);
+    sendSuccess(res, await this.checkout.getAttendeePurchaseSummary(userId));
   };
 
   create = async (req: Request, res: Response): Promise<void> => {
@@ -30,6 +40,14 @@ export class UserController {
       throw new UnauthorizedError('Authentication required');
     }
     sendSuccess(res, await this.service.update(req.auth.userId, req.body as UpdateUserInput));
+  };
+
+  upgradeMyMembership = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth?.userId) {
+      throw new UnauthorizedError('Authentication required');
+    }
+    const body = req.body as { membershipId: string };
+    sendSuccess(res, await this.service.upgradeMyMembership(req.auth.userId, body.membershipId));
   };
 
   remove = async (req: Request, res: Response): Promise<void> => {

@@ -9,12 +9,12 @@ import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
+import 'package:unleash_your_brave/core/widgets/suggest_search_field.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/agenda_local_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/data/models/session_model.dart';
 import 'package:unleash_your_brave/features/agenda/domain/entities/session_entity.dart';
 import 'package:unleash_your_brave/features/agenda/presentation/widgets/agenda_day_tabs.dart';
-import 'package:unleash_your_brave/features/agenda/presentation/widgets/agenda_search_field.dart';
 import 'package:unleash_your_brave/features/agenda/presentation/widgets/session_card.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/data/models/event_model.dart';
@@ -34,7 +34,6 @@ class AgendaPage extends StatefulWidget {
 
 class _AgendaPageState extends State<AgendaPage> {
   final _searchController = TextEditingController();
-  Timer? _searchDebounce;
 
   _AgendaStatus _status = _AgendaStatus.bootstrapping;
   EventEntity? _event;
@@ -45,6 +44,8 @@ class _AgendaPageState extends State<AgendaPage> {
   int? _selectedDayNumber;
   String? _errorMessage;
   String _searchQuery = '';
+  int _page = 0;
+  static const _pageSize = 8;
   bool _servingCachedData = false;
   int _sessionsRequestId = 0;
 
@@ -58,7 +59,6 @@ class _AgendaPageState extends State<AgendaPage> {
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -73,10 +73,14 @@ class _AgendaPageState extends State<AgendaPage> {
     return days.isEmpty ? null : days.first;
   }
 
-  List<SessionEntity> get _visibleSessions {
+  List<SessionEntity> get _daySessions {
     final day = _selectedDayNumber;
     if (day == null) return const [];
-    final all = _sessionsByDay[day] ?? const <SessionEntity>[];
+    return _sessionsByDay[day] ?? const <SessionEntity>[];
+  }
+
+  List<SessionEntity> get _visibleSessions {
+    final all = _daySessions;
     final query = _searchQuery.trim().toLowerCase();
     if (query.isEmpty) return all;
     return all
@@ -87,6 +91,20 @@ class _AgendaPageState extends State<AgendaPage> {
               speaker.contains(query);
         })
         .toList(growable: false);
+  }
+
+  List<SessionEntity> get _pagedSessions {
+    final all = _visibleSessions;
+    final start = _page * _pageSize;
+    if (start >= all.length) return const [];
+    final end = (start + _pageSize).clamp(0, all.length);
+    return all.sublist(start, end);
+  }
+
+  int get _totalPages {
+    final total = _visibleSessions.length;
+    if (total == 0) return 1;
+    return ((total - 1) ~/ _pageSize) + 1;
   }
 
   _DayLoadStatus get _selectedDayStatus {
@@ -398,7 +416,10 @@ class _AgendaPageState extends State<AgendaPage> {
   void _onDaySelected(int dayNumber) {
     if (_selectedDayNumber == dayNumber || _event == null) return;
 
-    setState(() => _selectedDayNumber = dayNumber);
+    setState(() {
+      _selectedDayNumber = dayNumber;
+      _page = 0;
+    });
 
     unawaited(
       _loadSessionsForDay(
@@ -409,13 +430,30 @@ class _AgendaPageState extends State<AgendaPage> {
     );
   }
 
-  void _onSearchChanged(String value) {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      setState(() => _searchQuery = value.trim());
+  void _onSearchApplied(String value) {
+    setState(() {
+      _searchQuery = value.trim();
+      _page = 0;
     });
-    setState(() {}); // refresh clear button
+  }
+
+  List<SearchSuggestionItem> _suggestionsFor(String draft) {
+    final q = draft.toLowerCase();
+    return _daySessions
+        .where((session) {
+          final speaker = session.speaker?.name.toLowerCase() ?? '';
+          return session.name.toLowerCase().contains(q) ||
+              session.description.toLowerCase().contains(q) ||
+              speaker.contains(q);
+        })
+        .map(
+          (session) => SearchSuggestionItem(
+            id: session.id,
+            title: session.name,
+            subtitle: session.speaker?.name,
+          ),
+        )
+        .toList(growable: false);
   }
 
   @override
@@ -457,7 +495,10 @@ class _AgendaPageState extends State<AgendaPage> {
                 event: _event,
                 selectedDay: _selectedDay,
                 selectedDayNumber: _selectedDayNumber,
-                sessions: _visibleSessions,
+                sessions: _pagedSessions,
+                totalFiltered: _visibleSessions.length,
+                page: _page,
+                totalPages: _totalPages,
                 dayStatus: _selectedDayStatus,
                 dayErrorMessage: _selectedDayNumber == null
                     ? null
@@ -469,7 +510,9 @@ class _AgendaPageState extends State<AgendaPage> {
                 searchController: _searchController,
                 searchQuery: _searchQuery,
                 onDaySelected: _onDaySelected,
-                onSearchChanged: _onSearchChanged,
+                onSearchApplied: _onSearchApplied,
+                suggestionsFor: _suggestionsFor,
+                onPageChanged: (page) => setState(() => _page = page),
                 onRetryDay: _retrySelectedDay,
               ),
           },
@@ -509,6 +552,9 @@ class _AgendaBody extends StatelessWidget {
     required this.selectedDay,
     required this.selectedDayNumber,
     required this.sessions,
+    required this.totalFiltered,
+    required this.page,
+    required this.totalPages,
     required this.dayStatus,
     required this.dayErrorMessage,
     required this.sessionsLoading,
@@ -517,7 +563,9 @@ class _AgendaBody extends StatelessWidget {
     required this.searchController,
     required this.searchQuery,
     required this.onDaySelected,
-    required this.onSearchChanged,
+    required this.onSearchApplied,
+    required this.suggestionsFor,
+    required this.onPageChanged,
     required this.onRetryDay,
   });
 
@@ -526,6 +574,9 @@ class _AgendaBody extends StatelessWidget {
   final EventDayEntity? selectedDay;
   final int? selectedDayNumber;
   final List<SessionEntity> sessions;
+  final int totalFiltered;
+  final int page;
+  final int totalPages;
   final _DayLoadStatus dayStatus;
   final String? dayErrorMessage;
   final bool sessionsLoading;
@@ -534,16 +585,19 @@ class _AgendaBody extends StatelessWidget {
   final TextEditingController searchController;
   final String searchQuery;
   final ValueChanged<int> onDaySelected;
-  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onSearchApplied;
+  final List<SearchSuggestionItem> Function(String draft) suggestionsFor;
+  final ValueChanged<int> onPageChanged;
   final VoidCallback onRetryDay;
 
   @override
   Widget build(BuildContext context) {
     final days = event?.days ?? const <EventDayEntity>[];
-    final showDayLoader = sessionsLoading && sessions.isEmpty;
+    final showDayLoader = sessionsLoading && sessions.isEmpty && totalFiltered == 0;
     final showDayError = (dayStatus == _DayLoadStatus.offline ||
             dayStatus == _DayLoadStatus.error) &&
-        sessions.isEmpty;
+        sessions.isEmpty &&
+        totalFiltered == 0;
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(
@@ -560,15 +614,24 @@ class _AgendaBody extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Agenda',
-                      style: AppTypography.headline.copyWith(fontSize: 32),
+                      'AGENDA',
+                      style: AppTypography.microLabel.copyWith(
+                        color: AppColors.accentPink,
+                        letterSpacing: 2.2,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Your day, curated',
+                      style: AppTypography.headline.copyWith(fontSize: 34),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       event?.name.isNotEmpty == true
                           ? event!.name
                           : 'Sessions for each gathering day',
-                      style: AppTypography.caption,
+                      style: AppTypography.caption.copyWith(fontSize: 14),
                     ),
                     if (servingCachedData) ...[
                       const SizedBox(height: 14),
@@ -606,9 +669,12 @@ class _AgendaBody extends StatelessWidget {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      AgendaSearchField(
+                      SuggestSearchField(
                         controller: searchController,
-                        onChanged: onSearchChanged,
+                        appliedQuery: searchQuery,
+                        onAppliedChanged: onSearchApplied,
+                        suggestionsFor: suggestionsFor,
+                        hintText: 'Search sessions or speakers',
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -637,7 +703,7 @@ class _AgendaBody extends StatelessWidget {
                 onRetry: onRetryDay,
               ),
             )
-          else if (sessions.isEmpty)
+          else if (totalFiltered == 0)
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
@@ -654,32 +720,114 @@ class _AgendaBody extends StatelessWidget {
               ),
             )
           else
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(sidePad, 0, sidePad, 28),
-              sliver: SliverList.separated(
-                itemCount: sessions.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final session = sessions[index];
-                  return Center(
-                    child: ConstrainedBox(
-                      constraints:
-                          BoxConstraints(maxWidth: context.maxContentWidth),
-                      child: Opacity(
-                        opacity: sessionsLoading ? 0.72 : 1,
-                        child: SessionCard(
-                          session: session,
-                          onTap: () => context.push(
-                            '/agenda/sessions/${session.id}',
-                            extra: session,
+            ...[
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(sidePad, 0, sidePad, 12),
+                sliver: SliverList.separated(
+                  itemCount: sessions.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final session = sessions[index];
+                    return Center(
+                      child: ConstrainedBox(
+                        constraints:
+                            BoxConstraints(maxWidth: context.maxContentWidth),
+                        child: Opacity(
+                          opacity: sessionsLoading ? 0.72 : 1,
+                          child: SessionCard(
+                            session: session,
+                            onTap: () => context.push(
+                              '/agenda/sessions/${session.id}',
+                              extra: session,
+                            ),
                           ),
                         ),
                       ),
+                    );
+                  },
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(sidePad, 4, sidePad, 28),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(maxWidth: context.maxContentWidth),
+                      child: _ListPager(
+                        page: page,
+                        totalPages: totalPages,
+                        total: totalFiltered,
+                        label: 'sessions',
+                        onPageChanged: onPageChanged,
+                      ),
                     ),
-                  );
-                },
+                  ),
+                ),
+              ),
+            ],
+      ],
+    );
+  }
+}
+
+class _ListPager extends StatelessWidget {
+  const _ListPager({
+    required this.page,
+    required this.totalPages,
+    required this.total,
+    required this.label,
+    required this.onPageChanged,
+  });
+
+  final int page;
+  final int totalPages;
+  final int total;
+  final String label;
+  final ValueChanged<int> onPageChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final from = total == 0 ? 0 : page * 8 + 1;
+    final to = ((page + 1) * 8).clamp(0, total);
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '$from–$to of $total $label',
+            style: AppTypography.caption,
+          ),
+        ),
+        if (totalPages > 1) ...[
+          TextButton(
+            onPressed: page > 0 ? () => onPageChanged(page - 1) : null,
+            child: Text(
+              'Prev',
+              style: AppTypography.button.copyWith(
+                fontSize: 13,
+                color: page > 0 ? AppColors.accentPink : AppColors.textSecondary,
               ),
             ),
+          ),
+          Text(
+            '${page + 1}/$totalPages',
+            style: AppTypography.caption.copyWith(fontWeight: FontWeight.w700),
+          ),
+          TextButton(
+            onPressed:
+                page + 1 < totalPages ? () => onPageChanged(page + 1) : null,
+            child: Text(
+              'Next',
+              style: AppTypography.button.copyWith(
+                fontSize: 13,
+                color: page + 1 < totalPages
+                    ? AppColors.accentPink
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

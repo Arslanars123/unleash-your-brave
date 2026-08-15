@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keyboard_actions/keyboard_actions.dart';
 import 'package:unleash_your_brave/core/responsive/responsive.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
@@ -71,7 +72,8 @@ class _LoginPageState extends State<LoginPage> {
         builder: (context, state) {
           final loading = state is AuthLoading;
 
-          return AdaptiveCenteredBody(
+          return KeyboardActions.done(
+            child: AdaptiveCenteredBody(
             child: Form(
               key: _formKey,
               autovalidateMode: _autovalidateMode,
@@ -81,8 +83,7 @@ class _LoginPageState extends State<LoginPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const AuthBrandHeader(
-                      title: 'Welcome',
-                      emphasis: 'back',
+                      title: 'Login',
                       subtitle:
                           'Sign in with the email and password you created after verifying your purchase code.',
                     ),
@@ -138,6 +139,25 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 16),
                     TextButton(
                       onPressed:
+                          loading ? null : () => context.go('/forgot-password'),
+                      child: Text.rich(
+                        textAlign: TextAlign.center,
+                        TextSpan(
+                          style: AppTypography.caption,
+                          children: [
+                            TextSpan(
+                              text: 'Forgot password?',
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.accentPink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed:
                           loading ? null : () => context.go('/verify-code'),
                       child: Text.rich(
                         textAlign: TextAlign.center,
@@ -178,6 +198,7 @@ class _LoginPageState extends State<LoginPage> {
                   ],
                 ),
               ),
+            ),
             ),
           );
         },

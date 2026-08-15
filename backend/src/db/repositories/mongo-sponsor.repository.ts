@@ -22,7 +22,7 @@ export class MongoSponsorRepository implements SponsorRepository {
     if (query.eventId) filter.eventId = query.eventId;
     if (query.search?.trim()) {
       const search = query.search.trim();
-      filter.$or = [containsCi('name', search), containsCi('description', search)];
+      filter.$or = [containsCi('name', search), containsCi('email', search), containsCi('description', search)];
     }
 
     const total = await this.collection.countDocuments(filter);

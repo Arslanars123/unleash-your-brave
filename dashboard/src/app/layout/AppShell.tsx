@@ -3,16 +3,19 @@ import {
   CalendarDays,
   Clapperboard,
   Handshake,
+  BadgeCheck,
   Images,
   LayoutDashboard,
   LogOut,
   Megaphone,
+  MessageCircle,
   Mic2,
   QrCode,
   UserRound,
   Users,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthProvider';
+import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
 
 export function AppShell() {
@@ -24,7 +27,7 @@ export function AppShell() {
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="brand-mark sm">UYB</span>
+          <BrandLogo height={108} className="sidebar-brand-logo" />
           <div>
             <strong>Unleash Your Brave</strong>
             <p>{portalLabel}</p>
@@ -50,6 +53,10 @@ export function AppShell() {
                 <Mic2 size={18} />
                 Speakers
               </NavLink>
+              <NavLink to="/memberships">
+                <BadgeCheck size={18} />
+                Memberships
+              </NavLink>
               <NavLink to="/sponsors">
                 <Handshake size={18} />
                 Sponsors
@@ -61,6 +68,10 @@ export function AppShell() {
               <NavLink to="/posts">
                 <Images size={18} />
                 Posts
+              </NavLink>
+              <NavLink to="/chat">
+                <MessageCircle size={18} />
+                Group chat
               </NavLink>
               <NavLink to="/users">
                 <Users size={18} />

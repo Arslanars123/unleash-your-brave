@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { ListSessionsQuery, Session } from './session.types.js';
 
+function isSessionAccessible(session: Session, membershipId: string | null): boolean {
+  const membershipIds = session.membershipIds ?? [];
+  if (membershipIds.length === 0) return true;
+  if (!membershipId) return false;
+  return membershipIds.includes(membershipId);
+}
+
 export interface PaginatedResult<T> {
   items: T[];
   total: number;
@@ -29,6 +36,11 @@ export class InMemorySessionRepository implements SessionRepository {
         if (query.eventId && session.eventId !== query.eventId) return false;
         if (query.speakerId && session.speakerId !== query.speakerId) return false;
         if (query.eventDayNumber && session.eventDayNumber !== query.eventDayNumber) return false;
+        if (query.accessibleToMembershipId !== undefined) {
+          if (!isSessionAccessible(session, query.accessibleToMembershipId)) {
+            return false;
+          }
+        }
         if (!search) return true;
         return (
           session.name.toLowerCase().includes(search) ||

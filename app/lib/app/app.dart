@@ -32,7 +32,11 @@ class UnleashYourBraveApp extends StatelessWidget {
                   maxScaleFactor: 1.3,
                 ),
               ),
-              child: child ?? const SizedBox.shrink(),
+              child: GestureDetector(
+                onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                behavior: HitTestBehavior.deferToChild,
+                child: child ?? const SizedBox.shrink(),
+              ),
             );
           },
         ),

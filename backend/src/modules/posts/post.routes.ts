@@ -64,7 +64,7 @@ export function createPostRouter(controller: PostController): Router {
   router.post(
     '/:id/likes',
     authenticate,
-    authorize('member', 'admin'),
+    authorize('member', 'admin', 'speaker', 'sponsor'),
     validate({ params: postIdParamSchema }),
     asyncHandler(controller.like),
   );
@@ -72,7 +72,7 @@ export function createPostRouter(controller: PostController): Router {
   router.delete(
     '/:id/likes',
     authenticate,
-    authorize('member', 'admin'),
+    authorize('member', 'admin', 'speaker', 'sponsor'),
     validate({ params: postIdParamSchema }),
     asyncHandler(controller.unlike),
   );
@@ -80,7 +80,7 @@ export function createPostRouter(controller: PostController): Router {
   router.post(
     '/:id/comments',
     authenticate,
-    authorize('member', 'admin'),
+    authorize('member', 'admin', 'speaker', 'sponsor'),
     validate({ params: postIdParamSchema, body: createPostCommentSchema }),
     asyncHandler(controller.addComment),
   );
@@ -88,7 +88,7 @@ export function createPostRouter(controller: PostController): Router {
   router.patch(
     '/:id/comments/:commentId',
     authenticate,
-    authorize('member', 'admin'),
+    authorize('member', 'admin', 'speaker', 'sponsor'),
     validate({ params: postCommentParamSchema, body: updatePostCommentSchema }),
     asyncHandler(controller.updateComment),
   );
@@ -96,7 +96,7 @@ export function createPostRouter(controller: PostController): Router {
   router.delete(
     '/:id/comments/:commentId',
     authenticate,
-    authorize('member', 'admin'),
+    authorize('member', 'admin', 'speaker', 'sponsor'),
     validate({ params: postCommentParamSchema }),
     asyncHandler(controller.removeComment),
   );

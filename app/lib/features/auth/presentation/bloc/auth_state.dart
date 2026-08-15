@@ -11,6 +11,12 @@ final class AuthInitial extends AuthState {
   const AuthInitial();
 }
 
+/// Cold-start session restore only — never used for sign-in / sign-up submits.
+final class AuthCheckingSession extends AuthState {
+  const AuthCheckingSession();
+}
+
+/// In-flight form submit (login, register, change password).
 final class AuthLoading extends AuthState {
   const AuthLoading();
 }

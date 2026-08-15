@@ -1,3 +1,4 @@
+import type { PublicMembershipPurchase } from '../checkout/purchase.types.js';
 import type { PublicUser } from '../users/user.types.js';
 
 export interface CheckIn {
@@ -7,6 +8,9 @@ export interface CheckIn {
   checkedInAt: Date;
   /** Admin user id who scanned, or null when self-service (unused for now). */
   checkedInBy: string | null;
+  /** Membership snapshot at the moment of check-in (survives later upgrades). */
+  membershipIdAtCheckIn: string | null;
+  membershipNameAtCheckIn: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -17,6 +21,8 @@ export interface PublicCheckIn {
   userId: string;
   checkedInAt: string;
   checkedInBy: string | null;
+  membershipIdAtCheckIn: string | null;
+  membershipNameAtCheckIn: string | null;
   createdAt: string;
   updatedAt: string;
   user?: PublicUser | null;
@@ -33,10 +39,23 @@ export interface MyCheckInQr {
   checkedInAt: string | null;
 }
 
+export interface CheckInScanMembershipSummary {
+  currentMembershipId: string | null;
+  currentMembershipName: string | null;
+  originalMembershipId: string | null;
+  originalMembershipName: string | null;
+  membershipIdAtCheckIn: string | null;
+  membershipNameAtCheckIn: string | null;
+  purchases: PublicMembershipPurchase[];
+  upgrades: PublicMembershipPurchase[];
+  latestPurchase: PublicMembershipPurchase | null;
+}
+
 export interface CheckInScanResult {
   checkIn: PublicCheckIn;
   alreadyCheckedIn: boolean;
   user: PublicUser;
+  membership: CheckInScanMembershipSummary;
 }
 
 export interface ListCheckInsQuery {

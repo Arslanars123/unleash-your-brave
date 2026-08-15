@@ -4,6 +4,7 @@ import { env } from '../../config/env.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
 import type { SponsorRepository } from '../sponsors/sponsor.repository.js';
+import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { PaginatedResult, UserRepository } from './user.repository.js';
 import type {
   CreateUserInput,
@@ -31,11 +32,18 @@ export function generateInviteCode(): string {
   return `UYB-${code}`;
 }
 
+/** Six-digit OTP for password reset emails. */
+export function generatePasswordResetOtp(): string {
+  const value = randomBytes(3).readUIntBE(0, 3) % 1_000_000;
+  return value.toString().padStart(6, '0');
+}
+
 export class UserService {
   constructor(
     private readonly users: UserRepository,
     private readonly speakers?: SpeakerRepository,
     private readonly sponsors?: SponsorRepository,
+    private readonly memberships?: MembershipRepository,
   ) {}
 
   async list(query: ListUsersQuery): Promise<PaginatedResult<PublicUser>> {
@@ -114,10 +122,138 @@ export class UserService {
       passwordHash: await bcrypt.hash(newPassword, PASSWORD_SALT_ROUNDS),
       inviteCodeHash: null,
       inviteCodeExpiresAt: null,
+      passwordResetOtpHash: null,
+      passwordResetOtpExpiresAt: null,
       mustChangePassword: false,
     });
     if (!updated) throw new NotFoundError('User');
     return toPublicUser(updated);
+  }
+
+  /**
+   * Create or refresh a dashboard portal account (speaker/sponsor) with invite code.
+   * Returns plaintext inviteCode on create or when a fresh invite is issued.
+   */
+  async upsertPortalAccount(input: {
+    email: string;
+    name: string;
+    role: 'speaker' | 'sponsor';
+    speakerId?: string | null;
+    sponsorId?: string | null;
+    issueInvite?: boolean;
+  }): Promise<{ user: PublicUser; created: boolean; inviteCode?: string }> {
+    const email = input.email.trim().toLowerCase();
+    const speakerId = input.role === 'speaker' ? (input.speakerId ?? null) : null;
+    const sponsorId = input.role === 'sponsor' ? (input.sponsorId ?? null) : null;
+
+    await this.assertProfileLinks(input.role, speakerId, sponsorId);
+
+    const linkedUser =
+      input.role === 'speaker' && speakerId
+        ? await this.users.findBySpeakerId(speakerId)
+        : input.role === 'sponsor' && sponsorId
+          ? await this.users.findBySponsorId(sponsorId)
+          : null;
+
+    const byEmail = await this.users.findByEmail(email);
+    const existing = linkedUser ?? byEmail;
+
+    if (existing) {
+      if (existing.role !== input.role) {
+        throw new ConflictError('That email is already used by another account type');
+      }
+      if (
+        speakerId &&
+        existing.speakerId &&
+        existing.speakerId !== speakerId
+      ) {
+        throw new ConflictError('That email is linked to a different speaker profile');
+      }
+      if (
+        sponsorId &&
+        existing.sponsorId &&
+        existing.sponsorId !== sponsorId
+      ) {
+        throw new ConflictError('That email is linked to a different sponsor profile');
+      }
+
+      const shouldIssueInvite = input.issueInvite ?? false;
+      let inviteCode: string | undefined;
+      let inviteCodeHash = existing.inviteCodeHash;
+      let inviteCodeExpiresAt = existing.inviteCodeExpiresAt;
+      let mustChangePassword = existing.mustChangePassword;
+
+      if (shouldIssueInvite) {
+        inviteCode = generateInviteCode();
+        inviteCodeExpiresAt = new Date(
+          Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+        );
+        inviteCodeHash = await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS);
+        mustChangePassword = true;
+      }
+
+      const updated = await this.users.update(existing.id, {
+        email,
+        name: input.name.trim(),
+        speakerId,
+        sponsorId,
+        status: 'active',
+        ...(shouldIssueInvite
+          ? {
+              inviteCodeHash,
+              inviteCodeExpiresAt,
+              mustChangePassword,
+              passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
+            }
+          : {}),
+      });
+      if (!updated) throw new NotFoundError('User');
+      return { user: toPublicUser(updated), created: false, inviteCode };
+    }
+
+    const inviteCode = generateInviteCode();
+    const expiresAt = new Date(
+      Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+    );
+
+    const created = await this.users.create({
+      email,
+      name: input.name.trim(),
+      passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
+      inviteCodeHash: await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS),
+      inviteCodeExpiresAt: expiresAt,
+      mustChangePassword: true,
+      role: input.role,
+      status: 'active',
+      speakerId,
+      sponsorId,
+      profileCompleted: false,
+    });
+
+    return { user: toPublicUser(created), created: true, inviteCode };
+  }
+
+  async storePasswordResetOtp(userId: string, otp: string): Promise<void> {
+    const expiresAt = new Date(Date.now() + env.passwordResetOtpTtlMinutes * 60 * 1000);
+    const updated = await this.users.update(userId, {
+      passwordResetOtpHash: await bcrypt.hash(otp, PASSWORD_SALT_ROUNDS),
+      passwordResetOtpExpiresAt: expiresAt,
+    });
+    if (!updated) throw new NotFoundError('User');
+  }
+
+  async verifyPasswordResetOtp(userId: string, otp: string): Promise<boolean> {
+    const user = await this.requireUser(userId);
+    if (!user.passwordResetOtpHash || !user.passwordResetOtpExpiresAt) return false;
+    if (user.passwordResetOtpExpiresAt.getTime() <= Date.now()) return false;
+    return bcrypt.compare(otp.trim(), user.passwordResetOtpHash);
+  }
+
+  async clearPasswordResetOtp(userId: string): Promise<void> {
+    await this.users.update(userId, {
+      passwordResetOtpHash: null,
+      passwordResetOtpExpiresAt: null,
+    });
   }
 
   async create(input: CreateUserInput): Promise<PublicUser> {
@@ -128,8 +264,10 @@ export class UserService {
     const role = input.role ?? 'member';
     const speakerId = role === 'speaker' ? (input.speakerId ?? null) : null;
     const sponsorId = role === 'sponsor' ? (input.sponsorId ?? null) : null;
+    const membershipId = role === 'member' ? (input.membershipId ?? null) : null;
 
     await this.assertProfileLinks(role, speakerId, sponsorId);
+    await this.assertMembership(membershipId);
 
     const created = await this.users.create({
       email: input.email,
@@ -139,6 +277,7 @@ export class UserService {
       status: input.status ?? 'active',
       speakerId,
       sponsorId,
+      membershipId,
       photoUrl: input.photoUrl,
       title: input.title,
       business: input.business,
@@ -174,6 +313,12 @@ export class UserService {
         : role === 'sponsor'
           ? existing.sponsorId
           : null;
+    const membershipId =
+      input.membershipId !== undefined
+        ? input.membershipId
+        : role === 'member'
+          ? existing.membershipId
+          : null;
 
     if (input.role !== undefined || input.speakerId !== undefined || input.sponsorId !== undefined) {
       await this.assertProfileLinks(
@@ -181,6 +326,10 @@ export class UserService {
         role === 'speaker' ? speakerId : null,
         role === 'sponsor' ? sponsorId : null,
       );
+    }
+
+    if (input.membershipId !== undefined || input.role !== undefined) {
+      await this.assertMembership(role === 'member' ? membershipId : null);
     }
 
     if (input.email && input.email.toLowerCase() !== existing.email) {
@@ -203,6 +352,9 @@ export class UserService {
             speakerId: role === 'speaker' ? speakerId : null,
             sponsorId: role === 'sponsor' ? sponsorId : null,
           }
+        : {}),
+      ...(input.membershipId !== undefined || input.role !== undefined
+        ? { membershipId: role === 'member' ? membershipId : null }
         : {}),
       ...(input.photoUrl !== undefined ? { photoUrl: input.photoUrl } : {}),
       ...(input.title !== undefined ? { title: input.title } : {}),
@@ -238,6 +390,22 @@ export class UserService {
       this.users.countByStatus('suspended'),
     ]);
     return { active, suspended, total: active + suspended };
+  }
+
+  /**
+   * Free in-app upgrades are disabled — purchases go through Stripe checkout.
+   */
+  async upgradeMyMembership(_userId: string, _membershipId: string): Promise<never> {
+    throw new BadRequestError(
+      'Membership purchases and upgrades must be completed through Stripe checkout on the membership website',
+    );
+  }
+
+  private async assertMembership(membershipId: string | null): Promise<void> {
+    if (!membershipId) return;
+    if (this.memberships && !(await this.memberships.findById(membershipId))) {
+      throw new BadRequestError('Linked membership was not found');
+    }
   }
 
   private async assertProfileLinks(

@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:http/http.dart' as http;
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/core/network/dio_client.dart';
 import 'package:unleash_your_brave/core/network/token_storage.dart';
 import 'package:unleash_your_brave/features/chat/data/models/chat_group_model.dart';
 import 'package:unleash_your_brave/features/chat/data/models/chat_member_model.dart';
 import 'package:unleash_your_brave/features/chat/data/models/chat_message_model.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 class ChatRemoteDataSource {
   ChatRemoteDataSource(this._dioClient, this._tokenStorage);
@@ -174,65 +174,40 @@ class ChatRemoteDataSource {
     }
   }
 
-  // SSE Stream for real-time events
+  // WebSocket stream for real-time events (Messenger-style push)
   Stream<Map<String, dynamic>> getEventStream() async* {
     final token = await _tokenStorage.readAccessToken();
     if (token == null) return;
 
     final baseUrl = _dioClient.client.options.baseUrl;
-    final url = '$baseUrl${ApiConstants.chatStream}?access_token=$token';
+    final uri = Uri.parse(baseUrl);
+    final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
+    final wsUri = uri.replace(
+      scheme: wsScheme,
+      path: '${uri.path.replaceAll(RegExp(r'/$'), '')}${ApiConstants.chatWs}',
+      queryParameters: {'access_token': token},
+    );
 
-    final client = http.Client();
+    WebSocketChannel? channel;
     try {
-      final request = http.Request('GET', Uri.parse(url));
-      request.headers['Accept'] = 'text/event-stream';
-      request.headers['Cache-Control'] = 'no-cache';
+      channel = WebSocketChannel.connect(wsUri);
+      await channel.ready;
 
-      final response = await client.send(request);
-      if (response.statusCode != 200) {
-        throw Exception('Failed to connect to SSE stream: ${response.statusCode}');
-      }
-
-      String? eventType;
-      final buffer = StringBuffer();
-      
-      await for (final chunk in response.stream.transform(utf8.decoder)) {
-        final lines = chunk.split('\n');
-        for (final line in lines) {
-          final trimmedLine = line.trim();
-          
-          if (trimmedLine.startsWith('event: ')) {
-            eventType = trimmedLine.substring(7).trim();
-          } else if (trimmedLine.startsWith('data: ')) {
-            final data = trimmedLine.substring(6).trim();
-            if (data.isNotEmpty && data != '[DONE]') {
-              buffer.write(data);
-            }
-          } else if (trimmedLine.isEmpty && buffer.isNotEmpty) {
-            // End of SSE event block
-            try {
-              final payload = jsonDecode(buffer.toString()) as Map<String, dynamic>;
-              
-              // Merge event type with payload, prioritizing payload's type if it exists
-              final event = <String, dynamic>{
-                'type': eventType ?? payload['type'],
-                ...payload,
-              };
-              
-              yield event;
-            } catch (e) {
-              // Skip malformed events
-            } finally {
-              buffer.clear();
-              eventType = null;
-            }
-          }
+      await for (final raw in channel.stream) {
+        try {
+          final payload = jsonDecode(raw.toString()) as Map<String, dynamic>;
+          yield <String, dynamic>{
+            'type': payload['type'],
+            ...payload,
+          };
+        } catch (_) {
+          // Skip malformed frames
         }
       }
-    } catch (e) {
-      // Handle connection errors silently - the stream will be retried
+    } catch (_) {
+      // Connection errors — callers reconnect
     } finally {
-      client.close();
+      await channel?.sink.close();
     }
   }
 }

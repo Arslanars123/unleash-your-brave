@@ -202,6 +202,41 @@ export class ChatService {
     return view;
   }
 
+  /**
+   * Admins can delete any message; members can delete their own.
+   */
+  async deleteMessage(actorUserId: string, messageId: string): Promise<{ ok: true }> {
+    const actor = await this.requireActiveUser(actorUserId);
+    const message = await this.messages.findById(messageId);
+    if (!message || message.groupId !== GLOBAL_CHAT_GROUP_ID) {
+      throw new NotFoundError('Message not found');
+    }
+
+    const isAdmin = actor.role === 'admin';
+    const isOwner = message.senderId === actorUserId;
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenError('You can only delete your own messages');
+    }
+
+    await this.reactions.removeForMessage(messageId);
+    await this.messages.deleteById(messageId);
+
+    this.hub.publish({
+      type: 'message.deleted',
+      payload: {
+        groupId: GLOBAL_CHAT_GROUP_ID,
+        messageId,
+        deletedBy: actorUserId,
+      },
+    });
+    this.hub.publish({
+      type: 'group.updated',
+      payload: { groupId: GLOBAL_CHAT_GROUP_ID },
+    });
+
+    return { ok: true as const };
+  }
+
   async markDelivered(userId: string, messageId: string) {
     await this.requireActiveUser(userId);
     const message = await this.messages.findById(messageId);
@@ -406,6 +441,7 @@ export class ChatService {
         groupId: message.groupId,
         senderId: message.senderId,
         senderName: sender?.name ?? 'Member',
+        senderRole: sender?.role ?? 'member',
         senderPhotoUrl: sender?.photoUrl ?? '',
         clientId: message.clientId,
         type: message.type,

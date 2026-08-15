@@ -23,6 +23,7 @@ class UserModel extends UserEntity {
     super.instagramUrl = '',
     super.websiteUrl = '',
     super.profileCompleted = false,
+    super.membershipId,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -46,6 +47,7 @@ class UserModel extends UserEntity {
       instagramUrl: json['instagramUrl'] as String? ?? '',
       websiteUrl: json['websiteUrl'] as String? ?? '',
       profileCompleted: json['profileCompleted'] as bool? ?? false,
+      membershipId: json['membershipId'] as String?,
     );
   }
 
@@ -57,6 +59,7 @@ class UserModel extends UserEntity {
       'role': role,
       'status': status,
       'mustChangePassword': mustChangePassword,
+      'membershipId': membershipId,
       'photoUrl': photoUrl,
       'title': title,
       'business': business,

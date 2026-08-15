@@ -5,6 +5,7 @@ import { postsApi } from '@/features/posts/api/posts-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { PublicPost, PublicPostComment } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { Spinner } from '@/shared/ui/Spinner';
 import { TextArea } from '@/shared/ui/TextArea';
 import { useToast } from '@/shared/ui/toast';
@@ -18,6 +19,7 @@ interface PostCommentsModalProps {
 export function PostCommentsModal({ open, post, onClose }: PostCommentsModalProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const [editing, setEditing] = useState<PublicPostComment | null>(null);
   const [text, setText] = useState('');
 
@@ -76,9 +78,25 @@ export function PostCommentsModal({ open, post, onClose }: PostCommentsModalProp
 
   async function handleDelete(comment: PublicPostComment) {
     const label = comment.user?.name ?? 'this comment';
-    const confirmed = window.confirm(`Delete comment from “${label}”?`);
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Delete comment?',
+      message: `Delete comment from “${label}”?`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await deleteMutation.mutateAsync(comment.id);
+  }
+
+  async function handleSaveComment() {
+    const ok = await confirm({
+      title: 'Save comment changes?',
+      message: 'Update this comment?',
+      confirmLabel: 'Save changes',
+      tone: 'primary',
+    });
+    if (!ok) return;
+    await updateMutation.mutateAsync();
   }
 
   return (
@@ -138,7 +156,7 @@ export function PostCommentsModal({ open, post, onClose }: PostCommentsModalProp
                   type="button"
                   loading={updateMutation.isPending}
                   disabled={!text.trim()}
-                  onClick={() => updateMutation.mutate()}
+                  onClick={() => void handleSaveComment()}
                 >
                   Save comment
                 </Button>

@@ -243,6 +243,9 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       case 'message.created':
         _handleMessageCreated(event);
         break;
+      case 'message.deleted':
+        _handleMessageDeleted(event);
+        break;
       case 'receipt.delivered':
         _handleReceiptDelivered(event);
         break;
@@ -251,21 +254,33 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
         break;
       case 'reaction.added':
       case 'reaction.removed':
+      case 'reaction.updated':
         _handleReactionUpdated(event);
         break;
     }
   }
 
+  void _handleMessageDeleted(Map<String, dynamic> event) {
+    final payload = event['payload'] as Map<String, dynamic>? ?? event;
+    final messageId = payload['messageId'] as String?;
+    if (messageId == null) return;
+    emit(state.copyWith(
+      messages: state.messages.where((m) => m.id != messageId).toList(),
+    ));
+  }
+
   void _handleMessageCreated(Map<String, dynamic> event) {
     try {
-      final messageData = event['message'] as Map<String, dynamic>?;
+      final payload = event['payload'] as Map<String, dynamic>? ?? event;
+      final messageData = payload['message'] as Map<String, dynamic>?;
       if (messageData == null) return;
 
       final message = ChatMessageEntity(
         id: messageData['id'] as String,
         groupId: messageData['groupId'] as String,
         senderId: messageData['senderId'] as String,
-        senderName: messageData['senderName'] as String,
+        senderName: messageData['senderName'] as String? ?? 'Member',
+        senderRole: messageData['senderRole'] as String? ?? 'member',
         senderPhotoUrl: messageData['senderPhotoUrl'] as String?,
         type: messageData['type'] == 'gif' ? ChatMessageType.gif : ChatMessageType.text,
         body: messageData['body'] as String?,

@@ -49,6 +49,8 @@ dependencies:
   cached_network_image: ^3.4.1
   google_maps_flutter: ^2.10.0
   qr_flutter: ^4.1.0
+  web_socket_channel: ^3.0.3
+  keyboard_actions: ^5.0.1
 
 dev_dependencies:
   flutter_test:

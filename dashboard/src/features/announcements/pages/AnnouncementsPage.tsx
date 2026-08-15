@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
-import { Bell, Megaphone, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Bell, Megaphone, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { announcementsApi } from '@/features/announcements/api/announcements-api';
 import { AnnouncementFormModal } from '@/features/announcements/components/AnnouncementFormModal';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { AnnouncementPayload, PublicAnnouncement } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
+import { ListPagination } from '@/shared/ui/ListPagination';
+import { SearchSuggest } from '@/shared/ui/SearchSuggest';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
@@ -37,15 +39,27 @@ function whenLabel(item: PublicAnnouncement): string {
 
 export function AnnouncementsPage() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicAnnouncement | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const listQuery = useQuery({
-    queryKey: ['announcements', 'list', search],
-    queryFn: () => announcementsApi.list({ search: search || undefined, perPage: 50 }),
+    queryKey: ['announcements', 'list', search, page],
+    queryFn: () =>
+      announcementsApi.list({
+        search: search || undefined,
+        page,
+        perPage: 20,
+      }),
   });
+
+  function applySearch(next: string) {
+    setSearch(next);
+    setPage(1);
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload: AnnouncementPayload) => announcementsApi.create(payload),
@@ -94,6 +108,13 @@ export function AnnouncementsPage() {
 
   async function handleSubmit(payload: AnnouncementPayload) {
     if (editing) {
+      const ok = await confirm({
+        title: 'Save announcement changes?',
+        message: `Update “${editing.title}”?`,
+        confirmLabel: 'Save changes',
+        tone: 'primary',
+      });
+      if (!ok) return;
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
@@ -101,8 +122,13 @@ export function AnnouncementsPage() {
   }
 
   async function handleDelete(item: PublicAnnouncement) {
-    const confirmed = window.confirm(`Delete “${item.title}”? This cannot be undone.`);
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Delete announcement?',
+      message: `Delete “${item.title}”? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await deleteMutation.mutateAsync(item.id);
   }
 
@@ -112,6 +138,7 @@ export function AnnouncementsPage() {
     <div className="page">
       <header className="page-header">
         <div>
+          <span className="page-kicker">Broadcast</span>
           <h1>Announcements</h1>
           <p className="muted">
             Publish or schedule notices with push delivery. Manual and automatic countdown notices
@@ -133,13 +160,29 @@ export function AnnouncementsPage() {
       </header>
 
       <div className="toolbar">
-        <Input
+        <SearchSuggest
           label="Search"
           placeholder="Title or description"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={applySearch}
+          loadSuggestions={async (draft) => {
+            const result = await announcementsApi.list({ search: draft, perPage: 6 });
+            return result.items.map((item) => ({
+              id: item.id,
+              title: item.title,
+              subtitle: statusLabel(item),
+            }));
+          }}
         />
       </div>
+      {search ? (
+        <div className="active-filter-chip">
+          Showing results for “{search}”
+          <button type="button" aria-label="Clear filter" onClick={() => applySearch('')}>
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
 
       {listQuery.isLoading ? <Spinner /> : null}
       {listQuery.isError ? (
@@ -210,6 +253,14 @@ export function AnnouncementsPage() {
                 ))}
               </tbody>
             </table>
+            <ListPagination
+              page={listQuery.data.meta.page}
+              totalPages={listQuery.data.meta.totalPages}
+              total={listQuery.data.meta.total}
+              perPage={listQuery.data.meta.perPage}
+              onPageChange={setPage}
+              label="announcements"
+            />
           </div>
         )
       ) : null}

@@ -5,6 +5,7 @@ import type { SessionFeedbackService } from '../modules/sessions/feedback/sessio
 import type { SessionService } from '../modules/sessions/session.service.js';
 import type { SpeakerService } from '../modules/speakers/speaker.service.js';
 import type { SponsorService } from '../modules/sponsors/sponsor.service.js';
+import type { MembershipService } from '../modules/memberships/membership.service.js';
 import type { UserService } from '../modules/users/user.service.js';
 import { logger } from '../core/logger.js';
 import { ConflictError } from '../core/errors/app-error.js';
@@ -19,6 +20,7 @@ export async function seedDemoData(
   speakerService: SpeakerService,
   sessionService: SessionService,
   sponsorService: SponsorService,
+  membershipService: MembershipService,
   sessionFeedbackService: SessionFeedbackService,
   announcementService: AnnouncementService,
   postService: PostService,
@@ -28,19 +30,6 @@ export async function seedDemoData(
     name: 'Platform Admin',
     password: 'Admin123!',
     role: 'admin',
-  });
-
-  await ensureUser(userService, {
-    email: 'member@unleashyourbrave.com',
-    name: 'magellan.explore1',
-    password: 'Member123!',
-    role: 'member',
-    title: 'CTO',
-    points: 125,
-    profileCompleted: true,
-    networkingPrefs: 'open_to_all',
-    goals: ['Raise Series A', 'Build community'],
-    interests: ['Leadership', 'AI'],
   });
 
   let eventId: string | null = null;
@@ -67,6 +56,47 @@ export async function seedDemoData(
   } else {
     eventId = existingEvents.items[0]!.id;
   }
+
+  let standardMembershipId: string | null = null;
+  let vipMembershipId: string | null = null;
+  const existingMemberships = await membershipService.list({ page: 1, perPage: 1, eventId: eventId! });
+  if (existingMemberships.total === 0 && eventId) {
+    const standard = await membershipService.create({
+      eventId,
+      name: 'Standard',
+      description: 'General admission — access to keynotes and open sessions.',
+      valueLink: 'https://example.com/memberships/standard',
+      price: 499,
+    });
+    const vip = await membershipService.create({
+      eventId,
+      name: 'VIP',
+      description: 'VIP access — includes exclusive labs and premium seating.',
+      valueLink: 'https://example.com/memberships/vip',
+      price: 999,
+    });
+    standardMembershipId = standard.id;
+    vipMembershipId = vip.id;
+    logger.info('Seeded demo memberships');
+  } else if (eventId) {
+    const memberships = await membershipService.list({ page: 1, perPage: 20, eventId });
+    standardMembershipId = memberships.items.find((m) => m.name === 'Standard')?.id ?? null;
+    vipMembershipId = memberships.items.find((m) => m.name === 'VIP')?.id ?? null;
+  }
+
+  await ensureUser(userService, {
+    email: 'member@unleashyourbrave.com',
+    name: 'magellan.explore1',
+    password: 'Member123!',
+    role: 'member',
+    title: 'CTO',
+    points: 125,
+    profileCompleted: true,
+    networkingPrefs: 'open_to_all',
+    goals: ['Raise Series A', 'Build community'],
+    interests: ['Leadership', 'AI'],
+    membershipId: standardMembershipId,
+  });
 
   const existingSpeakers = await speakerService.list({ page: 1, perPage: 1, eventId });
   if (existingSpeakers.total === 0 && eventId) {
@@ -131,6 +161,7 @@ export async function seedDemoData(
         startTime: '14:00',
         endTime: '15:30',
         location: 'Studio B',
+        membershipIds: vipMembershipId ? [vipMembershipId] : [],
         materials: [
           {
             type: 'video',
@@ -296,6 +327,7 @@ async function ensureUser(
     role: 'admin' | 'member' | 'speaker' | 'sponsor';
     speakerId?: string;
     sponsorId?: string;
+    membershipId?: string | null;
     title?: string;
     points?: number;
     profileCompleted?: boolean;

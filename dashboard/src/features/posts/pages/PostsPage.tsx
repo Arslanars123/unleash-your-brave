@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Heart, Images, MessageCircle, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Heart, Images, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { postsApi } from '@/features/posts/api/posts-api';
 import { PostCommentsModal } from '@/features/posts/components/PostCommentsModal';
 import { PostFormModal } from '@/features/posts/components/PostFormModal';
@@ -8,22 +8,38 @@ import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type { PostPayload, PublicPost } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
+import { ListPagination } from '@/shared/ui/ListPagination';
+import { SearchSuggest } from '@/shared/ui/SearchSuggest';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
+const PER_PAGE = 12;
+
 export function PostsPage() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicPost | null>(null);
   const [commentsPost, setCommentsPost] = useState<PublicPost | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const listQuery = useQuery({
-    queryKey: ['posts', 'list', search],
-    queryFn: () => postsApi.list({ search: search || undefined, perPage: 50 }),
+    queryKey: ['posts', 'list', search, page],
+    queryFn: () =>
+      postsApi.list({
+        search: search || undefined,
+        page,
+        perPage: PER_PAGE,
+      }),
   });
+
+  function applySearch(next: string) {
+    setSearch(next);
+    setPage(1);
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload: PostPayload) => postsApi.create(payload),
@@ -82,6 +98,13 @@ export function PostsPage() {
 
   async function handleSubmit(payload: PostPayload) {
     if (editing) {
+      const ok = await confirm({
+        title: 'Save post changes?',
+        message: 'Update this post for all attendees?',
+        confirmLabel: 'Save changes',
+        tone: 'primary',
+      });
+      if (!ok) return;
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
@@ -89,8 +112,13 @@ export function PostsPage() {
   }
 
   async function handleDelete(post: PublicPost) {
-    const confirmed = window.confirm('Delete this post and all of its likes/comments?');
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Delete post?',
+      message: 'Delete this post and all of its likes/comments? This cannot be undone.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await deleteMutation.mutateAsync(post.id);
   }
 
@@ -100,6 +128,7 @@ export function PostsPage() {
     <div className="page">
       <header className="page-header">
         <div>
+          <span className="page-kicker">Feed</span>
           <h1>Posts</h1>
           <p className="muted">
             Instagram-style posts with text and a picture. Attendees can like and comment; you
@@ -113,13 +142,30 @@ export function PostsPage() {
       </header>
 
       <div className="toolbar">
-        <Input
+        <SearchSuggest
           label="Search"
-          placeholder="Search captions..."
+          placeholder="Search captions…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={applySearch}
+          loadSuggestions={async (draft) => {
+            const result = await postsApi.list({ search: draft, perPage: 6 });
+            return result.items.map((post) => ({
+              id: post.id,
+              title: post.text?.slice(0, 48) || 'Untitled post',
+              subtitle: `${post.likesCount ?? 0} likes · ${post.commentsCount ?? 0} comments`,
+              leading: post.image ? <img src={resolveMediaUrl(post.image)} alt="" /> : undefined,
+            }));
+          }}
         />
       </div>
+      {search ? (
+        <div className="active-filter-chip">
+          Showing results for “{search}”
+          <button type="button" aria-label="Clear filter" onClick={() => applySearch('')}>
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
 
       {listQuery.isLoading ? <Spinner /> : null}
       {listQuery.isError ? (
@@ -201,6 +247,17 @@ export function PostsPage() {
             ))}
           </div>
         )
+      ) : null}
+
+      {listQuery.data && listQuery.data.items.length > 0 ? (
+        <ListPagination
+          page={listQuery.data.meta.page}
+          totalPages={listQuery.data.meta.totalPages}
+          total={listQuery.data.meta.total}
+          perPage={listQuery.data.meta.perPage}
+          onPageChange={setPage}
+          label="posts"
+        />
       ) : null}
 
       <PostFormModal

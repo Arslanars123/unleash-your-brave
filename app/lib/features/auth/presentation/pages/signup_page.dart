@@ -83,8 +83,7 @@ class _SignupPageState extends State<SignupPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const AuthBrandHeader(
-                      title: 'Create',
-                      emphasis: 'your account',
+                      title: 'Sign up',
                       subtitle:
                           'Sign up with email and password. No social login.',
                     ),

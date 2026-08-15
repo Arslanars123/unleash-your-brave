@@ -1,6 +1,8 @@
 import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
 import type { CheckInRepository } from '../../db/repositories/mongo-checkin.repository.js';
+import type { CheckoutService } from '../checkout/checkout.service.js';
 import type { EventService } from '../events/event.service.js';
+import type { MembershipRepository } from '../memberships/membership.repository.js';
 import { toPublicUser } from '../users/user.mapper.js';
 import type { UserRepository } from '../users/user.repository.js';
 import { toPublicCheckIn } from './checkin.mapper.js';
@@ -18,6 +20,8 @@ export class CheckInService {
     private readonly checkIns: CheckInRepository,
     private readonly users: UserRepository,
     private readonly events: EventService,
+    private readonly memberships: MembershipRepository,
+    private readonly checkout: CheckoutService,
   ) {}
 
   async getMyQr(userId: string, eventId?: string): Promise<MyCheckInQr> {
@@ -82,11 +86,13 @@ export class CheckInService {
 
     const existing = await this.checkIns.findByEventAndUser(eventId, userId);
     if (existing) {
-      return {
-        checkIn: toPublicCheckIn(existing, toPublicUser(user)),
-        alreadyCheckedIn: true,
-        user: toPublicUser(user),
-      };
+      return this.toScanResult(existing, user, true, eventId);
+    }
+
+    let membershipNameAtCheckIn: string | null = null;
+    if (user.membershipId) {
+      const membership = await this.memberships.findById(user.membershipId);
+      membershipNameAtCheckIn = membership?.name ?? null;
     }
 
     try {
@@ -95,21 +101,15 @@ export class CheckInService {
         userId,
         checkedInAt: new Date(),
         checkedInBy: input.adminUserId,
+        membershipIdAtCheckIn: user.membershipId ?? null,
+        membershipNameAtCheckIn,
       });
 
-      return {
-        checkIn: toPublicCheckIn(created, toPublicUser(user)),
-        alreadyCheckedIn: false,
-        user: toPublicUser(user),
-      };
+      return this.toScanResult(created, user, false, eventId);
     } catch {
       const raced = await this.checkIns.findByEventAndUser(eventId, userId);
       if (raced) {
-        return {
-          checkIn: toPublicCheckIn(raced, toPublicUser(user)),
-          alreadyCheckedIn: true,
-          user: toPublicUser(user),
-        };
+        return this.toScanResult(raced, user, true, eventId);
       }
       throw new BadRequestError('Unable to complete check-in');
     }
@@ -148,6 +148,8 @@ export class CheckInService {
         userId: user.id,
         checkedInAt: '',
         checkedInBy: null,
+        membershipIdAtCheckIn: null,
+        membershipNameAtCheckIn: null,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
         user: publicUser,
@@ -191,6 +193,25 @@ export class CheckInService {
       eventId,
       checkedInCount: await this.checkIns.countByEvent(eventId),
       attendeeCount: await this.countActiveMembers(),
+    };
+  }
+
+  private async toScanResult(
+    checkIn: Parameters<typeof toPublicCheckIn>[0],
+    user: NonNullable<Awaited<ReturnType<UserRepository['findById']>>>,
+    alreadyCheckedIn: boolean,
+    eventId: string,
+  ): Promise<CheckInScanResult> {
+    const summary = await this.checkout.getAttendeePurchaseSummary(user.id, eventId);
+    return {
+      checkIn: toPublicCheckIn(checkIn, toPublicUser(user)),
+      alreadyCheckedIn,
+      user: toPublicUser(user),
+      membership: {
+        ...summary,
+        membershipIdAtCheckIn: checkIn.membershipIdAtCheckIn ?? null,
+        membershipNameAtCheckIn: checkIn.membershipNameAtCheckIn ?? null,
+      },
     };
   }
 

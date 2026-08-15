@@ -8,6 +8,7 @@ import {
   listUsersQuerySchema,
   updateMyProfileSchema,
   updateUserSchema,
+  upgradeMyMembershipSchema,
   userIdParamSchema,
 } from './user.schema.js';
 
@@ -22,6 +23,13 @@ export function createUserRouter(controller: UserController): Router {
     asyncHandler(controller.updateMe),
   );
 
+  router.patch(
+    '/me/membership',
+    authenticate,
+    validate({ body: upgradeMyMembershipSchema }),
+    asyncHandler(controller.upgradeMyMembership),
+  );
+
   router.use(authenticate, authorize('admin'));
 
   router.get('/stats', asyncHandler(controller.stats));
@@ -31,6 +39,12 @@ export function createUserRouter(controller: UserController): Router {
   router.post('/', validate({ body: createUserSchema }), asyncHandler(controller.create));
 
   router.get('/:id', validate({ params: userIdParamSchema }), asyncHandler(controller.getById));
+
+  router.get(
+    '/:id/purchases',
+    validate({ params: userIdParamSchema }),
+    asyncHandler(controller.listPurchases),
+  );
 
   router.patch(
     '/:id',

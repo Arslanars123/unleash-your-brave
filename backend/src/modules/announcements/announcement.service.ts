@@ -31,11 +31,12 @@ function daysBetweenUtc(from: Date, to: Date): number {
 
 function applyTemplate(
   template: string,
-  vars: { daysLeft: number; eventName: string },
+  vars: { daysLeft: number; eventName: string; eventDate: string },
 ): string {
   return template
     .replaceAll('{{daysLeft}}', String(vars.daysLeft))
-    .replaceAll('{{eventName}}', vars.eventName);
+    .replaceAll('{{eventName}}', vars.eventName)
+    .replaceAll('{{eventDate}}', vars.eventDate);
 }
 
 export class AnnouncementService {
@@ -245,6 +246,12 @@ export class AnnouncementService {
     if (daysLeft < 0) return 0;
 
     const eventName = latest.name || 'Unleash Your Brave';
+    const eventDate = eventStart.toLocaleDateString('en-AU', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
     const eventDayKey = startOfUtcDay(eventStart).toISOString().slice(0, 10);
     const todayKey = startOfUtcDay(today).toISOString().slice(0, 10);
     let created = 0;
@@ -273,8 +280,8 @@ export class AnnouncementService {
       const existing = await this.announcements.findBySystemKey(systemKey);
       if (existing) continue;
 
-      const title = applyTemplate(rule.titleTemplate, { daysLeft, eventName });
-      const description = applyTemplate(rule.bodyTemplate, { daysLeft, eventName });
+      const title = applyTemplate(rule.titleTemplate, { daysLeft, eventName, eventDate });
+      const description = applyTemplate(rule.bodyTemplate, { daysLeft, eventName, eventDate });
       const announcement = await this.announcements.create({
         title,
         description,

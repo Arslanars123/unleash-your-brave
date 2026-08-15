@@ -1,5 +1,6 @@
 import { apiClient } from '@/shared/api/client';
 import type {
+  AttendeePurchaseSummary,
   CreateUserPayload,
   PaginationMeta,
   PublicUser,
@@ -34,6 +35,13 @@ export const usersApi = {
 
   async getById(id: string): Promise<PublicUser> {
     const { data } = await apiClient.get<SuccessEnvelope<PublicUser>>(`/users/${id}`);
+    return data.data;
+  },
+
+  async getPurchases(id: string): Promise<AttendeePurchaseSummary> {
+    const { data } = await apiClient.get<SuccessEnvelope<AttendeePurchaseSummary>>(
+      `/users/${id}/purchases`,
+    );
     return data.data;
   },
 

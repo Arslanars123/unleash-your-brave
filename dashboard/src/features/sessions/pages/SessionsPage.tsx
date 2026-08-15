@@ -1,35 +1,47 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Clapperboard, MessageSquareText, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Clapperboard, MessageSquareText, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
 import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { sessionsApi } from '@/features/sessions/api/sessions-api';
 import { SessionFeedbackModal } from '@/features/sessions/components/SessionFeedbackModal';
 import { SessionFormModal } from '@/features/sessions/components/SessionFormModal';
 import { speakersApi } from '@/features/speakers/api/speakers-api';
+import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { formatSessionTimeRange } from '@/shared/lib/datetime';
 import type { PublicSession, SessionPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
+import { ListPagination } from '@/shared/ui/ListPagination';
+import { SearchSuggest } from '@/shared/ui/SearchSuggest';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
+const PER_PAGE = 20;
+
 export function SessionsPage() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicSession | null>(null);
   const [feedbackSession, setFeedbackSession] = useState<PublicSession | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const { eventId, selectedEdition, isPastEdition, workspaceQuery } = useEditionScope();
 
   const eventDays = selectedEdition?.days ?? [];
 
   const sessionsQuery = useQuery({
-    queryKey: ['sessions', 'list', eventId, search],
+    queryKey: ['sessions', 'list', eventId, search, page],
     queryFn: () =>
-      sessionsApi.list({ search: search || undefined, perPage: 100, eventId }),
+      sessionsApi.list({
+        search: search || undefined,
+        page,
+        perPage: PER_PAGE,
+        eventId,
+      }),
     enabled: Boolean(eventId),
   });
 
@@ -38,6 +50,21 @@ export function SessionsPage() {
     queryFn: () => speakersApi.list({ perPage: 100, eventId }),
     enabled: Boolean(eventId),
   });
+
+  const membershipsQuery = useQuery({
+    queryKey: ['memberships', 'list', eventId, 'all'],
+    queryFn: () => membershipsApi.list({ perPage: 100, eventId }),
+    enabled: Boolean(eventId),
+  });
+
+  function applySearch(next: string) {
+    setSearch(next);
+    setPage(1);
+  }
+
+  useEffect(() => {
+    setPage(1);
+  }, [eventId]);
 
   const createMutation = useMutation({
     mutationFn: (payload: SessionPayload) => sessionsApi.create(payload),
@@ -86,6 +113,13 @@ export function SessionsPage() {
 
   async function handleSubmit(payload: SessionPayload) {
     if (editing) {
+      const ok = await confirm({
+        title: 'Save session changes?',
+        message: `Update “${editing.name}”?`,
+        confirmLabel: 'Save changes',
+        tone: 'primary',
+      });
+      if (!ok) return;
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
@@ -97,13 +131,19 @@ export function SessionsPage() {
   }
 
   async function handleDelete(session: PublicSession) {
-    const confirmed = window.confirm(`Delete “${session.name}”? This cannot be undone.`);
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Delete session?',
+      message: `Delete “${session.name}”? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await deleteMutation.mutateAsync(session.id);
   }
 
   const saving = createMutation.isPending || updateMutation.isPending;
   const speakers = speakersQuery.data?.items ?? [];
+  const memberships = membershipsQuery.data?.items ?? [];
   const canEdit = Boolean(eventId);
   const bootstrapLoading =
     workspaceQuery.isLoading ||
@@ -113,6 +153,7 @@ export function SessionsPage() {
     <div className="page">
       <header className="page-header">
         <div>
+          <span className="page-kicker">Agenda</span>
           <h1>Sessions</h1>
           <p className="muted">
             {isPastEdition
@@ -131,13 +172,40 @@ export function SessionsPage() {
       <EditionSwitcher />
 
       <div className="toolbar">
-        <Input
+        <SearchSuggest
           label="Search"
           placeholder="Session name or description"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={applySearch}
+          disabled={!eventId}
+          loadSuggestions={async (draft) => {
+            if (!eventId) return [];
+            const result = await sessionsApi.list({
+              search: draft,
+              perPage: 6,
+              eventId,
+            });
+            return result.items.map((session) => ({
+              id: session.id,
+              title: session.name,
+              subtitle: [
+                session.speaker?.name,
+                session.eventDayNumber ? `Day ${session.eventDayNumber}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · '),
+            }));
+          }}
         />
       </div>
+      {search ? (
+        <div className="active-filter-chip">
+          Showing results for “{search}”
+          <button type="button" aria-label="Clear filter" onClick={() => applySearch('')}>
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
 
       {bootstrapLoading ? <Spinner /> : null}
       {sessionsQuery.isError ? (
@@ -273,9 +341,14 @@ export function SessionsPage() {
                 })}
               </tbody>
             </table>
-            <p className="muted table-meta">
-              Showing {sessionsQuery.data.items.length} of {sessionsQuery.data.meta.total} sessions
-            </p>
+            <ListPagination
+              page={sessionsQuery.data.meta.page}
+              totalPages={sessionsQuery.data.meta.totalPages}
+              total={sessionsQuery.data.meta.total}
+              perPage={sessionsQuery.data.meta.perPage}
+              onPageChange={setPage}
+              label="sessions"
+            />
           </div>
         )
       ) : null}
@@ -286,6 +359,7 @@ export function SessionsPage() {
           mode={editing ? 'edit' : 'create'}
           initialSession={editing}
           speakers={speakers}
+          memberships={memberships}
           eventDays={eventDays}
           loading={saving}
           onClose={closeModal}

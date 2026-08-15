@@ -5,6 +5,7 @@ import { getApiErrorMessage } from '@/shared/api/client';
 import { isValidMediaRef } from '@/shared/lib/media';
 import type {
   PublicEventDay,
+  PublicMembership,
   PublicSession,
   PublicSpeaker,
   SessionMaterialType,
@@ -31,6 +32,7 @@ export interface SessionFormValues {
   endTime: string;
   location: string;
   materials: MaterialRow[];
+  membershipIds: string[];
   feedbackEnabled: boolean;
 }
 
@@ -55,6 +57,7 @@ const emptyForm: SessionFormValues = {
   endTime: '',
   location: '',
   materials: [],
+  membershipIds: [],
   feedbackEnabled: true,
 };
 
@@ -73,6 +76,7 @@ function sessionToForm(session: PublicSession): SessionFormValues {
       title: material.title,
       url: material.url,
     })),
+    membershipIds: [...(session.membershipIds ?? [])],
     feedbackEnabled: session.feedbackEnabled ?? true,
   };
 }
@@ -119,6 +123,7 @@ export function toSessionPayload(values: SessionFormValues): SessionPayload {
     startTime: values.startTime.trim(),
     endTime: values.endTime.trim(),
     location: values.location.trim(),
+    membershipIds: values.membershipIds,
     materials: values.materials.map((material) => ({
       type: material.type,
       title: material.title.trim(),
@@ -133,6 +138,7 @@ interface SessionFormModalProps {
   mode: 'create' | 'edit';
   initialSession?: PublicSession | null;
   speakers: PublicSpeaker[];
+  memberships: PublicMembership[];
   eventDays: PublicEventDay[];
   loading?: boolean;
   onClose: () => void;
@@ -144,6 +150,7 @@ export function SessionFormModal({
   mode,
   initialSession,
   speakers,
+  memberships,
   eventDays,
   loading = false,
   onClose,
@@ -196,6 +203,18 @@ export function SessionFormModal({
     setForm({
       ...values,
       materials: values.materials.filter((_, i) => i !== index),
+    });
+  }
+
+  function toggleMembership(id: string) {
+    setValues((current) => {
+      const has = current.membershipIds.includes(id);
+      const membershipIds = has
+        ? current.membershipIds.filter((item) => item !== id)
+        : [...current.membershipIds, id];
+      const next = { ...current, membershipIds };
+      if (submitted) setErrors(validate(next));
+      return next;
     });
   }
 
@@ -341,6 +360,27 @@ export function SessionFormModal({
             placeholder="Main Ballroom"
             maxLength={160}
           />
+
+          <div className="field">
+            <span className="field-label">Allowed memberships</span>
+            <p className="hint">Leave all unchecked to allow everyone. Select one or more tiers to restrict access.</p>
+            {memberships.length === 0 ? (
+              <p className="muted">No membership tiers for this edition yet.</p>
+            ) : (
+              <div className="checkbox-grid">
+                {memberships.map((membership) => (
+                  <label key={membership.id} className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={values.membershipIds.includes(membership.id)}
+                      onChange={() => toggleMembership(membership.id)}
+                    />
+                    {membership.name}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
 
           <label className="checkbox-row">
             <input

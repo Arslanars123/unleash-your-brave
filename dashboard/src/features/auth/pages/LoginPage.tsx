@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { getHomePathForUser, useAuth } from '@/features/auth/context/AuthProvider';
 import { getApiErrorMessage } from '@/shared/api/client';
+import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -56,6 +57,11 @@ export function LoginPage() {
     setLoading(true);
     try {
       const signedIn = await login({ email: email.trim(), password });
+      if (signedIn.mustChangePassword) {
+        toast.success('Create your password to finish setup');
+        navigate('/set-password', { replace: true });
+        return;
+      }
       toast.success('Signed in successfully');
       navigate(
         from && from !== '/login' ? from : getHomePathForUser(signedIn),
@@ -71,8 +77,7 @@ export function LoginPage() {
   return (
     <div className="auth-shell">
       <form className="auth-card" onSubmit={onSubmit} noValidate>
-        <div className="brand-mark">UYB</div>
-        <p className="brand-wordmark">Unleash Your Brave</p>
+        <BrandLogo height={156} />
         <h1>Portal sign in</h1>
         <p className="muted">Admins, speakers, and sponsors can sign in here.</p>
 
@@ -89,7 +94,7 @@ export function LoginPage() {
           }}
         />
         <Input
-          label="Password"
+          label="Password or invite code"
           type="password"
           name="password"
           autoComplete="current-password"
@@ -100,6 +105,10 @@ export function LoginPage() {
             revalidate(email, e.target.value);
           }}
         />
+
+        <p className="hint">
+          <Link to="/forgot-password">Forgot password?</Link>
+        </p>
 
         <Button type="submit" loading={loading}>
           Sign in

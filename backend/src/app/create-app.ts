@@ -6,6 +6,7 @@ import { pinoHttp } from 'pino-http';
 import type { IncomingMessage } from 'node:http';
 import { env } from '../config/env.js';
 import { logger } from '../core/logger.js';
+import { asyncHandler } from '../core/http/async-handler.js';
 import { sendSuccess } from '../core/http/response.js';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.js';
 import { apiRateLimiter } from '../middleware/rate-limit.js';
@@ -40,6 +41,14 @@ export function createApp(container: Container): Express {
       },
     }),
   );
+
+  // Stripe webhooks require the raw body for signature verification.
+  app.post(
+    '/api/v1/webhooks/stripe',
+    express.raw({ type: 'application/json' }),
+    asyncHandler(container.controllers.checkout.stripeWebhook),
+  );
+
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
   app.use('/uploads', express.static(uploadsRoot));
@@ -70,6 +79,8 @@ export function createApp(container: Container): Express {
   app.use('/api/v1/speakers', container.routers.speakers);
   app.use('/api/v1/sessions', container.routers.sessions);
   app.use('/api/v1/sponsors', container.routers.sponsors);
+  app.use('/api/v1/memberships', container.routers.memberships);
+  app.use('/api/v1/checkout', container.routers.checkout);
   app.use('/api/v1/announcements', container.routers.announcements);
   app.use('/api/v1/checkins', container.routers.checkins);
   app.use('/api/v1/posts', container.routers.posts);

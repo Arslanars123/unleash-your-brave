@@ -48,6 +48,7 @@ async function ensureIndexes(database: Db): Promise<void> {
       { key: { email: 1 }, unique: true, name: 'users_email_unique' },
       { key: { status: 1 }, name: 'users_status' },
       { key: { role: 1 }, name: 'users_role' },
+      { key: { membershipId: 1 }, name: 'users_membershipId' },
       { key: { createdAt: -1 }, name: 'users_createdAt' },
     ]),
     database.collection('events').createIndexes([
@@ -61,9 +62,14 @@ async function ensureIndexes(database: Db): Promise<void> {
       { key: { eventId: 1 }, name: 'sponsors_eventId' },
       { key: { name: 1 }, name: 'sponsors_name' },
     ]),
+    database.collection('memberships').createIndexes([
+      { key: { eventId: 1 }, name: 'memberships_eventId' },
+      { key: { name: 1 }, name: 'memberships_name' },
+    ]),
     database.collection('sessions').createIndexes([
       { key: { eventId: 1, eventDayNumber: 1, startTime: 1 }, name: 'sessions_event_day_time' },
       { key: { speakerId: 1 }, name: 'sessions_speakerId' },
+      { key: { membershipIds: 1 }, name: 'sessions_membershipIds' },
     ]),
     database.collection('session_feedback').createIndexes([
       {

@@ -3,10 +3,12 @@ import { X } from 'lucide-react';
 import type { PublicSpeaker, SpeakerPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
+import { MediaImageField, isValidMediaRef } from '@/shared/ui/MediaImageField';
 import { TextArea } from '@/shared/ui/TextArea';
 
 export interface SpeakerFormValues {
   name: string;
+  email: string;
   title: string;
   description: string;
   photo: string;
@@ -16,6 +18,7 @@ type FieldErrors = Partial<Record<keyof SpeakerFormValues, string>>;
 
 const emptyForm: SpeakerFormValues = {
   name: '',
+  email: '',
   title: '',
   description: '',
   photo: '',
@@ -24,6 +27,7 @@ const emptyForm: SpeakerFormValues = {
 function speakerToForm(speaker: PublicSpeaker): SpeakerFormValues {
   return {
     name: speaker.name,
+    email: speaker.email,
     title: speaker.title,
     description: speaker.description,
     photo: speaker.photo,
@@ -36,8 +40,13 @@ function validate(values: SpeakerFormValues): FieldErrors {
   if (!values.name.trim()) errors.name = 'Name is required';
   else if (values.name.trim().length < 2) errors.name = 'Name must be at least 2 characters';
 
-  if (values.photo.trim() && !/^https?:\/\//i.test(values.photo.trim())) {
-    errors.photo = 'Photo must be a valid URL';
+  if (values.photo.trim() && !isValidMediaRef(values.photo.trim())) {
+    errors.photo = 'Use a valid URL or upload an image';
+  }
+
+  const email = values.email.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = 'Enter a valid email address';
   }
 
   return errors;
@@ -46,6 +55,7 @@ function validate(values: SpeakerFormValues): FieldErrors {
 export function toSpeakerPayload(values: SpeakerFormValues): SpeakerPayload {
   return {
     name: values.name.trim(),
+    email: values.email.trim() || undefined,
     title: values.title.trim(),
     description: values.description.trim(),
     photo: values.photo.trim(),
@@ -126,6 +136,16 @@ export function SpeakerFormModal({
             placeholder="Maya Chen"
           />
           <Input
+            label="Portal email"
+            name="email"
+            type="email"
+            value={values.email}
+            error={errors.email}
+            onChange={(e) => update('email', e.target.value)}
+            placeholder="speaker@example.com"
+          />
+          <p className="hint">Optional. Sends a login invite when creating or updating.</p>
+          <Input
             label="Title"
             name="title"
             value={values.title}
@@ -141,19 +161,13 @@ export function SpeakerFormModal({
             onChange={(e) => update('description', e.target.value)}
             placeholder="A short bio for the speaker..."
           />
-          <Input
-            label="Photo URL"
-            name="photo"
+          <MediaImageField
+            label="Photo"
             value={values.photo}
             error={errors.photo}
-            onChange={(e) => update('photo', e.target.value)}
-            placeholder="https://..."
+            disabled={loading}
+            onChange={(url) => update('photo', url)}
           />
-          {values.photo.trim() && /^https?:\/\//i.test(values.photo.trim()) ? (
-            <div className="speaker-photo-preview">
-              <img src={values.photo.trim()} alt="Speaker preview" />
-            </div>
-          ) : null}
 
           <div className="modal-actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>

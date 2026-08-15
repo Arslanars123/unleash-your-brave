@@ -24,6 +24,7 @@ export class MongoSpeakerRepository implements SpeakerRepository {
       const search = query.search.trim();
       filter.$or = [
         containsCi('name', search),
+        containsCi('email', search),
         containsCi('title', search),
         containsCi('description', search),
       ];

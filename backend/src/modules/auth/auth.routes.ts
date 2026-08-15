@@ -6,9 +6,12 @@ import { validate } from '../../middleware/validate.js';
 import type { AuthController } from './auth.controller.js';
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
   loginSchema,
   refreshSchema,
   registerSchema,
+  resetPasswordSchema,
+  verifyResetOtpSchema,
 } from './auth.schema.js';
 
 export function createAuthRouter(controller: AuthController): Router {
@@ -33,6 +36,27 @@ export function createAuthRouter(controller: AuthController): Router {
     authRateLimiter,
     validate({ body: changePasswordSchema }),
     asyncHandler(controller.changePassword),
+  );
+
+  router.post(
+    '/forgot-password',
+    authRateLimiter,
+    validate({ body: forgotPasswordSchema }),
+    asyncHandler(controller.forgotPassword),
+  );
+
+  router.post(
+    '/verify-reset-otp',
+    authRateLimiter,
+    validate({ body: verifyResetOtpSchema }),
+    asyncHandler(controller.verifyResetOtp),
+  );
+
+  router.post(
+    '/reset-password',
+    authRateLimiter,
+    validate({ body: resetPasswordSchema }),
+    asyncHandler(controller.resetPassword),
   );
 
   return router;

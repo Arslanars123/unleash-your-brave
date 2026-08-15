@@ -25,6 +25,7 @@ class ChatMessageEntity extends Equatable {
     required this.groupId,
     required this.senderId,
     required this.senderName,
+    this.senderRole = 'member',
     this.senderPhotoUrl,
     this.clientId,
     required this.type,
@@ -39,6 +40,7 @@ class ChatMessageEntity extends Equatable {
   final String groupId;
   final String senderId;
   final String senderName;
+  final String senderRole;
   final String? senderPhotoUrl;
   final String? clientId;
   final ChatMessageType type;
@@ -47,6 +49,8 @@ class ChatMessageEntity extends Equatable {
   final DateTime createdAt;
   final List<ChatReactionEntity> reactions;
   final DeliveryStatus deliveryStatus;
+
+  bool get isAdminSender => senderRole == 'admin';
 
   // Note: UI will pass currentUserId and compare senderId
   // This getter is deprecated and should not be used
@@ -58,6 +62,7 @@ class ChatMessageEntity extends Equatable {
     String? groupId,
     String? senderId,
     String? senderName,
+    String? senderRole,
     String? senderPhotoUrl,
     String? clientId,
     ChatMessageType? type,
@@ -72,6 +77,7 @@ class ChatMessageEntity extends Equatable {
       groupId: groupId ?? this.groupId,
       senderId: senderId ?? this.senderId,
       senderName: senderName ?? this.senderName,
+      senderRole: senderRole ?? this.senderRole,
       senderPhotoUrl: senderPhotoUrl ?? this.senderPhotoUrl,
       clientId: clientId ?? this.clientId,
       type: type ?? this.type,
@@ -89,6 +95,7 @@ class ChatMessageEntity extends Equatable {
         groupId,
         senderId,
         senderName,
+        senderRole,
         senderPhotoUrl,
         clientId,
         type,

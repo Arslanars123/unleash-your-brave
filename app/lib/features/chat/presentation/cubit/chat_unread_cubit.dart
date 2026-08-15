@@ -83,6 +83,7 @@ class ChatUnreadCubit extends Cubit<ChatUnreadState> {
         emit(state.copyWith(connected: true));
         final type = event['type'] as String?;
         if (type == 'message.created' ||
+            type == 'message.deleted' ||
             type == 'group.updated' ||
             type == 'receipt.read') {
           await refresh();

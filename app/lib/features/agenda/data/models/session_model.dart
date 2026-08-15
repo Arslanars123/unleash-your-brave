@@ -39,7 +39,7 @@ class SessionModel extends SessionEntity {
               .map(SessionMaterialModel.fromJson)
               .toList(growable: false)
           : const [],
-      feedbackEnabled: json['feedbackEnabled'] as bool? ?? false,
+      feedbackEnabled: json['feedbackEnabled'] as bool? ?? true,
       feedbackSummary: feedbackJson is Map<String, dynamic>
           ? SessionFeedbackSummaryModel.fromJson(feedbackJson)
           : null,

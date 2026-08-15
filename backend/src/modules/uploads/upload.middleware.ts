@@ -2,6 +2,7 @@ import multer from 'multer';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { BadRequestError } from '../../core/errors/app-error.js';
+import { env } from '../../config/env.js';
 import { ensureUploadsDir } from './upload.paths.js';
 
 const IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -50,16 +51,23 @@ function mimeToExt(mime: string): string {
   }
 }
 
+function makeFilename(originalName: string, mime: string): string {
+  const ext = path.extname(originalName).toLowerCase() || mimeToExt(mime);
+  return `${randomUUID()}${ext}`;
+}
+
 function createUploader(folder: 'events' | 'materials', allowed: Set<string>, maxBytes: number) {
-  const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-      cb(null, ensureUploadsDir(folder));
-    },
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase() || mimeToExt(file.mimetype);
-      cb(null, `${randomUUID()}${ext}`);
-    },
-  });
+  // Memory → S3 (production). Disk only when S3 is not configured (local fallback).
+  const storage = env.s3.enabled
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (_req, _file, cb) => {
+          cb(null, ensureUploadsDir(folder));
+        },
+        filename: (_req, file, cb) => {
+          cb(null, makeFilename(file.originalname, file.mimetype));
+        },
+      });
 
   return multer({
     storage,
@@ -68,6 +76,13 @@ function createUploader(folder: 'events' | 'materials', allowed: Set<string>, ma
       if (!allowed.has(file.mimetype)) {
         cb(new BadRequestError(`Unsupported file type: ${file.mimetype}`));
         return;
+      }
+      // Ensure S3 path has a stable filename even with memory storage.
+      if (env.s3.enabled && !file.filename) {
+        (file as Express.Multer.File).filename = makeFilename(
+          file.originalname,
+          file.mimetype,
+        );
       }
       cb(null, true);
     },

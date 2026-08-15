@@ -21,7 +21,7 @@ class UploadsRemoteDataSource {
         ApiConstants.uploadImage,
         data: formData,
         options: Options(
-          contentType: 'multipart/form-data',
+          // Let Dio set multipart boundary — forcing contentType breaks Multer.
           sendTimeout: const Duration(seconds: 60),
           receiveTimeout: const Duration(seconds: 60),
         ),

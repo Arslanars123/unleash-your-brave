@@ -60,7 +60,7 @@ export class SessionFeedbackService {
     input: UpsertSessionFeedbackInput,
   ): Promise<PublicSessionFeedback> {
     const session = await this.requireSession(sessionId);
-    if (!session.feedbackEnabled) {
+    if (session.feedbackEnabled === false) {
       throw new ForbiddenError('Feedback is disabled for this session');
     }
 

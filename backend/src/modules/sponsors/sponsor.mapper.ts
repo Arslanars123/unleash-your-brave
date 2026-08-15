@@ -24,6 +24,7 @@ export function toPublicSponsor(sponsor: Sponsor): PublicSponsor {
     id: sponsor.id,
     eventId: sponsor.eventId,
     name: sponsor.name,
+    email: sponsor.email ?? '',
     description: sponsor.description,
     image: sponsor.image,
     offers: [...sponsor.offers]

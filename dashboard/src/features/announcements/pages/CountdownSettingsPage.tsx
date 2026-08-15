@@ -3,12 +3,12 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Bell } from 'lucide-react';
 import { announcementsApi } from '@/features/announcements/api/announcements-api';
+import { TemplateBodyField } from '@/features/announcements/components/TemplateBodyField';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { CountdownCadence, CountdownRule } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Spinner } from '@/shared/ui/Spinner';
-import { TextArea } from '@/shared/ui/TextArea';
 import { useToast } from '@/shared/ui/toast';
 
 const CADENCE_OPTIONS: Array<{ value: CountdownCadence; label: string }> = [
@@ -61,7 +61,8 @@ export function CountdownSettingsPage() {
           <h1>Automatic countdown notifications</h1>
           <p className="muted">
             Control event countdown push notices — pause everything, edit wording, or change when
-            each rule fires. Use {'{{daysLeft}}'} and {'{{eventName}}'} in templates.
+            each rule fires. Insert fields with the buttons — you’ll see names like Days Left, not
+            code.
           </p>
         </div>
         <Button
@@ -152,15 +153,16 @@ export function CountdownSettingsPage() {
                   </label>
                 </div>
 
-                <Input
+                <TemplateBodyField
                   label="Title template"
                   value={rule.titleTemplate}
-                  onChange={(e) => updateRule(rule.id, { titleTemplate: e.target.value })}
+                  rows={2}
+                  onChange={(titleTemplate) => updateRule(rule.id, { titleTemplate })}
                 />
-                <TextArea
+                <TemplateBodyField
                   label="Body template"
                   value={rule.bodyTemplate}
-                  onChange={(e) => updateRule(rule.id, { bodyTemplate: e.target.value })}
+                  onChange={(bodyTemplate) => updateRule(rule.id, { bodyTemplate })}
                 />
               </section>
             ))}

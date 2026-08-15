@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { env } from '../../config/env.js';
 import { NotFoundError } from '../../core/errors/app-error.js';
 import type { EventService } from '../events/event.service.js';
+import type { MailService } from '../mail/mail.service.js';
+import type { UserService } from '../users/user.service.js';
 import { toPublicSponsor } from './sponsor.mapper.js';
 import type { PaginatedResult, SponsorRepository } from './sponsor.repository.js';
 import type {
@@ -33,6 +36,8 @@ export class SponsorService {
   constructor(
     private readonly sponsors: SponsorRepository,
     private readonly events: EventService,
+    private readonly users: UserService,
+    private readonly mail: MailService,
   ) {}
 
   async list(query: ListSponsorsQuery): Promise<PaginatedResult<PublicSponsor>> {
@@ -50,10 +55,16 @@ export class SponsorService {
     const created = await this.sponsors.create({
       eventId: input.eventId,
       name: input.name,
+      email: input.email?.trim().toLowerCase() ?? '',
       description: input.description ?? '',
       image: input.image ?? '',
       offers: normalizeOffers(input.offers),
     });
+
+    if (input.email?.trim()) {
+      await this.provisionPortalAccount(created, input.email.trim(), true);
+    }
+
     return toPublicSponsor(created);
   }
 
@@ -62,18 +73,51 @@ export class SponsorService {
 
     const updated = await this.sponsors.update(id, {
       ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.email !== undefined ? { email: input.email.trim().toLowerCase() } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.image !== undefined ? { image: input.image } : {}),
       ...(input.offers !== undefined ? { offers: normalizeOffers(input.offers) } : {}),
     });
 
     if (!updated) throw new NotFoundError('Sponsor');
+
+    const email = input.email?.trim() || updated.email.trim();
+    if (email) {
+      await this.provisionPortalAccount(updated, email, Boolean(input.email?.trim()));
+    }
+
     return toPublicSponsor(updated);
   }
 
   async delete(id: string): Promise<void> {
     if (!(await this.sponsors.delete(id))) {
       throw new NotFoundError('Sponsor');
+    }
+  }
+
+  private async provisionPortalAccount(
+    sponsor: Sponsor,
+    email: string,
+    issueInvite: boolean,
+  ): Promise<void> {
+    const { inviteCode } = await this.users.upsertPortalAccount({
+      email,
+      name: sponsor.name,
+      role: 'sponsor',
+      sponsorId: sponsor.id,
+      issueInvite,
+    });
+
+    if (inviteCode) {
+      const expiresAt = new Date(
+        Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+      );
+      await this.mail.sendInviteCode({
+        to: email,
+        name: sponsor.name,
+        inviteCode,
+        expiresAt,
+      });
     }
   }
 

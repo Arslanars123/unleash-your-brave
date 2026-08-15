@@ -79,8 +79,7 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const AuthBrandHeader(
-                    title: 'Verify your',
-                    emphasis: 'email',
+                    title: 'Verify email',
                     subtitle:
                         'Enter the verification code we sent after your purchase. Then you will create a password.',
                   ),

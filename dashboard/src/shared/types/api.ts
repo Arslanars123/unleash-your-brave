@@ -25,6 +25,7 @@ export interface PublicUser {
   status: UserStatus;
   speakerId: string | null;
   sponsorId: string | null;
+  membershipId: string | null;
   photoUrl: string;
   title: string;
   business: string;
@@ -56,6 +57,7 @@ export interface CreateUserPayload {
   status?: UserStatus;
   speakerId?: string | null;
   sponsorId?: string | null;
+  membershipId?: string | null;
   photoUrl?: string;
   title?: string;
   business?: string;
@@ -81,6 +83,7 @@ export interface UpdateUserPayload {
   status?: UserStatus;
   speakerId?: string | null;
   sponsorId?: string | null;
+  membershipId?: string | null;
   photoUrl?: string;
   title?: string;
   business?: string;
@@ -131,16 +134,57 @@ export interface PublicCheckInRow {
   userId: string;
   checkedInAt: string;
   checkedInBy: string | null;
+  membershipIdAtCheckIn?: string | null;
+  membershipNameAtCheckIn?: string | null;
   createdAt: string;
   updatedAt: string;
   checkedIn: boolean;
   user?: PublicUser | null;
 }
 
+export interface PublicMembershipPurchase {
+  id: string;
+  eventId: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  membershipId: string;
+  membershipName: string;
+  price: number;
+  currency: string;
+  kind: 'purchase' | 'upgrade';
+  previousMembershipId: string | null;
+  previousMembershipName: string | null;
+  paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
+  stripeCheckoutSessionId: string;
+  stripePaymentIntentId: string | null;
+  stripeCustomerId: string | null;
+  purchasedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AttendeePurchaseSummary {
+  currentMembershipId: string | null;
+  currentMembershipName: string | null;
+  originalMembershipId: string | null;
+  originalMembershipName: string | null;
+  purchases: PublicMembershipPurchase[];
+  upgrades: PublicMembershipPurchase[];
+  latestPurchase: PublicMembershipPurchase | null;
+}
+
+export interface CheckInScanMembershipSummary extends AttendeePurchaseSummary {
+  membershipIdAtCheckIn: string | null;
+  membershipNameAtCheckIn: string | null;
+}
+
 export interface CheckInScanResult {
   checkIn: PublicCheckInRow;
   alreadyCheckedIn: boolean;
   user: PublicUser;
+  membership: CheckInScanMembershipSummary;
 }
 
 export interface MyCheckInQr {
@@ -245,6 +289,7 @@ export interface PublicSpeaker {
   id: string;
   eventId: string;
   name: string;
+  email: string;
   title: string;
   description: string;
   photo: string;
@@ -255,12 +300,42 @@ export interface PublicSpeaker {
 export interface SpeakerPayload {
   eventId?: string;
   name: string;
+  email?: string;
   title?: string;
   description?: string;
   photo?: string;
 }
 
 export type SessionMaterialType = 'pdf' | 'video' | 'doc' | 'link';
+
+export interface PublicMembership {
+  id: string;
+  eventId: string;
+  name: string;
+  valueLink: string;
+  price: number;
+  description: string;
+  features?: string[];
+  paymentPlanNote?: string;
+  featured?: boolean;
+  tierRank?: number;
+  sortOrder?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MembershipPayload {
+  eventId?: string;
+  name: string;
+  valueLink?: string;
+  price?: number;
+  description?: string;
+  features?: string[];
+  paymentPlanNote?: string;
+  featured?: boolean;
+  tierRank?: number;
+  sortOrder?: number;
+}
 
 export interface PublicSessionMaterial {
   id: string;
@@ -299,6 +374,7 @@ export interface PublicSession {
   startTime: string;
   endTime: string;
   location: string;
+  membershipIds: string[];
   materials: PublicSessionMaterial[];
   feedbackEnabled: boolean;
   feedbackSummary: SessionFeedbackSummary;
@@ -315,6 +391,7 @@ export interface SessionPayload {
   startTime?: string;
   endTime?: string;
   location?: string;
+  membershipIds?: string[];
   materials?: SessionMaterialPayload[];
   feedbackEnabled?: boolean;
 }
@@ -380,6 +457,7 @@ export interface PublicSponsor {
   id: string;
   eventId: string;
   name: string;
+  email: string;
   description: string;
   image: string;
   offers: PublicSponsorOffer[];
@@ -390,6 +468,7 @@ export interface PublicSponsor {
 export interface SponsorPayload {
   eventId?: string;
   name: string;
+  email?: string;
   description?: string;
   image?: string;
   offers?: SponsorOfferPayload[];

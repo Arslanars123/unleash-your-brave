@@ -24,6 +24,11 @@ export class MongoChatMessageRepository implements ChatMessageRepository {
     return fromDoc<ChatMessage>(await this.collection.findOne({ _id: id }));
   }
 
+  async deleteById(id: string): Promise<boolean> {
+    const result = await this.collection.deleteOne({ _id: id });
+    return result.deletedCount === 1;
+  }
+
   async listBefore(params: {
     groupId: string;
     beforeCreatedAt?: Date;

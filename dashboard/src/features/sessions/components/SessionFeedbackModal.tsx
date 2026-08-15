@@ -5,6 +5,7 @@ import { sessionsApi } from '@/features/sessions/api/sessions-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { PublicSession, PublicSessionFeedback } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { Spinner } from '@/shared/ui/Spinner';
 import { TextArea } from '@/shared/ui/TextArea';
 import { useToast } from '@/shared/ui/toast';
@@ -62,6 +63,7 @@ interface SessionFeedbackModalProps {
 export function SessionFeedbackModal({ open, session, onClose }: SessionFeedbackModalProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const [editing, setEditing] = useState<PublicSessionFeedback | null>(null);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -131,9 +133,25 @@ export function SessionFeedbackModal({ open, session, onClose }: SessionFeedback
 
   async function handleDelete(item: PublicSessionFeedback) {
     const label = item.user?.name ?? 'this review';
-    const confirmed = window.confirm(`Delete review from “${label}”? This cannot be undone.`);
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Delete review?',
+      message: `Delete review from “${label}”? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await deleteMutation.mutateAsync(item.id);
+  }
+
+  async function handleSaveReview() {
+    const ok = await confirm({
+      title: 'Save review changes?',
+      message: 'Update this attendee review?',
+      confirmLabel: 'Save changes',
+      tone: 'primary',
+    });
+    if (!ok) return;
+    await updateMutation.mutateAsync();
   }
 
   return (
@@ -225,7 +243,7 @@ export function SessionFeedbackModal({ open, session, onClose }: SessionFeedback
                 <Button
                   type="button"
                   loading={updateMutation.isPending}
-                  onClick={() => updateMutation.mutate()}
+                  onClick={() => void handleSaveReview()}
                 >
                   Save review
                 </Button>

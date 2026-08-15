@@ -25,7 +25,19 @@ export class SessionFeedbackController {
 
     const query = req.query as unknown as ListSessionFeedbackQuery;
     const { items, total } = await this.service.list(sessionId, query);
-    sendPaginated(res, items, buildPaginationMeta(query.page, query.perPage, total));
+
+    // Attendees can read reviews, but never other people's emails.
+    const redactEmail = req.auth.role === 'member';
+    const payload = redactEmail
+      ? items.map((item) => ({
+          ...item,
+          user: item.user
+            ? { id: item.user.id, name: item.user.name, email: '' }
+            : null,
+        }))
+      : items;
+
+    sendPaginated(res, payload, buildPaginationMeta(query.page, query.perPage, total));
   };
 
   mine = async (req: Request, res: Response): Promise<void> => {

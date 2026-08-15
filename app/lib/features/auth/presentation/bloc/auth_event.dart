@@ -58,6 +58,11 @@ final class AuthUserUpdated extends AuthEvent {
   List<Object?> get props => [user];
 }
 
+/// Silently re-fetch `/auth/me` without flipping to a loading screen.
+final class AuthRefreshRequested extends AuthEvent {
+  const AuthRefreshRequested();
+}
+
 final class AuthLogoutRequested extends AuthEvent {
   const AuthLogoutRequested();
 }

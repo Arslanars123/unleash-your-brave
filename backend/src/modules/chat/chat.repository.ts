@@ -21,6 +21,7 @@ export interface ChatMessageRepository {
   create(message: ChatMessage): Promise<ChatMessage>;
   findByClientId(groupId: string, clientId: string): Promise<ChatMessage | null>;
   findById(id: string): Promise<ChatMessage | null>;
+  deleteById(id: string): Promise<boolean>;
   listBefore(params: {
     groupId: string;
     beforeCreatedAt?: Date;
@@ -56,6 +57,7 @@ export interface ChatMemberStateRepository {
 export interface ChatReactionRepository {
   upsert(reaction: ChatReaction): Promise<ChatReaction>;
   remove(messageId: string, userId: string): Promise<void>;
+  removeForMessage(messageId: string): Promise<void>;
   listForMessages(messageIds: string[]): Promise<ChatReaction[]>;
 }
 

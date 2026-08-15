@@ -24,6 +24,7 @@ interface OfferRow {
 
 export interface SponsorFormValues {
   name: string;
+  email: string;
   description: string;
   image: string;
   offers: OfferRow[];
@@ -45,6 +46,7 @@ function emptyOffer(): OfferRow {
 
 const emptyForm: SponsorFormValues = {
   name: '',
+  email: '',
   description: '',
   image: '',
   offers: [],
@@ -53,6 +55,7 @@ const emptyForm: SponsorFormValues = {
 function sponsorToForm(sponsor: PublicSponsor): SponsorFormValues {
   return {
     name: sponsor.name,
+    email: sponsor.email,
     description: sponsor.description,
     image: sponsor.image,
     offers: [...sponsor.offers]
@@ -80,6 +83,11 @@ function validate(values: SponsorFormValues): FieldErrors {
     errors.image = 'Use a valid URL or upload an image';
   }
 
+  const email = values.email.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = 'Enter a valid email address';
+  }
+
   values.offers.forEach((offer, offerIndex) => {
     if (!offer.description.trim()) {
       errors[`offer-desc-${offerIndex}`] = 'Offer description is required';
@@ -102,6 +110,7 @@ function validate(values: SponsorFormValues): FieldErrors {
 export function toSponsorPayload(values: SponsorFormValues): SponsorPayload {
   return {
     name: values.name.trim(),
+    email: values.email.trim() || undefined,
     description: values.description.trim(),
     image: values.image.trim(),
     offers: values.offers.map((offer, index) => ({
@@ -269,6 +278,16 @@ export function SponsorFormModal({
             onChange={(e) => update('name', e.target.value)}
             placeholder="Brave Collective"
           />
+          <Input
+            label="Portal email"
+            name="email"
+            type="email"
+            value={values.email}
+            error={errors.email}
+            onChange={(e) => update('email', e.target.value)}
+            placeholder="sponsor@example.com"
+          />
+          <p className="hint">Optional. Sends a login invite when creating or updating.</p>
           <TextArea
             label="Description"
             name="description"

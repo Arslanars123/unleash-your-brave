@@ -7,7 +7,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { authApi, type LoginPayload } from '@/features/auth/api/auth-api';
+import {
+  authApi,
+  type ChangePasswordPayload,
+  type LoginPayload,
+} from '@/features/auth/api/auth-api';
 import { tokenStorage } from '@/shared/lib/token-storage';
 import type { PublicUser, UserRole } from '@/shared/types/api';
 
@@ -17,10 +21,12 @@ interface AuthContextValue {
   user: PublicUser | null;
   isAuthenticated: boolean;
   isBootstrapping: boolean;
+  mustChangePassword: boolean;
   isAdmin: boolean;
   isSpeaker: boolean;
   isSponsor: boolean;
   login: (payload: LoginPayload) => Promise<PublicUser>;
+  changePassword: (payload: ChangePasswordPayload) => Promise<PublicUser>;
   logout: () => void;
 }
 
@@ -92,6 +98,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result.user;
   }, []);
 
+  const changePassword = useCallback(async (payload: ChangePasswordPayload) => {
+    const updated = assertDashboardUser(await authApi.changePassword(payload));
+    tokenStorage.setUser(JSON.stringify(updated));
+    setUser(updated);
+    return updated;
+  }, []);
+
   const logout = useCallback(() => {
     tokenStorage.clear();
     setUser(null);
@@ -102,13 +115,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated: Boolean(user),
       isBootstrapping,
+      mustChangePassword: Boolean(user?.mustChangePassword),
       isAdmin: user?.role === 'admin',
       isSpeaker: user?.role === 'speaker',
       isSponsor: user?.role === 'sponsor',
       login,
+      changePassword,
       logout,
     }),
-    [user, isBootstrapping, login, logout],
+    [user, isBootstrapping, login, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -124,5 +139,6 @@ export function useAuth(): AuthContextValue {
 
 export function getHomePathForUser(user: PublicUser | null): string {
   if (!user) return '/login';
+  if (user.mustChangePassword) return '/set-password';
   return homePathForRole(user.role);
 }
