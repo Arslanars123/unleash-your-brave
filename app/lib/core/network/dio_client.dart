@@ -91,12 +91,43 @@ Never throwMappedDioError(DioException error) {
   String message = 'Request failed';
   if (payload is Map<String, dynamic>) {
     final err = payload['error'];
-    if (err is Map<String, dynamic> && err['message'] is String) {
-      message = err['message'] as String;
+    if (err is Map<String, dynamic>) {
+      final details = err['details'];
+      final fromFields = _formatValidationDetails(details);
+      if (fromFields != null && fromFields.isNotEmpty) {
+        message = fromFields;
+      } else if (err['message'] is String) {
+        message = err['message'] as String;
+      }
     }
   }
 
   throw ServerException(message, statusCode: status);
+}
+
+String? _formatValidationDetails(Object? details) {
+  if (details is! Map) return null;
+  final fieldErrors = details['fieldErrors'];
+  final formErrors = details['formErrors'];
+  final parts = <String>[];
+
+  if (fieldErrors is Map) {
+    for (final entry in fieldErrors.entries) {
+      final value = entry.value;
+      if (value is List && value.isNotEmpty) {
+        parts.add('${entry.key}: ${value.first}');
+      } else if (value is String && value.isNotEmpty) {
+        parts.add('${entry.key}: $value');
+      }
+    }
+  }
+  if (formErrors is List) {
+    for (final item in formErrors) {
+      if (item is String && item.isNotEmpty) parts.add(item);
+    }
+  }
+  if (parts.isEmpty) return null;
+  return parts.join(' · ');
 }
 
 bool _isNetworkFailure(DioException error) {

@@ -1,4 +1,5 @@
 import { apiClient } from '@/shared/api/client';
+import { createClientId } from '@/shared/lib/client-id';
 import type { SuccessEnvelope } from '@/shared/types/api';
 
 export interface ChatMessageView {
@@ -33,13 +34,6 @@ export interface ChatMemberView {
   role: string;
 }
 
-function clientId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `admin-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 export const chatApi = {
   async getGroup(): Promise<ChatGroupSummary> {
     const { data } = await apiClient.get<SuccessEnvelope<ChatGroupSummary>>('/chat/group');
@@ -68,7 +62,7 @@ export const chatApi = {
 
   async sendText(body: string, clientIdOverride?: string): Promise<ChatMessageView> {
     const { data } = await apiClient.post<SuccessEnvelope<ChatMessageView>>('/chat/messages', {
-      clientId: clientIdOverride ?? clientId(),
+      clientId: clientIdOverride ?? createClientId(),
       type: 'text',
       body,
     });

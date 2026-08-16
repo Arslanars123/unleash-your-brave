@@ -5,6 +5,7 @@ import { chatApi, type ChatMessageView } from '@/features/chat/api/chat-api';
 import { useChatRealtime } from '@/features/chat/hooks/useChatRealtime';
 import { useAuth } from '@/features/auth/context/AuthProvider';
 import { getApiErrorMessage } from '@/shared/api/client';
+import { createClientId } from '@/shared/lib/client-id';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import { Button } from '@/shared/ui/Button';
 import { useConfirm } from '@/shared/ui/ConfirmDialog';
@@ -26,13 +27,6 @@ function roleLabel(role: string): string {
   if (role === 'speaker') return 'Speaker';
   if (role === 'sponsor') return 'Sponsor';
   return 'Attendee';
-}
-
-function newClientId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `admin-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function ChatPage() {
@@ -98,7 +92,7 @@ export function ChatPage() {
     const text = draft.trim();
     if (!text || sending || !user) return;
 
-    const clientId = newClientId();
+    const clientId = createClientId();
     const optimistic: ChatMessageView = {
       id: `local-${clientId}`,
       groupId: groupQuery.data?.id ?? 'global',

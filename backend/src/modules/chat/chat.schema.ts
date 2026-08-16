@@ -13,7 +13,8 @@ export const listMembersQuerySchema = z.object({
 
 export const createMessageSchema = z
   .object({
-    clientId: z.string().uuid(),
+    // Idempotency key — UUID preferred, but any stable client token is fine.
+    clientId: z.string().trim().min(8).max(128),
     type: z.enum(CHAT_MESSAGE_TYPES),
     body: z.string().max(4000).optional(),
     gifUrl: z.string().url().max(2000).optional(),

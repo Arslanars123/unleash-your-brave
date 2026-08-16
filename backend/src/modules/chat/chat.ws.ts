@@ -1,4 +1,5 @@
 import type { Server as HttpServer, IncomingMessage } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import { logger } from '../../core/logger.js';
 import { ForbiddenError, UnauthorizedError } from '../../core/errors/app-error.js';
@@ -129,9 +130,9 @@ async function handleClientMessage(
     if (type === 'chat.send') {
       const body = typeof parsed.body === 'string' ? parsed.body.trim() : '';
       const clientId =
-        typeof parsed.clientId === 'string' && parsed.clientId
-          ? parsed.clientId
-          : `ws-${Date.now()}`;
+        typeof parsed.clientId === 'string' && parsed.clientId.trim().length >= 8
+          ? parsed.clientId.trim()
+          : randomUUID();
       if (!body) {
         throw new Error('Message body required');
       }
