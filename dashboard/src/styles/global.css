@@ -2027,6 +2027,223 @@ td strong {
   }
 }
 
+.membership-record {
+  display: grid;
+  gap: 1rem;
+}
+
+.membership-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.membership-summary-card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel, #fff);
+  min-width: 0;
+}
+
+.membership-summary-card-accent {
+  border-color: color-mix(in srgb, var(--accent, #f04e93) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent, #f04e93) 8%, #fff);
+}
+
+.membership-summary-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.membership-summary-card strong {
+  font-size: 1rem;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.membership-summary-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.membership-source-grid {
+  margin-top: 0.15rem;
+}
+
+.purchase-history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.purchase-history-head h4 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.purchase-card-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.purchase-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  background: #fafafa;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.purchase-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.purchase-card-kind {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.purchase-card-plan {
+  margin: 0.2rem 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.purchase-card-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 1rem;
+  margin: 0;
+}
+
+.purchase-card-meta dt {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.purchase-card-meta dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.purchase-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  white-space: nowrap;
+  background: #eee;
+  color: #444;
+}
+
+.purchase-status-paid {
+  background: color-mix(in srgb, #16a34a 16%, #fff);
+  color: #15803d;
+}
+
+.purchase-status-pending {
+  background: color-mix(in srgb, #d97706 16%, #fff);
+  color: #b45309;
+}
+
+.purchase-status-failed {
+  background: color-mix(in srgb, #dc2626 14%, #fff);
+  color: #b91c1c;
+}
+
+.purchase-status-refunded {
+  background: color-mix(in srgb, #6366f1 14%, #fff);
+  color: #4338ca;
+}
+
+.purchase-ref {
+  display: grid;
+  gap: 0.3rem;
+  padding-top: 0.15rem;
+  border-top: 1px dashed var(--line);
+}
+
+.purchase-ref-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.purchase-ref-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.purchase-ref-code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.purchase-ref-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text, #222);
+  cursor: pointer;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.purchase-ref-btn:hover {
+  border-color: color-mix(in srgb, var(--accent, #f04e93) 45%, var(--line));
+  color: var(--accent, #f04e93);
+}
+
+.purchase-card-note {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .membership-summary-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-card-meta {
+    grid-template-columns: 1fr;
+  }
+}
+
 .form-fieldset {
   border: 1px solid var(--line);
   border-radius: 12px;

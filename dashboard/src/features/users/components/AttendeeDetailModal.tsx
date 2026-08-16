@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pencil, X } from 'lucide-react';
+import { MembershipRecordPanel } from '@/features/users/components/MembershipRecordPanel';
 import { usersApi } from '@/features/users/api/users-api';
 import type { PublicUser } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -16,17 +17,6 @@ function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString();
-}
-
-function money(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-    }).format(amount);
-  } catch {
-    return `${amount} ${currency}`;
-  }
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -70,6 +60,11 @@ export function AttendeeDetailModal({
 
   const fromGhl = Boolean(user.ghlContactId) || Boolean(user.title);
   const summary = purchasesQuery.data;
+  const sourceLabel = user.ghlContactId
+    ? 'GoHighLevel webhook'
+    : fromGhl
+      ? 'Likely purchase / GHL'
+      : 'Manual / admin / Stripe';
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -127,74 +122,19 @@ export function AttendeeDetailModal({
           </section>
 
           <section className="attendee-detail-section">
-            <h3>Membership & purchases</h3>
+            <h3>Membership</h3>
             {purchasesQuery.isLoading ? <Spinner /> : null}
             {purchasesQuery.isError ? (
               <p className="form-error">Could not load purchase history.</p>
             ) : null}
             {summary ? (
-              <>
-                <dl className="attendee-detail-grid">
-                  <DetailRow
-                    label="Current membership"
-                    value={display(summary.currentMembershipName)}
-                  />
-                  <DetailRow
-                    label="Original membership"
-                    value={display(summary.originalMembershipName)}
-                  />
-                  <DetailRow
-                    label="Latest purchase"
-                    value={
-                      summary.latestPurchase
-                        ? `${summary.latestPurchase.membershipName} · ${money(
-                            summary.latestPurchase.price,
-                            summary.latestPurchase.currency,
-                          )} · ${formatDate(summary.latestPurchase.purchasedAt)}`
-                        : '—'
-                    }
-                  />
-                </dl>
-                {summary.purchases.length > 0 ? (
-                  <ul style={{ margin: '12px 0 0', paddingLeft: 18 }}>
-                    {summary.purchases.map((item) => (
-                      <li key={item.id}>
-                        {item.kind === 'upgrade'
-                          ? `${item.previousMembershipName ?? '?'} → ${item.membershipName}`
-                          : item.membershipName}
-                        {' · '}
-                        {money(item.price, item.currency)}
-                        {' · '}
-                        {item.paymentStatus}
-                        {' · '}
-                        {formatDate(item.purchasedAt)}
-                        {item.stripePaymentIntentId
-                          ? ` · ${item.stripePaymentIntentId}`
-                          : ''}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="muted" style={{ marginTop: 8 }}>
-                    No Stripe purchases recorded yet.
-                  </p>
-                )}
-              </>
-            ) : null}
-            <dl className="attendee-detail-grid" style={{ marginTop: 16 }}>
-              <DetailRow
-                label="Legacy source"
-                value={
-                  user.ghlContactId
-                    ? 'GoHighLevel webhook'
-                    : fromGhl
-                      ? 'Likely purchase / GHL'
-                      : 'Manual / admin / Stripe'
-                }
+              <MembershipRecordPanel
+                summary={summary}
+                sourceLabel={sourceLabel}
+                ghlContactId={user.ghlContactId}
+                productTitle={user.title}
               />
-              <DetailRow label="GHL contact ID" value={display(user.ghlContactId)} />
-              <DetailRow label="Product / title" value={display(user.title)} />
-            </dl>
+            ) : null}
           </section>
 
           <section className="attendee-detail-section">

@@ -8,6 +8,7 @@ import {
   formatEditionRange,
   useEditionScope,
 } from '@/features/events/hooks/useEditionScope';
+import { MembershipRecordPanel } from '@/features/users/components/MembershipRecordPanel';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type { CheckInScanResult } from '@/shared/types/api';
@@ -19,17 +20,6 @@ import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
 const PER_PAGE = 25;
-
-function money(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-    }).format(amount);
-  } catch {
-    return `${amount} ${currency}`;
-  }
-}
 
 export function CheckInsPage() {
   const { eventId, selectedEdition, isPastEdition } = useEditionScope();
@@ -208,7 +198,7 @@ export function CheckInsPage() {
               {scanDetail && membership ? (
                 <div className="attendee-detail-section" style={{ marginTop: 16 }}>
                   <h3 style={{ marginTop: 0 }}>Last scan details</h3>
-                  <dl className="attendee-detail-grid">
+                  <dl className="attendee-detail-grid" style={{ marginBottom: 12 }}>
                     <div className="attendee-detail-row">
                       <dt>Name</dt>
                       <dd>{scanDetail.user.name}</dd>
@@ -216,14 +206,6 @@ export function CheckInsPage() {
                     <div className="attendee-detail-row">
                       <dt>Email</dt>
                       <dd>{scanDetail.user.email}</dd>
-                    </div>
-                    <div className="attendee-detail-row">
-                      <dt>Current membership</dt>
-                      <dd>{membership.currentMembershipName ?? '—'}</dd>
-                    </div>
-                    <div className="attendee-detail-row">
-                      <dt>Original membership</dt>
-                      <dd>{membership.originalMembershipName ?? '—'}</dd>
                     </div>
                     <div className="attendee-detail-row">
                       <dt>Checked in</dt>
@@ -239,46 +221,16 @@ export function CheckInsPage() {
                       <dd>{membership.membershipNameAtCheckIn ?? '—'}</dd>
                     </div>
                   </dl>
-
-                  {membership.upgrades.length > 0 ? (
-                    <div style={{ marginTop: 12 }}>
-                      <h4 style={{ margin: '0 0 8px' }}>Upgrade history</h4>
-                      <ul style={{ margin: 0, paddingLeft: 18 }}>
-                        {membership.upgrades.map((item) => (
-                          <li key={item.id}>
-                            {(item.previousMembershipName ?? '?')} → {item.membershipName}
-                            {' · '}
-                            {money(item.price, item.currency)}
-                            {' · '}
-                            {new Date(item.purchasedAt).toLocaleString()}
-                            {item.stripePaymentIntentId
-                              ? ` · ${item.stripePaymentIntentId}`
-                              : ''}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {membership.purchases.length > 0 ? (
-                    <div style={{ marginTop: 12 }}>
-                      <h4 style={{ margin: '0 0 8px' }}>Purchases</h4>
-                      <ul style={{ margin: 0, paddingLeft: 18 }}>
-                        {membership.purchases.map((item) => (
-                          <li key={item.id}>
-                            {item.kind === 'upgrade' ? 'Upgrade' : 'Purchase'}:{' '}
-                            {item.membershipName}
-                            {' · '}
-                            {money(item.price, item.currency)}
-                            {' · '}
-                            {item.paymentStatus}
-                            {' · '}
-                            {new Date(item.purchasedAt).toLocaleString()}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
+                  <MembershipRecordPanel
+                    summary={membership}
+                    sourceLabel={
+                      scanDetail.user.ghlContactId
+                        ? 'GoHighLevel webhook'
+                        : 'Manual / admin / Stripe'
+                    }
+                    ghlContactId={scanDetail.user.ghlContactId}
+                    productTitle={scanDetail.user.title}
+                  />
                 </div>
               ) : null}
             </section>
