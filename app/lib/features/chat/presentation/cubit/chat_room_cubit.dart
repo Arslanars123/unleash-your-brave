@@ -63,9 +63,10 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
   final ChatRepository _repository;
   final String _currentUserId;
   final _uuid = const Uuid();
-  
+
   StreamSubscription<Map<String, dynamic>>? _sseSub;
   Timer? _reconnectTimer;
+  Timer? _pollTimer;
   bool _running = false;
 
   Future<void> loadInitial() async {
@@ -73,7 +74,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
 
     emit(state.copyWith(loading: true, error: null));
 
-    final result = await _repository.getMessages(limit: 30);
+    final result = await _repository.getMessages(limit: 40);
     result.fold(
       (failure) => emit(state.copyWith(loading: false, error: failure.message)),
       (messages) {
@@ -82,7 +83,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
           messages: _sortedByTimestamp(messages),
           error: null,
         ));
-        _connectSse();
+        _startRealtime();
       },
     );
   }
@@ -138,9 +139,8 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     final clientId = _uuid.v4();
     final now = DateTime.now();
 
-    // Create optimistic pending message
     final pendingMessage = ChatMessageEntity(
-      id: clientId, // Temporary ID
+      id: clientId,
       groupId: 'temp-group-id',
       senderId: _currentUserId,
       senderName: 'You',
@@ -152,15 +152,12 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       deliveryStatus: DeliveryStatus.sent,
     );
 
-    // Add optimistic message to UI — user is composing, stick to bottom.
     emit(state.copyWith(
       messages: _sortedByTimestamp([...state.messages, pendingMessage]),
-      sending: false,
       isNearBottom: true,
       newMessageCountWhileScrolledUp: 0,
     ));
 
-    // Send to backend
     final result = await _repository.sendMessage(
       clientId: clientId,
       type: type,
@@ -170,23 +167,29 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
 
     result.fold(
       (failure) {
-        // Remove optimistic message on failure
         final filteredMessages =
             state.messages.where((m) => m.clientId != clientId).toList();
         emit(state.copyWith(
           messages: _sortedByTimestamp(filteredMessages),
+          sending: false,
           error: failure.message,
         ));
       },
       (sentMessage) {
-        // Replace optimistic message with real message
         final updatedMessages = state.messages.map((m) {
-          if (m.clientId == clientId) {
+          if (m.clientId == clientId || m.id == clientId) {
             return sentMessage;
           }
           return m;
         }).toList();
-        emit(state.copyWith(messages: _sortedByTimestamp(updatedMessages)));
+        final hasMatch = updatedMessages.any((m) => m.id == sentMessage.id);
+        emit(state.copyWith(
+          messages: _sortedByTimestamp(
+            hasMatch ? updatedMessages : [...updatedMessages, sentMessage],
+          ),
+          sending: false,
+          error: null,
+        ));
       },
     );
   }
@@ -236,10 +239,18 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     ));
   }
 
-  void _connectSse() {
+  void _startRealtime() {
     if (_running) return;
     _running = true;
-    
+    _connectRealtime();
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      unawaited(_pollLatest());
+    });
+  }
+
+  void _connectRealtime() {
+    if (!_running) return;
     _sseSub?.cancel();
     _sseSub = _repository.getEventStream().listen(
       (event) {
@@ -247,12 +258,52 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       },
       onError: (_) => _scheduleReconnect(),
       onDone: () => _scheduleReconnect(),
+      cancelOnError: true,
     );
+  }
+
+  Future<void> _pollLatest() async {
+    if (!_running || isClosed || state.loading) return;
+    final result = await _repository.getMessages(limit: 40);
+    if (!_running || isClosed) return;
+    result.fold((_) {}, (messages) {
+      final byId = <String, ChatMessageEntity>{
+        for (final m in state.messages) m.id: m,
+      };
+      // Keep optimistic locals that are not yet confirmed.
+      for (final m in state.messages) {
+        if (m.clientId != null && m.id == m.clientId) {
+          byId[m.id] = m;
+        }
+      }
+      var addedForeign = 0;
+      for (final m in messages) {
+        final isNew = !byId.containsKey(m.id);
+        byId[m.id] = m;
+        if (isNew && m.senderId != _currentUserId) {
+          addedForeign += 1;
+        }
+        // Drop matching optimistic bubble once server message arrives.
+        byId.removeWhere(
+          (key, value) =>
+              value.clientId != null &&
+              value.clientId == m.clientId &&
+              value.id != m.id,
+        );
+      }
+      final stickToBottom = state.isNearBottom;
+      emit(state.copyWith(
+        messages: _sortedByTimestamp(byId.values.toList()),
+        newMessageCountWhileScrolledUp: stickToBottom
+            ? 0
+            : state.newMessageCountWhileScrolledUp + addedForeign,
+      ));
+    });
   }
 
   void _handleSseEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
-    
+
     switch (type) {
       case 'message.created':
         _handleMessageCreated(event);
@@ -289,6 +340,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       final messageData = payload['message'] as Map<String, dynamic>?;
       if (messageData == null) return;
 
+      final serverClientId = messageData['clientId'] as String?;
       final message = ChatMessageEntity(
         id: messageData['id'] as String,
         groupId: messageData['groupId'] as String,
@@ -296,6 +348,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
         senderName: messageData['senderName'] as String? ?? 'Member',
         senderRole: messageData['senderRole'] as String? ?? 'member',
         senderPhotoUrl: messageData['senderPhotoUrl'] as String?,
+        clientId: serverClientId,
         type: messageData['type'] == 'gif' ? ChatMessageType.gif : ChatMessageType.text,
         body: messageData['body'] as String?,
         gifUrl: messageData['gifUrl'] as String?,
@@ -306,27 +359,25 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       final isMine = message.senderId == _currentUserId;
 
       if (isMine) {
-        // Replace optimistic message if it exists
         final updatedMessages = state.messages.map((m) {
-          if (m.clientId != null &&
-              m.senderId == _currentUserId &&
-              m.createdAt.difference(message.createdAt).abs() <
-                  const Duration(seconds: 5)) {
-            return message;
-          }
-          return m;
+          final matchesOptimistic = (serverClientId != null && m.clientId == serverClientId) ||
+              m.id == message.id ||
+              (m.senderId == _currentUserId &&
+                  m.clientId != null &&
+                  m.id == m.clientId &&
+                  m.createdAt.difference(message.createdAt).abs() <
+                      const Duration(seconds: 8));
+          return matchesOptimistic ? message : m;
         }).toList();
         final hasMatch = updatedMessages.any((m) => m.id == message.id);
         emit(state.copyWith(
           messages: _sortedByTimestamp(
             hasMatch ? updatedMessages : [...updatedMessages, message],
           ),
-          // Own messages should keep the user at the latest.
           isNearBottom: true,
           newMessageCountWhileScrolledUp: 0,
         ));
       } else {
-        // New message from others — dedupe by id
         if (state.messages.any((m) => m.id == message.id)) return;
 
         markDelivered(message.id);
@@ -344,7 +395,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
           markVisibleRead(message.id);
         }
       }
-    } catch (e) {
+    } catch (_) {
       // Skip malformed message events
     }
   }
@@ -416,8 +467,9 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
   }
 
   void _scheduleReconnect() {
+    if (!_running || isClosed) return;
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), _connectSse);
+    _reconnectTimer = Timer(const Duration(seconds: 3), _connectRealtime);
   }
 
   void stop() {
@@ -425,6 +477,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     _sseSub?.cancel();
     _sseSub = null;
     _reconnectTimer?.cancel();
+    _pollTimer?.cancel();
   }
 
   @override

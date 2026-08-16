@@ -79,13 +79,14 @@ class ChatRepositoryImpl implements ChatRepository {
         body: body,
         gifUrl: gifUrl,
       );
-      // Remove from pending queue if it was there
       await local.removePendingMessage(clientId);
       return Right(message);
     } on NetworkException {
       return const Left(NetworkFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
     }
   }
 

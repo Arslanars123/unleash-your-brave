@@ -10,9 +10,9 @@ class ChatReactionModel extends ChatReactionEntity {
 
   factory ChatReactionModel.fromJson(Map<String, dynamic> json) {
     return ChatReactionModel(
-      emoji: json['emoji'] as String,
-      count: json['count'] as int,
-      reactedByMe: json['reactedByMe'] as bool,
+      emoji: json['emoji'] as String? ?? '',
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      reactedByMe: json['reactedByMe'] as bool? ?? false,
     );
   }
 

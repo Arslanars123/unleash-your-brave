@@ -7,7 +7,6 @@ import 'package:unleash_your_brave/core/network/token_storage.dart';
 import 'package:unleash_your_brave/features/chat/data/models/chat_group_model.dart';
 import 'package:unleash_your_brave/features/chat/data/models/chat_member_model.dart';
 import 'package:unleash_your_brave/features/chat/data/models/chat_message_model.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 class ChatRemoteDataSource {
   ChatRemoteDataSource(this._dioClient, this._tokenStorage);
@@ -84,7 +83,8 @@ class ChatRemoteDataSource {
         ApiConstants.chatMessages,
         data: data,
       );
-      final responseData = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      final responseData =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
       return ChatMessageModel.fromJson(responseData);
     } on DioException catch (error) {
       throwMappedDioError(error);
@@ -174,40 +174,106 @@ class ChatRemoteDataSource {
     }
   }
 
-  // WebSocket stream for real-time events (Messenger-style push)
+  /// Live chat events via SSE (`/chat/stream`).
+  ///
+  /// App Runner currently rejects WebSocket upgrades (403), while SSE works.
   Stream<Map<String, dynamic>> getEventStream() async* {
     final token = await _tokenStorage.readAccessToken();
-    if (token == null) return;
+    if (token == null || token.isEmpty) return;
 
-    final baseUrl = _dioClient.client.options.baseUrl;
-    final uri = Uri.parse(baseUrl);
-    final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    final wsUri = uri.replace(
-      scheme: wsScheme,
-      path: '${uri.path.replaceAll(RegExp(r'/$'), '')}${ApiConstants.chatWs}',
-      queryParameters: {'access_token': token},
-    );
+    final base = _dioClient.client.options.baseUrl.replaceAll(RegExp(r'/$'), '');
+    final url = '$base${ApiConstants.chatStream}';
 
-    WebSocketChannel? channel;
+    Response<ResponseBody>? response;
     try {
-      channel = WebSocketChannel.connect(wsUri);
-      await channel.ready;
+      response = await _dioClient.client.get<ResponseBody>(
+        url,
+        queryParameters: {'access_token': token},
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: const {
+            'Accept': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+          },
+          receiveTimeout: Duration.zero,
+        ),
+      );
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
 
-      await for (final raw in channel.stream) {
-        try {
-          final payload = jsonDecode(raw.toString()) as Map<String, dynamic>;
-          yield <String, dynamic>{
-            'type': payload['type'],
-            ...payload,
-          };
-        } catch (_) {
-          // Skip malformed frames
+    final stream = response.data?.stream;
+    if (stream == null) return;
+
+    final buffer = StringBuffer();
+    String? eventName;
+
+    await for (final chunk in stream) {
+      buffer.write(utf8.decode(chunk, allowMalformed: true));
+      var content = buffer.toString();
+
+      while (true) {
+        final sep = content.indexOf('\n\n');
+        if (sep < 0) break;
+
+        final rawEvent = content.substring(0, sep);
+        content = content.substring(sep + 2);
+        buffer
+          ..clear()
+          ..write(content);
+
+        final parsed = _parseSseBlock(rawEvent, fallbackEvent: eventName);
+        eventName = parsed.eventName;
+        if (parsed.data != null) {
+          yield parsed.data!;
         }
       }
-    } catch (_) {
-      // Connection errors — callers reconnect
-    } finally {
-      await channel?.sink.close();
     }
   }
+
+  _SseParseResult _parseSseBlock(String rawEvent, {String? fallbackEvent}) {
+    String? eventName = fallbackEvent;
+    final dataLines = <String>[];
+
+    for (final line in rawEvent.split('\n')) {
+      final trimmed = line.trimRight();
+      if (trimmed.isEmpty || trimmed.startsWith(':')) continue;
+      if (trimmed.startsWith('event:')) {
+        eventName = trimmed.substring(6).trim();
+        continue;
+      }
+      if (trimmed.startsWith('data:')) {
+        dataLines.add(trimmed.substring(5).trimLeft());
+      }
+    }
+
+    if (dataLines.isEmpty) {
+      return _SseParseResult(eventName: eventName);
+    }
+
+    final rawData = dataLines.join('\n');
+    try {
+      final decoded = jsonDecode(rawData);
+      if (decoded is Map<String, dynamic>) {
+        final type = decoded['type'] as String? ?? eventName;
+        return _SseParseResult(
+          eventName: eventName,
+          data: <String, dynamic>{
+            if (type != null) 'type': type,
+            ...decoded,
+          },
+        );
+      }
+    } catch (_) {
+      // Ignore malformed frames
+    }
+    return _SseParseResult(eventName: eventName);
+  }
+}
+
+class _SseParseResult {
+  const _SseParseResult({this.eventName, this.data});
+
+  final String? eventName;
+  final Map<String, dynamic>? data;
 }

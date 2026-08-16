@@ -265,12 +265,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       body: BlocConsumer<ChatRoomCubit, ChatRoomState>(
         listenWhen: (previous, current) =>
             previous.messages.length != current.messages.length ||
+            previous.error != current.error ||
             (current.messages.isNotEmpty &&
                 previous.messages.isNotEmpty &&
                 previous.messages.last.id != current.messages.last.id) ||
             (previous.loading && !current.loading),
         listener: (context, state) {
-          if (state.error != null) {
+          if (state.error != null && state.error!.isNotEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.error!)),
             );

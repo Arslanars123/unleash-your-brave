@@ -5,10 +5,9 @@ import { tokenStorage } from '@/shared/lib/token-storage';
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
 
-function toWsUrl(httpBase: string): string {
-  const url = new URL(httpBase.replace(/\/$/, ''));
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.pathname = `${url.pathname.replace(/\/$/, '')}/chat/ws`;
+function toStreamUrl(httpBase: string, token: string): string {
+  const url = new URL(`${httpBase.replace(/\/$/, '')}/chat/stream`);
+  url.searchParams.set('access_token', token);
   return url.toString();
 }
 
@@ -35,12 +34,12 @@ export type ChatSocketHandle = {
 };
 
 /**
- * Live group chat over WebSocket (/api/v1/chat/ws) — same hub events as the mobile app.
- * Messenger uses MQTT-over-WebSocket; we use plain WebSocket pub/sub for the same instant UX.
+ * Live group chat over SSE (`/chat/stream`).
+ * App Runner rejects WebSocket upgrades (403); SSE is the supported realtime path.
  */
 export function useChatRealtime(enabled = true): ChatSocketHandle {
   const queryClient = useQueryClient();
-  const socketRef = useRef<WebSocket | null>(null);
+  const connectedRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -50,8 +49,8 @@ export function useChatRealtime(enabled = true): ChatSocketHandle {
 
     let closed = false;
     let retryTimer: number | undefined;
-    let pingTimer: number | undefined;
-    let socket: WebSocket | null = null;
+    let source: EventSource | null = null;
+    let pollTimer: number | undefined;
 
     const applyEvent = (data: {
       type?: string;
@@ -84,68 +83,67 @@ export function useChatRealtime(enabled = true): ChatSocketHandle {
 
     const connect = () => {
       if (closed) return;
+      source?.close();
+      source = new EventSource(toStreamUrl(apiBase, token));
 
-      const url = `${toWsUrl(apiBase)}?access_token=${encodeURIComponent(token)}`;
-      socket = new WebSocket(url);
-      socketRef.current = socket;
-
-      socket.onopen = () => {
-        pingTimer = window.setInterval(() => {
-          if (socket?.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, 25_000);
+      source.onopen = () => {
+        connectedRef.current = true;
       };
 
-      socket.onmessage = (event) => {
+      const onFrame = (event: MessageEvent<string>) => {
         try {
           const data = JSON.parse(String(event.data)) as {
             type?: string;
             payload?: { message?: ChatMessageView; messageId?: string };
           };
+          // Named SSE events include type in data JSON already.
+          if (!data.type && event.type && event.type !== 'message') {
+            data.type = event.type;
+          }
           applyEvent(data);
         } catch {
           // ignore malformed frames
         }
       };
 
-      socket.onclose = () => {
-        socketRef.current = null;
-        if (pingTimer) window.clearInterval(pingTimer);
+      source.addEventListener('connected', onFrame);
+      source.addEventListener('message.created', onFrame);
+      source.addEventListener('message.deleted', onFrame);
+      source.addEventListener('group.updated', onFrame);
+      source.addEventListener('receipt.delivered', onFrame);
+      source.addEventListener('receipt.read', onFrame);
+      source.onmessage = onFrame;
+
+      source.onerror = () => {
+        connectedRef.current = false;
+        source?.close();
+        source = null;
         if (!closed) {
           retryTimer = window.setTimeout(connect, 2_000);
         }
       };
-
-      socket.onerror = () => {
-        socket?.close();
-      };
     };
 
     connect();
+    // Lightweight poll backup while SSE reconnects.
+    pollTimer = window.setInterval(() => {
+      void queryClient.invalidateQueries({ queryKey: ['chat', 'messages'] });
+      void queryClient.invalidateQueries({ queryKey: ['chat', 'group'] });
+    }, 8_000);
 
     return () => {
       closed = true;
+      connectedRef.current = false;
       if (retryTimer) window.clearTimeout(retryTimer);
-      if (pingTimer) window.clearInterval(pingTimer);
-      socket?.close();
-      socketRef.current = null;
+      if (pollTimer) window.clearInterval(pollTimer);
+      source?.close();
     };
   }, [enabled, queryClient]);
 
   return {
-    ready: () => socketRef.current?.readyState === WebSocket.OPEN,
-    sendText: (body, clientId) => {
-      const ws = socketRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return false;
-      ws.send(JSON.stringify({ type: 'chat.send', clientId, body }));
-      return true;
-    },
-    deleteMessage: (messageId) => {
-      const ws = socketRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return false;
-      ws.send(JSON.stringify({ type: 'chat.delete', messageId }));
-      return true;
-    },
+    ready: () => connectedRef.current,
+    // Send always goes over HTTP — App Runner WS is unavailable.
+    sendText: () => false,
+    deleteMessage: () => false,
   };
 }
