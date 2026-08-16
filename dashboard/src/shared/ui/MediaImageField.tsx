@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { ImagePlus } from 'lucide-react';
 import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
+import { prepareImageForUpload } from '@/shared/lib/compress-image';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
@@ -34,7 +35,7 @@ export function MediaImageField({
   error,
   disabled = false,
   onChange,
-  hint = 'JPEG, PNG, WebP, or GIF · max 5MB · stored in cloud storage',
+  hint = 'Any photo size — resized & compressed automatically before upload',
 }: MediaImageFieldProps) {
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,18 +47,19 @@ export function MediaImageField({
       toast.error('Please choose an image file');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be 5MB or smaller');
-      return;
-    }
 
     setUploading(true);
     try {
-      const uploaded = await uploadsApi.uploadImage(file);
+      const prepared = await prepareImageForUpload(file);
+      const uploaded = await uploadsApi.uploadImage(prepared);
       onChange(uploaded.url);
       toast.success('Image uploaded');
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Unable to upload image'));
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : getApiErrorMessage(err, 'Unable to upload image'),
+      );
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -71,7 +73,7 @@ export function MediaImageField({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
           hidden
           onChange={(e) => void handleUpload(e.target.files?.[0])}
         />

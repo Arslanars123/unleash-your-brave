@@ -20,6 +20,14 @@ class ApiConstants {
   static const posts = '/posts';
   static const memberships = '/memberships';
   static const upgradeMyMembership = '/users/me/membership';
+  static const checkoutCatalog = '/checkout/catalog';
+  static const checkoutEligibility = '/checkout/eligibility';
+  static const checkoutSessions = '/checkout/sessions';
+
+  /// Stripe success / cancel pages on the marketing site.
+  static const checkoutSuccessUrl =
+      'https://www.fittoprofit.com/checkout/success?session_id={CHECKOUT_SESSION_ID}';
+  static const checkoutCancelUrl = 'https://www.fittoprofit.com/checkout';
 
   // Chat endpoints
   static const chatGroup = '/chat/group';
@@ -49,4 +57,5 @@ class StorageKeys {
   static const chatLastSync = 'chat_last_sync';
   static const fcmToken = 'fcm_token';
   static const pushNotificationsEnabled = 'push_notifications_enabled';
+  static const onboardingCompleted = 'onboarding_completed';
 }

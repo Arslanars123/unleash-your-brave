@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
@@ -12,6 +13,10 @@ import 'package:unleash_your_brave/features/chat/presentation/chat_assets.dart';
 import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_room_cubit.dart';
 import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_cubit.dart';
 
+/// Distance from the bottom that counts as "following" the latest messages
+/// (WhatsApp-style stick-to-bottom buffer).
+const _kBottomStickThreshold = 120.0;
+
 class ChatRoomPage extends StatefulWidget {
   const ChatRoomPage({super.key});
 
@@ -23,7 +28,11 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   final _scrollController = ScrollController();
   final _messageController = TextEditingController();
   final _focusNode = FocusNode();
-  
+
+  String? _lastSeenMessageId;
+  int _lastMessageCount = 0;
+  bool _initialScrollDone = false;
+
   @override
   void initState() {
     super.initState();
@@ -32,22 +41,65 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _messageController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
-  void _onScroll() {
-    final cubit = context.read<ChatRoomCubit>();
-    final isNearBottom = _scrollController.hasClients &&
-        _scrollController.offset >= _scrollController.position.maxScrollExtent - 100;
-    
-    cubit.updateScrollPosition(isNearBottom);
+  bool get _isNearBottom {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    if (!position.hasContentDimensions) return true;
+    return position.maxScrollExtent - position.pixels <= _kBottomStickThreshold;
+  }
 
-    // Load more when near top
-    if (_scrollController.position.pixels <= 100) {
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final cubit = context.read<ChatRoomCubit>();
+    final nearBottom = _isNearBottom;
+    cubit.updateScrollPosition(nearBottom);
+
+    // Load older history near the top.
+    if (_scrollController.position.pixels <= 80) {
       cubit.loadOlder();
+    }
+
+    // Mark latest as read once the user is back at the bottom.
+    if (nearBottom && cubit.state.messages.isNotEmpty) {
+      cubit.markVisibleRead(cubit.state.messages.last.id);
+    }
+  }
+
+  void _scrollToBottom({bool animated = true}) {
+    void jump() {
+      if (!_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      if (animated) {
+        _scrollController.animateTo(
+          max,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _scrollController.jumpTo(max);
+      }
+    }
+
+    // Wait for the list to layout after new items are inserted.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      jump();
+      SchedulerBinding.instance.addPostFrameCallback((_) => jump());
+    });
+  }
+
+  void _jumpToLatest() {
+    context.read<ChatRoomCubit>().clearScrolledUpUnread();
+    _scrollToBottom(animated: true);
+    final messages = context.read<ChatRoomCubit>().state.messages;
+    if (messages.isNotEmpty) {
+      context.read<ChatRoomCubit>().markVisibleRead(messages.last.id);
     }
   }
 
@@ -56,17 +108,42 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     if (text.isNotEmpty) {
       context.read<ChatRoomCubit>().sendText(text);
       _messageController.clear();
-      _scrollToBottom();
+      _scrollToBottom(animated: true);
     }
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+  void _onMessagesUpdated(ChatRoomState state) {
+    final messages = state.messages;
+    if (messages.isEmpty) return;
+
+    final latestId = messages.last.id;
+    final count = messages.length;
+    final isNewMessage = latestId != _lastSeenMessageId || count > _lastMessageCount;
+    final previousCount = _lastMessageCount;
+
+    _lastSeenMessageId = latestId;
+    _lastMessageCount = count;
+
+    // First paint after initial load — jump to latest (no animation).
+    if (!_initialScrollDone && !state.loading) {
+      _initialScrollDone = true;
+      _scrollToBottom(animated: false);
+      context.read<ChatRoomCubit>().markVisibleRead(latestId);
+      return;
+    }
+
+    if (!isNewMessage) return;
+
+    // History prepend (older messages) — do not jump to bottom.
+    if (count > previousCount && previousCount > 0 && !state.isNearBottom) {
+      // Incoming while scrolled up: counter handled in cubit; keep place.
+      return;
+    }
+
+    // Stick to bottom for own sends and for incoming while following latest.
+    if (state.isNearBottom) {
+      _scrollToBottom(animated: true);
+      context.read<ChatRoomCubit>().markVisibleRead(latestId);
     }
   }
 
@@ -105,7 +182,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         onGifTap: (gifUrl) {
           cubit.sendGif(gifUrl);
           Navigator.pop(sheetContext);
-          _scrollToBottom();
+          _scrollToBottom(animated: true);
         },
       ),
     );
@@ -128,166 +205,225 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        backgroundColor: AppColors.bgBase,
-        appBar: AppBar(
-          backgroundColor: AppColors.bgCard,
-          elevation: 0,
-          leading: IconButton(
-            onPressed: () => context.pop(),
-            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          ),
-          title: BlocBuilder<ChatUnreadCubit, ChatUnreadState>(
-            builder: (context, unreadState) {
-              final group = unreadState.group;
-              return InkWell(
-                onTap: _showMembersSheet,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+      backgroundColor: AppColors.bgBase,
+      appBar: AppBar(
+        backgroundColor: AppColors.bgCard,
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => context.pop(),
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+        ),
+        title: BlocBuilder<ChatUnreadCubit, ChatUnreadState>(
+          builder: (context, unreadState) {
+            final group = unreadState.group;
+            return InkWell(
+              onTap: _showMembersSheet,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      group?.name ?? 'Group Chat',
+                      style: AppTypography.body.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 17,
+                      ),
+                    ),
+                    if (group != null)
                       Text(
-                        group?.name ?? 'Group Chat',
-                        style: AppTypography.body.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 17,
+                        '${group.memberCount} members · tap for info',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textTertiary,
+                          fontSize: 12,
                         ),
                       ),
-                      if (group != null)
-                        Text(
-                          '${group.memberCount} members · tap for info',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.textTertiary,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        actions: [
+          BlocBuilder<ChatUnreadCubit, ChatUnreadState>(
+            builder: (context, state) {
+              return Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: 16),
+                decoration: BoxDecoration(
+                  color: state.connected ? Colors.green : AppColors.textTertiary,
+                  borderRadius: BorderRadius.circular(4),
                 ),
               );
             },
           ),
-          actions: [
-            BlocBuilder<ChatUnreadCubit, ChatUnreadState>(
-              builder: (context, state) {
-                return Container(
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.only(right: 16),
-                  decoration: BoxDecoration(
-                    color: state.connected ? Colors.green : AppColors.textTertiary,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-        body: BlocConsumer<ChatRoomCubit, ChatRoomState>(
-          listener: (context, state) {
-            if (state.error != null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.error!)),
-              );
-            }
-          },
-          builder: (context, state) {
-            if (state.loading && state.messages.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            return Column(
-              children: [
-                // Messages list
-                Expanded(
-                  child: Stack(
-                    children: [
-                      ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: state.messages.length + (state.loadingMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == 0 && state.loadingMore) {
-                            return const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: CircularProgressIndicator(),
-                              ),
-                            );
-                          }
-                          
-                          final messageIndex = state.loadingMore ? index - 1 : index;
-                          final message = state.messages[messageIndex];
-                          return _MessageBubble(
-                            message: message,
-                            onReactionTap: (emoji) => _addReaction(message.id, emoji),
-                          );
-                        },
-                      ),
-                      // New messages indicator
-                      if (!state.isNearBottom && state.newMessageCountWhileScrolledUp > 0)
-                        Positioned(
-                          bottom: 16,
-                          right: 16,
-                          child: InkWell(
-                            onTap: _scrollToBottom,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: AppColors.accentPink,
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.3),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '${state.newMessageCountWhileScrolledUp} new',
-                                    style: AppTypography.caption.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  const Icon(
-                                    Icons.keyboard_arrow_down,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // Message composer
-                _MessageComposer(
-                  controller: _messageController,
-                  focusNode: _focusNode,
-                  onSend: _sendMessage,
-                  onEmojiTap: _showEmojiSheet,
-                  onGifTap: _showGifSheet,
-                  sending: state.sending,
-                ),
-              ],
+        ],
+      ),
+      body: BlocConsumer<ChatRoomCubit, ChatRoomState>(
+        listenWhen: (previous, current) =>
+            previous.messages.length != current.messages.length ||
+            (current.messages.isNotEmpty &&
+                previous.messages.isNotEmpty &&
+                previous.messages.last.id != current.messages.last.id) ||
+            (previous.loading && !current.loading),
+        listener: (context, state) {
+          if (state.error != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.error!)),
             );
-          },
-        ),
+          }
+          _onMessagesUpdated(state);
+        },
+        builder: (context, state) {
+          if (state.loading && state.messages.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final showJumpFab = !state.isNearBottom;
+
+          return Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      itemCount:
+                          state.messages.length + (state.loadingMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == 0 && state.loadingMore) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16),
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+
+                        final messageIndex =
+                            state.loadingMore ? index - 1 : index;
+                        final message = state.messages[messageIndex];
+                        return _MessageBubble(
+                          message: message,
+                          onReactionTap: (emoji) =>
+                              _addReaction(message.id, emoji),
+                        );
+                      },
+                    ),
+                    // WhatsApp-style jump-to-latest FAB + unread badge
+                    if (showJumpFab)
+                      Positioned(
+                        right: 14,
+                        bottom: 14,
+                        child: _JumpToLatestFab(
+                          unreadCount: state.newMessageCountWhileScrolledUp,
+                          onTap: _jumpToLatest,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              _MessageComposer(
+                controller: _messageController,
+                focusNode: _focusNode,
+                onSend: _sendMessage,
+                onEmojiTap: _showEmojiSheet,
+                onGifTap: _showGifSheet,
+                sending: state.sending,
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
   void _addReaction(String messageId, String emoji) {
     context.read<ChatRoomCubit>().addReaction(messageId, emoji);
+  }
+}
+
+class _JumpToLatestFab extends StatelessWidget {
+  const _JumpToLatestFab({
+    required this.unreadCount,
+    required this.onTap,
+  });
+
+  final int unreadCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.bgCard,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.borderSubtle),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: AppColors.textPrimary,
+                size: 28,
+              ),
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                top: -6,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 22),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentPink,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    unreadCount > 99 ? '99+' : '$unreadCount',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.caption.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -27,7 +27,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof MulterError) {
     const message =
       err.code === 'LIMIT_FILE_SIZE'
-        ? 'File is too large (images max 5MB, materials max 50MB)'
+        ? 'File is too large (images max 10MB after compression, materials max 50MB)'
         : err.message || 'Upload failed';
     const body: ErrorEnvelope = {
       success: false,

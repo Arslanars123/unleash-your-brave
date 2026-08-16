@@ -89,5 +89,5 @@ function createUploader(folder: 'events' | 'materials', allowed: Set<string>, ma
   });
 }
 
-export const imageUpload = createUploader('events', IMAGE_MIME, 5 * 1024 * 1024);
+export const imageUpload = createUploader('events', IMAGE_MIME, 10 * 1024 * 1024);
 export const materialUpload = createUploader('materials', MATERIAL_MIME, 50 * 1024 * 1024);

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show Color;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -64,7 +65,7 @@ class PushNotificationService {
 
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings('@drawable/ic_stat_uyb');
     const iosInit = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -228,7 +229,12 @@ class PushNotificationService {
           channelDescription: channel.description,
           importance: Importance.high,
           priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+          // Small status-bar icon must be white-on-transparent.
+          icon: '@drawable/ic_stat_uyb',
+          color: const Color(0xFFF04E93),
+          largeIcon: const DrawableResourceAndroidBitmap(
+            '@drawable/ic_notification_brand',
+          ),
           tag: isAnnouncement
               ? (message.data['announcementId'] as String? ?? 'announcement')
               : (message.data['groupId'] as String? ?? 'chat'),

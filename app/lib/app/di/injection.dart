@@ -34,7 +34,8 @@ Future<void> configureDependencies() async {
   final prefs = await SharedPreferences.getInstance();
 
   // Core
-  sl.registerLazySingleton(() => TokenStorage(prefs));
+  sl.registerLazySingleton<SharedPreferences>(() => prefs);
+  sl.registerLazySingleton(() => TokenStorage(sl()));
   sl.registerLazySingleton(() => DioClient(sl()));
 
   // Auth data
@@ -55,7 +56,7 @@ Future<void> configureDependencies() async {
 
   // Chat data
   sl.registerLazySingleton(() => ChatRemoteDataSource(sl(), sl()));
-  sl.registerLazySingleton(() => ChatLocalDataSource(prefs));
+  sl.registerLazySingleton(() => ChatLocalDataSource(sl()));
   sl.registerLazySingleton<ChatRepository>(
     () => ChatRepositoryImpl(remote: sl(), local: sl()),
   );
@@ -64,12 +65,12 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => ChatUnreadCubit(sl()));
 
   // Push notifications
-  sl.registerLazySingleton(() => PushNotificationService(sl(), prefs));
+  sl.registerLazySingleton(() => PushNotificationService(sl(), sl()));
 
   // Home / events / agenda / announcements
   sl.registerLazySingleton(() => EventsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => SessionsRemoteDataSource(sl()));
-  sl.registerLazySingleton(() => AgendaLocalDataSource(prefs));
+  sl.registerLazySingleton(() => AgendaLocalDataSource(sl()));
   sl.registerLazySingleton(() => AnnouncementsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => CheckInRemoteDataSource(sl()));
   sl.registerLazySingleton(() => PostsRemoteDataSource(sl()));

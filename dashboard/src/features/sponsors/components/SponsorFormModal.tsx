@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ImagePlus, Link2, Plus, Trash2, X } from 'lucide-react';
 import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
+import { prepareImageForUpload } from '@/shared/lib/compress-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type { PublicSponsor, SponsorPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -217,14 +218,11 @@ export function SponsorFormModal({
       toast.error('Please choose an image file');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be 5MB or smaller');
-      return;
-    }
 
     setUploading(target);
     try {
-      const uploaded = await uploadsApi.uploadImage(file);
+      const prepared = await prepareImageForUpload(file);
+      const uploaded = await uploadsApi.uploadImage(prepared);
       if (target === 'sponsor') {
         update('image', uploaded.url);
       } else {
@@ -233,7 +231,11 @@ export function SponsorFormModal({
       }
       toast.success('Image uploaded');
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to upload image'));
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : getApiErrorMessage(error, 'Unable to upload image'),
+      );
     } finally {
       setUploading(null);
       if (target === 'sponsor' && sponsorImageRef.current) sponsorImageRef.current.value = '';

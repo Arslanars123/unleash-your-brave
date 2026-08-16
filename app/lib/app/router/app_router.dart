@@ -22,6 +22,7 @@ import 'package:unleash_your_brave/features/chat/presentation/pages/chat_room_pa
 import 'package:unleash_your_brave/features/home/presentation/pages/home_page.dart';
 import 'package:unleash_your_brave/features/legal/presentation/pages/legal_document_page.dart';
 import 'package:unleash_your_brave/features/map/presentation/pages/map_page.dart';
+import 'package:unleash_your_brave/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/edit_profile_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/main_shell.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/profile_page.dart';
@@ -41,10 +42,12 @@ class AppRouter {
       final authState = sl<AuthBloc>().state;
       final location = state.matchedLocation;
       final onSplash = location == '/splash';
+      final onOnboarding = location == '/onboarding';
       final onAuthGate = location == '/login' ||
           location == '/signup' ||
           location == '/verify-code' ||
-          location == '/forgot-password';
+          location == '/forgot-password' ||
+          onOnboarding;
       final onSetPassword = location == '/set-password';
 
       // Cold start / session restore only — never bounce form submits to splash.
@@ -55,6 +58,12 @@ class AppRouter {
 
       // Splash decides when to leave after its animation hold.
       if (onSplash) return null;
+
+      // Form submit / transient error — keep the current route. AuthLoading is not
+      // "logged out"; treating it that way flashes /login during set-password.
+      if (authState is AuthLoading || authState is AuthFailureState) {
+        return null;
+      }
 
       final signedIn = authState is AuthAuthenticated;
       final mustChange = authState is AuthAuthenticated &&
@@ -67,6 +76,10 @@ class AppRouter {
     },
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashPage()),
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, state) => const OnboardingPage(),
+      ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(path: '/signup', builder: (context, state) => const SignupPage()),
       GoRoute(

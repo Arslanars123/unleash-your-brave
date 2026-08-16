@@ -191,7 +191,9 @@ class AuthBrandHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const BrandLogo(height: 72, alignment: Alignment.center),
+        const _AuthLogoGlow(
+          child: BrandLogo(height: 72, alignment: Alignment.center),
+        ),
         SizedBox(height: context.isShortViewport ? 18 : 28),
         Text(
           title,
@@ -207,6 +209,58 @@ class AuthBrandHeader extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _AuthLogoGlow extends StatefulWidget {
+  const _AuthLogoGlow({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AuthLogoGlow> createState() => _AuthLogoGlowState();
+}
+
+class _AuthLogoGlowState extends State<_AuthLogoGlow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        final t = Curves.easeInOut.transform(_pulse.value);
+        return Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.accentPink.withValues(alpha: 0.1 + (0.08 * t)),
+                blurRadius: 28 + (10 * t),
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }

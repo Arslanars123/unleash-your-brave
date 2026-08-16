@@ -161,6 +161,8 @@ export class PushNotificationService {
             channelId: params.androidChannelId,
             tag: params.androidTag,
             clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+            icon: 'ic_stat_uyb',
+            color: '#F04E93',
           },
         },
         apns: {

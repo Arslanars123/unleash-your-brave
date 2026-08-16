@@ -8,6 +8,8 @@ import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/utils/app_toast.dart';
 import 'package:unleash_your_brave/core/utils/validators.dart';
 import 'package:unleash_your_brave/core/widgets/adaptive_page.dart';
+import 'package:unleash_your_brave/core/widgets/auth_ambient_background.dart';
+import 'package:unleash_your_brave/core/widgets/staggered_entrance.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/auth/presentation/widgets/auth_form_fields.dart';
 
@@ -59,141 +61,156 @@ class _SignupPageState extends State<SignupPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgBase,
-      body: BlocConsumer<AuthBloc, AuthState>(
-        listenWhen: (previous, current) =>
-            current is AuthAuthenticated || current is AuthFailureState,
-        listener: (context, state) {
-          if (state is AuthAuthenticated) {
-            AppToast.success('Account created — welcome!');
-            context.go('/');
-          } else if (state is AuthFailureState) {
-            AppToast.error(state.message);
-          }
-        },
-        builder: (context, state) {
-          final loading = state is AuthLoading;
+      body: AuthAmbientBackground(
+        child: BlocConsumer<AuthBloc, AuthState>(
+          listenWhen: (previous, current) =>
+              current is AuthAuthenticated || current is AuthFailureState,
+          listener: (context, state) {
+            if (state is AuthAuthenticated) {
+              AppToast.success('Account created — welcome!');
+              context.go('/');
+            } else if (state is AuthFailureState) {
+              AppToast.error(state.message);
+            }
+          },
+          builder: (context, state) {
+            final loading = state is AuthLoading;
 
-          return AdaptiveCenteredBody(
-            child: Form(
-              key: _formKey,
-              autovalidateMode: _autovalidateMode,
-              child: AutofillGroup(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const AuthBrandHeader(
-                      title: 'Sign up',
-                      subtitle:
-                          'Sign up with email and password. No social login.',
-                    ),
-                    SizedBox(height: context.sectionGap),
-                    Container(
-                      padding: context.cardPadding,
-                      decoration: BoxDecoration(
-                        color: AppColors.bgCard,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.borderSubtle),
+            return AdaptiveCenteredBody(
+              child: Form(
+                key: _formKey,
+                autovalidateMode: _autovalidateMode,
+                child: AutofillGroup(
+                  child: StaggeredColumn(
+                    children: [
+                      const AuthBrandHeader(
+                        title: 'Sign up',
+                        subtitle:
+                            'Sign up with email and password. No social login.',
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          AuthTextField(
-                            controller: _nameController,
-                            label: 'Full name',
-                            prefixIcon: Icons.person_outline_rounded,
-                            textInputAction: TextInputAction.next,
-                            enabled: !loading,
-                            autofillHints: const [AutofillHints.name],
-                            validator: Validators.name,
-                          ),
-                          const SizedBox(height: 14),
-                          AuthTextField(
-                            controller: _emailController,
-                            label: 'Email',
-                            prefixIcon: Icons.mail_outline_rounded,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            enabled: !loading,
-                            autofillHints: const [AutofillHints.email],
-                            inputFormatters: [
-                              FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                            ],
-                            validator: Validators.email,
-                          ),
-                          const SizedBox(height: 14),
-                          AuthTextField(
-                            controller: _passwordController,
-                            label: 'Password',
-                            prefixIcon: Icons.lock_outline_rounded,
-                            obscureText: _obscurePassword,
-                            enabled: !loading,
-                            onChanged: (value) =>
-                                setState(() => _password = value),
-                            onToggleObscure: () {
-                              setState(
-                                  () => _obscurePassword = !_obscurePassword);
-                            },
-                            textInputAction: TextInputAction.next,
-                            autofillHints: const [AutofillHints.newPassword],
-                            validator: Validators.signupPassword,
-                          ),
-                          PasswordStrengthMeter(password: _password),
-                          const SizedBox(height: 14),
-                          AuthTextField(
-                            controller: _confirmPasswordController,
-                            label: 'Confirm password',
-                            prefixIcon: Icons.lock_outline_rounded,
-                            obscureText: _obscureConfirm,
-                            enabled: !loading,
-                            onToggleObscure: () {
-                              setState(
-                                  () => _obscureConfirm = !_obscureConfirm);
-                            },
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _submit(),
-                            autofillHints: const [AutofillHints.newPassword],
-                            validator: (value) => Validators.confirmPassword(
-                              value,
-                              _passwordController.text,
-                            ),
-                          ),
-                          SizedBox(height: context.isShortViewport ? 18 : 24),
-                          AuthPrimaryButton(
-                            label: 'Create account',
-                            loading: loading,
-                            onPressed: _submit,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: loading ? null : () => context.go('/login'),
-                      child: Text.rich(
-                        textAlign: TextAlign.center,
-                        TextSpan(
-                          style: AppTypography.caption,
-                          children: [
-                            const TextSpan(text: 'Already have an account? '),
-                            TextSpan(
-                              text: 'Sign in',
-                              style: AppTypography.caption.copyWith(
-                                color: AppColors.accentPink,
-                                fontWeight: FontWeight.w600,
+                      SizedBox(height: context.sectionGap),
+                      Container(
+                        padding: context.cardPadding,
+                        decoration: BoxDecoration(
+                          color: AppColors.bgCard.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.borderSubtle),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.accentPink.withValues(
+                                alpha: 0.06,
                               ),
+                              blurRadius: 28,
+                              offset: const Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            AuthTextField(
+                              controller: _nameController,
+                              label: 'Full name',
+                              prefixIcon: Icons.person_outline_rounded,
+                              textInputAction: TextInputAction.next,
+                              enabled: !loading,
+                              autofillHints: const [AutofillHints.name],
+                              validator: Validators.name,
+                            ),
+                            const SizedBox(height: 14),
+                            AuthTextField(
+                              controller: _emailController,
+                              label: 'Email',
+                              prefixIcon: Icons.mail_outline_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              enabled: !loading,
+                              autofillHints: const [AutofillHints.email],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(
+                                  RegExp(r'\s'),
+                                ),
+                              ],
+                              validator: Validators.email,
+                            ),
+                            const SizedBox(height: 14),
+                            AuthTextField(
+                              controller: _passwordController,
+                              label: 'Password',
+                              prefixIcon: Icons.lock_outline_rounded,
+                              obscureText: _obscurePassword,
+                              enabled: !loading,
+                              onChanged: (value) =>
+                                  setState(() => _password = value),
+                              onToggleObscure: () {
+                                setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                );
+                              },
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const [AutofillHints.newPassword],
+                              validator: Validators.signupPassword,
+                            ),
+                            PasswordStrengthMeter(password: _password),
+                            const SizedBox(height: 14),
+                            AuthTextField(
+                              controller: _confirmPasswordController,
+                              label: 'Confirm password',
+                              prefixIcon: Icons.lock_outline_rounded,
+                              obscureText: _obscureConfirm,
+                              enabled: !loading,
+                              onToggleObscure: () {
+                                setState(
+                                  () => _obscureConfirm = !_obscureConfirm,
+                                );
+                              },
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _submit(),
+                              autofillHints: const [AutofillHints.newPassword],
+                              validator: (value) => Validators.confirmPassword(
+                                value,
+                                _passwordController.text,
+                              ),
+                            ),
+                            SizedBox(
+                              height: context.isShortViewport ? 18 : 24,
+                            ),
+                            AuthPrimaryButton(
+                              label: 'Create account',
+                              loading: loading,
+                              onPressed: _submit,
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: loading ? null : () => context.go('/login'),
+                        child: Text.rich(
+                          textAlign: TextAlign.center,
+                          TextSpan(
+                            style: AppTypography.caption,
+                            children: [
+                              const TextSpan(text: 'Already have an account? '),
+                              TextSpan(
+                                text: 'Sign in',
+                                style: AppTypography.caption.copyWith(
+                                  color: AppColors.accentPink,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

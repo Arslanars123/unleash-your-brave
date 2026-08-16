@@ -4,6 +4,7 @@ import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
 import { VenuePlacesField } from '@/features/events/components/VenuePlacesField';
 import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
+import { prepareImageForUpload } from '@/shared/lib/compress-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type { EventPayload, PublicEvent, ScheduleEventPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -278,18 +279,19 @@ export function EventFormModal({
       toast.error('Please choose an image file');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be 5MB or smaller');
-      return;
-    }
 
     setUploading(true);
     try {
-      const uploaded = await uploadsApi.uploadImage(file);
+      const prepared = await prepareImageForUpload(file);
+      const uploaded = await uploadsApi.uploadImage(prepared);
       update('coverImage', uploaded.url);
       toast.success('Cover image uploaded');
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to upload image'));
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : getApiErrorMessage(error, 'Unable to upload image'),
+      );
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -615,7 +617,7 @@ export function EventFormModal({
                     <img src={resolveMediaUrl(values.coverImage)} alt="Event cover preview" />
                   </div>
                 ) : null}
-                <p className="hint">JPEG, PNG, WebP, or GIF · max 5MB</p>
+                <p className="hint">Any photo size — resized & compressed automatically</p>
               </div>
             </>
           ) : null}

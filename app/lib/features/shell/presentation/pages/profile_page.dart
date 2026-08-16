@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
+import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
 import 'package:unleash_your_brave/core/notifications/push_notification_service.dart';
 import 'package:unleash_your_brave/core/responsive/responsive.dart';
@@ -17,6 +18,13 @@ import 'package:unleash_your_brave/features/home/data/datasources/events_remote_
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
 import 'package:unleash_your_brave/features/memberships/domain/entities/membership_entity.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+({String firstName, String lastName}) _splitDisplayName(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return (firstName: 'Attendee', lastName: 'Member');
+  if (parts.length == 1) return (firstName: parts.first, lastName: parts.first);
+  return (firstName: parts.first, lastName: parts.sublist(1).join(' '));
+}
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -316,16 +324,35 @@ class _MembershipSection extends StatefulWidget {
   State<_MembershipSection> createState() => _MembershipSectionState();
 }
 
-class _MembershipSectionState extends State<_MembershipSection> {
+class _MembershipSectionState extends State<_MembershipSection>
+    with WidgetsBindingObserver {
   bool _loading = true;
   bool _upgrading = false;
+  bool _awaitingCheckoutReturn = false;
   String? _error;
   List<MembershipEntity> _memberships = const [];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _awaitingCheckoutReturn) {
+      _awaitingCheckoutReturn = false;
+      if (!mounted) return;
+      context.read<AuthBloc>().add(const AuthRefreshRequested());
+      AppToast.success('If payment succeeded, your membership will update shortly.');
+    }
   }
 
   @override
@@ -349,10 +376,20 @@ class _MembershipSectionState extends State<_MembershipSection> {
       } catch (_) {
         // Fall back to all memberships if event lookup fails.
       }
-      final items = await sl<MembershipsRemoteDataSource>().list(eventId: eventId);
+      List<MembershipEntity> items;
+      try {
+        items = await sl<MembershipsRemoteDataSource>().catalog(eventId: eventId);
+      } catch (_) {
+        items = await sl<MembershipsRemoteDataSource>().list(eventId: eventId);
+      }
       if (!mounted) return;
       setState(() {
-        _memberships = [...items]..sort((a, b) => a.price.compareTo(b.price));
+        _memberships = [...items]
+          ..sort((a, b) {
+            final bySort = a.sortOrder.compareTo(b.sortOrder);
+            if (bySort != 0) return bySort;
+            return a.price.compareTo(b.price);
+          });
         _loading = false;
       });
     } on NetworkException catch (error) {
@@ -390,13 +427,15 @@ class _MembershipSectionState extends State<_MembershipSection> {
     if (id == null || id.isEmpty) {
       return _memberships;
     }
-    final currentPrice = _current?.price ?? 0;
+    final currentRank = _current?.upgradeRank ?? 0;
     return _memberships
-        .where((m) => m.id != id && m.price > currentPrice)
+        .where((m) => m.id != id && m.upgradeRank > currentRank)
         .toList(growable: false);
   }
 
   Future<void> _upgrade(MembershipEntity membership) async {
+    final isUpgrade = widget.user.membershipId != null &&
+        widget.user.membershipId!.isNotEmpty;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -405,15 +444,20 @@ class _MembershipSectionState extends State<_MembershipSection> {
           borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         ),
         title: Text(
-          'Upgrade to ${membership.name}?',
+          isUpgrade
+              ? 'Upgrade to ${membership.name}?'
+              : 'Purchase ${membership.name}?',
           style: AppTypography.body.copyWith(
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
         ),
         content: Text(
-          'Switch to ${membership.name} for ${membership.priceLabel}. '
-          'You can only move to a higher-priced tier.',
+          isUpgrade
+              ? 'You’ll complete a secure Stripe payment for ${membership.priceLabel}. '
+                  'Your membership updates automatically after payment.'
+              : 'You’ll complete a secure Stripe payment for ${membership.priceLabel}. '
+                  'Your pass unlocks after payment succeeds.',
           style: AppTypography.caption.copyWith(height: 1.45),
         ),
         actions: [
@@ -430,7 +474,7 @@ class _MembershipSectionState extends State<_MembershipSection> {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
-              'Confirm upgrade',
+              'Continue to payment',
               style: AppTypography.button.copyWith(
                 color: AppColors.accentPink,
                 fontSize: 14,
@@ -444,22 +488,51 @@ class _MembershipSectionState extends State<_MembershipSection> {
 
     setState(() => _upgrading = true);
     try {
-      final user =
-          await sl<MembershipsRemoteDataSource>().upgradeMyMembership(membership.id);
+      final ds = sl<MembershipsRemoteDataSource>();
+      final eligibility = await ds.checkEligibility(
+        email: widget.user.email,
+        membershipId: membership.id,
+      );
+      if (!eligibility.allowed) {
+        AppToast.error(eligibility.reason ?? 'This purchase is not allowed');
+        return;
+      }
+
+      final names = _splitDisplayName(widget.user.name);
+      final session = await ds.createCheckoutSession(
+        membershipId: membership.id,
+        email: widget.user.email,
+        firstName: names.firstName,
+        lastName: names.lastName,
+        successUrl: ApiConstants.checkoutSuccessUrl,
+        cancelUrl: ApiConstants.checkoutCancelUrl,
+      );
+
+      final uri = Uri.tryParse(session.checkoutUrl);
+      if (uri == null) {
+        AppToast.error('Invalid checkout link');
+        return;
+      }
+
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) {
+        AppToast.error('Unable to open Stripe checkout');
+        return;
+      }
+
+      _awaitingCheckoutReturn = true;
       if (!mounted) return;
-      context.read<AuthBloc>().add(AuthUserUpdated(user));
-      AppToast.success('Membership updated to ${membership.name}');
+      AppToast.success('Complete payment in your browser, then return to the app.');
     } on NetworkException catch (error) {
       AppToast.error(error.message);
     } on ServerException catch (error) {
       AppToast.error(error.message);
     } catch (_) {
-      AppToast.error('Unable to upgrade membership');
+      AppToast.error('Unable to start checkout');
     } finally {
       if (mounted) setState(() => _upgrading = false);
     }
   }
-
   void _showUpgradeSheet() {
     final upgrades = _upgrades;
     final current = _current;
@@ -501,8 +574,8 @@ class _MembershipSectionState extends State<_MembershipSection> {
                       const SizedBox(height: 6),
                       Text(
                         current == null
-                            ? 'Pick a tier to unlock restricted sessions and event access.'
-                            : 'Move to a higher-priced tier. Your current pass stays until you upgrade.',
+                            ? 'Pay securely with Stripe to unlock your pass and event access.'
+                            : 'Upgrade to a higher tier with Stripe. Your current pass stays until payment succeeds.',
                         style: AppTypography.caption.copyWith(height: 1.4),
                       ),
                     ],
@@ -764,8 +837,8 @@ class _MembershipSectionState extends State<_MembershipSection> {
                             children: [
                               Text(
                                 current == null
-                                    ? 'Browse memberships'
-                                    : 'View upgrade options',
+                                    ? 'Purchase with Stripe'
+                                    : 'Upgrade with Stripe',
                                 style: AppTypography.caption.copyWith(
                                   color: AppColors.textPrimary,
                                   fontWeight: FontWeight.w600,
@@ -862,7 +935,38 @@ class _MembershipTierheetCard extends StatelessWidget {
               ),
             ],
           ),
-          if (membership.description.isNotEmpty) ...[
+          if (membership.paymentPlanNote.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              membership.paymentPlanNote,
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textTertiary,
+              ),
+            ),
+          ],
+          if (membership.features.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...membership.features.take(4).map(
+                  (f) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('•  ', style: TextStyle(color: AppColors.accentPink)),
+                        Expanded(
+                          child: Text(
+                            f,
+                            style: AppTypography.caption.copyWith(
+                              height: 1.4,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ] else if (membership.description.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
               membership.description,
@@ -885,7 +989,7 @@ class _MembershipTierheetCard extends StatelessWidget {
                       : AppColors.accentPink.withValues(alpha: 0.85),
                 ),
                 child: Text(
-                  'Select ${membership.name}',
+                  'Pay ${membership.priceLabel}',
                   style: AppTypography.button.copyWith(fontSize: 14),
                 ),
               ),

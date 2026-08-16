@@ -152,10 +152,12 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       deliveryStatus: DeliveryStatus.sent,
     );
 
-    // Add optimistic message to UI
+    // Add optimistic message to UI — user is composing, stick to bottom.
     emit(state.copyWith(
       messages: _sortedByTimestamp([...state.messages, pendingMessage]),
       sending: false,
+      isNearBottom: true,
+      newMessageCountWhileScrolledUp: 0,
     ));
 
     // Send to backend
@@ -214,12 +216,24 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
   }
 
   void updateScrollPosition(bool isNearBottom) {
-    if (state.isNearBottom != isNearBottom) {
-      emit(state.copyWith(
-        isNearBottom: isNearBottom,
-        newMessageCountWhileScrolledUp: isNearBottom ? 0 : state.newMessageCountWhileScrolledUp,
-      ));
+    if (state.isNearBottom == isNearBottom &&
+        !(isNearBottom && state.newMessageCountWhileScrolledUp > 0)) {
+      return;
     }
+    emit(state.copyWith(
+      isNearBottom: isNearBottom,
+      newMessageCountWhileScrolledUp:
+          isNearBottom ? 0 : state.newMessageCountWhileScrolledUp,
+    ));
+  }
+
+  /// Clears the while-scrolled-up unread badge (e.g. after jumping to latest).
+  void clearScrolledUpUnread() {
+    if (state.newMessageCountWhileScrolledUp == 0 && state.isNearBottom) return;
+    emit(state.copyWith(
+      isNearBottom: true,
+      newMessageCountWhileScrolledUp: 0,
+    ));
   }
 
   void _connectSse() {
@@ -307,6 +321,9 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
           messages: _sortedByTimestamp(
             hasMatch ? updatedMessages : [...updatedMessages, message],
           ),
+          // Own messages should keep the user at the latest.
+          isNearBottom: true,
+          newMessageCountWhileScrolledUp: 0,
         ));
       } else {
         // New message from others — dedupe by id
@@ -314,13 +331,18 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
 
         markDelivered(message.id);
 
+        final stickToBottom = state.isNearBottom;
         final newCount =
-            state.isNearBottom ? 0 : state.newMessageCountWhileScrolledUp + 1;
+            stickToBottom ? 0 : state.newMessageCountWhileScrolledUp + 1;
 
         emit(state.copyWith(
           messages: _sortedByTimestamp([...state.messages, message]),
           newMessageCountWhileScrolledUp: newCount,
         ));
+
+        if (stickToBottom) {
+          markVisibleRead(message.id);
+        }
       }
     } catch (e) {
       // Skip malformed message events

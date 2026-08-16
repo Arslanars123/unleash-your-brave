@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ImagePlus, X } from 'lucide-react';
 import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
+import { prepareImageForUpload } from '@/shared/lib/compress-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type { PostPayload, PublicPost } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -95,17 +96,18 @@ export function PostFormModal({
       toast.error('Please choose an image file');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be under 5MB');
-      return;
-    }
 
     setUploading(true);
     try {
-      const uploaded = await uploadsApi.uploadImage(file);
+      const prepared = await prepareImageForUpload(file, { maxEdge: 1440 });
+      const uploaded = await uploadsApi.uploadImage(prepared);
       update('image', uploaded.url);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to upload image'));
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : getApiErrorMessage(error, 'Unable to upload image'),
+      );
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -154,7 +156,7 @@ export function PostFormModal({
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
                 hidden
                 onChange={(e) => void uploadImage(e.target.files?.[0])}
               />
@@ -168,6 +170,10 @@ export function PostFormModal({
                 Upload image
               </Button>
             </div>
+            <p className="hint">
+              Pick any photo from your device — it’s resized and compressed automatically
+              before upload (Instagram-style).
+            </p>
             <Input
               label="Image URL"
               name="image"
