@@ -22,13 +22,6 @@ function formatTime(iso: string): string {
   });
 }
 
-function roleLabel(role: string): string {
-  if (role === 'admin') return 'Admin';
-  if (role === 'speaker') return 'Speaker';
-  if (role === 'sponsor') return 'Sponsor';
-  return 'Attendee';
-}
-
 export function ChatPage() {
   const { user } = useAuth();
   const toast = useToast();
@@ -219,9 +212,6 @@ export function ChatPage() {
                     <div className={`chat-admin-bubble ${mine ? 'is-mine' : ''}`}>
                       <div className="chat-admin-name-row">
                         <strong>{mine ? 'You' : message.senderName}</strong>
-                        <span className={`chat-role-pill role-${message.senderRole}`}>
-                          {roleLabel(message.senderRole)}
-                        </span>
                       </div>
                       {message.type === 'gif' ? (
                         <p className="chat-admin-gif-removed">GIF</p>
@@ -288,10 +278,7 @@ export function ChatPage() {
               <li key={member.id}>
                 <div>
                   <strong>{member.name}</strong>
-                  <p className="muted">
-                    {roleLabel(member.role)}
-                    {member.title ? ` · ${member.title}` : ''}
-                  </p>
+                  {member.title ? <p className="muted">{member.title}</p> : null}
                 </div>
               </li>
             ))}
