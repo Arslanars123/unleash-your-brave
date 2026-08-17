@@ -80,6 +80,29 @@ export class UserService {
       'Attendee';
 
     if (existing) {
+      // Speakers/sponsors (and any account) may also buy membership. Keep their
+      // portal role/links; issue a fresh app invite when they still need first login.
+      const needsAppInvite = existing.mustChangePassword;
+      let inviteCode: string | undefined;
+      let invitePatch: Partial<{
+        inviteCodeHash: string;
+        inviteCodeExpiresAt: Date;
+        mustChangePassword: boolean;
+        passwordHash: string;
+      }> = {};
+
+      if (needsAppInvite) {
+        inviteCode = generateInviteCode();
+        invitePatch = {
+          inviteCodeHash: await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS),
+          inviteCodeExpiresAt: new Date(
+            Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+          ),
+          mustChangePassword: true,
+          passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
+        };
+      }
+
       const updated = await this.users.update(existing.id, {
         name: displayName,
         ...(firstName ? { firstName } : {}),
@@ -87,9 +110,10 @@ export class UserService {
         ...(input.product?.trim() ? { title: input.product.trim() } : {}),
         ...(input.contactId?.trim() ? { ghlContactId: input.contactId.trim() } : {}),
         status: 'active',
+        ...invitePatch,
       });
       if (!updated) throw new NotFoundError('User');
-      return { user: toPublicUser(updated), created: false };
+      return { user: toPublicUser(updated), created: false, inviteCode };
     }
 
     const inviteCode = generateInviteCode();
@@ -313,12 +337,13 @@ export class UserService {
         : role === 'sponsor'
           ? existing.sponsorId
           : null;
+    // Speakers/sponsors may also hold a membership (dual attendee access).
     const membershipId =
       input.membershipId !== undefined
         ? input.membershipId
-        : role === 'member'
-          ? existing.membershipId
-          : null;
+        : role === 'admin'
+          ? null
+          : existing.membershipId;
 
     if (input.role !== undefined || input.speakerId !== undefined || input.sponsorId !== undefined) {
       await this.assertProfileLinks(
@@ -329,7 +354,7 @@ export class UserService {
     }
 
     if (input.membershipId !== undefined || input.role !== undefined) {
-      await this.assertMembership(role === 'member' ? membershipId : null);
+      await this.assertMembership(role === 'admin' ? null : membershipId);
     }
 
     if (input.email && input.email.toLowerCase() !== existing.email) {
@@ -354,7 +379,7 @@ export class UserService {
           }
         : {}),
       ...(input.membershipId !== undefined || input.role !== undefined
-        ? { membershipId: role === 'member' ? membershipId : null }
+        ? { membershipId: role === 'admin' ? null : membershipId }
         : {}),
       ...(input.membershipStatus !== undefined
         ? { membershipStatus: input.membershipStatus }

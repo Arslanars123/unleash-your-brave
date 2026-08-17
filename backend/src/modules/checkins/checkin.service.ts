@@ -121,7 +121,7 @@ export class CheckInService {
 
     const user = await this.users.findById(userId);
     if (!user) throw new NotFoundError('Attendee');
-    if (user.role !== 'member') {
+    if (user.role !== 'member' && !user.membershipId) {
       throw new BadRequestError('Only attendees can be checked in');
     }
     if (user.status !== 'active') {
@@ -170,7 +170,7 @@ export class CheckInService {
     const members = await this.users.list({
       page: 1,
       perPage: 5000,
-      role: 'member',
+      attendeesOnly: true,
       search: query.search,
     });
 
@@ -284,7 +284,7 @@ export class CheckInService {
     const result = await this.users.list({
       page: 1,
       perPage: 1,
-      role: 'member',
+      attendeesOnly: true,
       status: 'active',
     });
     return result.total;

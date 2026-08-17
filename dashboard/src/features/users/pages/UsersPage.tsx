@@ -39,13 +39,13 @@ export function UsersPage() {
   });
 
   const usersQuery = useQuery({
-    queryKey: ['users', 'list', 'member', search, page],
+    queryKey: ['users', 'list', 'attendees', search, page],
     queryFn: () =>
       usersApi.list({
         search: search || undefined,
         page,
         perPage: PER_PAGE,
-        role: 'member',
+        attendeesOnly: true,
       }),
     refetchInterval: 15_000,
   });

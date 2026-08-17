@@ -38,11 +38,15 @@ export class MongoUserRepository implements UserRepository {
 
   async list(query: ListUsersQuery): Promise<PaginatedResult<User>> {
     const filter: Filter<MongoDoc<User>> = {};
-    if (query.role) filter.role = query.role;
+    if (query.attendeesOnly) {
+      filter.$or = [{ role: 'member' }, { membershipId: { $ne: null } }];
+    } else if (query.role) {
+      filter.role = query.role;
+    }
     if (query.status) filter.status = query.status;
     if (query.search?.trim()) {
       const search = query.search.trim();
-      filter.$or = [
+      const searchOr = [
         containsCi('name', search),
         containsCi('email', search),
         containsCi('title', search),
@@ -50,6 +54,12 @@ export class MongoUserRepository implements UserRepository {
         containsCi('industry', search),
         containsCi('location', search),
       ];
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchOr }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchOr;
+      }
     }
 
     const total = await this.collection.countDocuments(filter);
@@ -75,7 +85,6 @@ export class MongoUserRepository implements UserRepository {
   async listDueForMembershipExpiry(now: Date): Promise<User[]> {
     const docs = await this.collection
       .find({
-        role: 'member',
         membershipId: { $ne: null },
         membershipExpiresAt: { $lte: now },
         $or: [{ membershipStatus: 'active' }, { membershipStatus: null }, { membershipStatus: { $exists: false } }],
@@ -89,7 +98,6 @@ export class MongoUserRepository implements UserRepository {
     const horizon = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
     const docs = await this.collection
       .find({
-        role: 'member',
         membershipId: { $ne: null },
         membershipExpiresAt: { $gt: now, $lte: horizon },
         membershipStatus: { $ne: 'expired' },

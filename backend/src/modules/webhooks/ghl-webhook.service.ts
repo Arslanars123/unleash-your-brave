@@ -42,7 +42,7 @@ export class GhlWebhookService {
     });
 
     let inviteEmailSent = false;
-    if (created && inviteCode) {
+    if (inviteCode) {
       const expiresAt = new Date(Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000);
       try {
         const result = await this.mail.sendInviteCode({

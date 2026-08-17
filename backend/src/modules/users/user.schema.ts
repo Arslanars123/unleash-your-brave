@@ -28,6 +28,14 @@ export const listUsersQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   role: z.enum(USER_ROLES).optional(),
   status: z.enum(USER_STATUSES).optional(),
+  attendeesOnly: z
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .optional()
+    .transform((value) => {
+      if (value === undefined) return undefined;
+      if (typeof value === 'boolean') return value;
+      return value === 'true' || value === '1';
+    }),
 });
 
 const profileFields = {

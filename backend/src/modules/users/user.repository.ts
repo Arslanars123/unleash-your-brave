@@ -108,7 +108,11 @@ export class InMemoryUserRepository implements UserRepository {
 
     const filtered = [...this.users.values()]
       .filter((user) => {
-        if (query.role && user.role !== query.role) return false;
+        if (query.attendeesOnly) {
+          if (user.role !== 'member' && !user.membershipId) return false;
+        } else if (query.role && user.role !== query.role) {
+          return false;
+        }
         if (query.status && user.status !== query.status) return false;
         if (search) {
           return (
@@ -141,7 +145,6 @@ export class InMemoryUserRepository implements UserRepository {
   async listDueForMembershipExpiry(now: Date): Promise<User[]> {
     return [...this.users.values()].filter(
       (user) =>
-        user.role === 'member' &&
         user.membershipId &&
         user.membershipExpiresAt &&
         user.membershipExpiresAt.getTime() <= now.getTime() &&
@@ -152,7 +155,7 @@ export class InMemoryUserRepository implements UserRepository {
   async listDueForRenewalReminder(now: Date, withinDays: number): Promise<User[]> {
     const horizon = now.getTime() + withinDays * 24 * 60 * 60 * 1000;
     return [...this.users.values()].filter((user) => {
-      if (user.role !== 'member' || !user.membershipId || !user.membershipExpiresAt) {
+      if (!user.membershipId || !user.membershipExpiresAt) {
         return false;
       }
       if (user.membershipStatus === 'expired') return false;

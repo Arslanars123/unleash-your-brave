@@ -217,12 +217,27 @@ export class EffectiveAccessService {
     const user = await this.users.findById(userId);
     const payment = userPaymentFields(user);
 
-    if (!user || user.status !== 'active' || user.role !== 'member') {
+    const isAttendee =
+      user != null &&
+      user.status === 'active' &&
+      (user.role === 'member' || Boolean(user.membershipId));
+
+    if (!user || user.status !== 'active') {
       return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
         blockQrWhenRenewalUnpaid: blockUnpaid,
         ...payment,
         qrDeniedReason: 'account_inactive',
+        upgradeMembershipIds: catalog.map((item) => item.id),
+      });
+    }
+
+    if (!isAttendee) {
+      return emptyAccess(event.id, {
+        allowPreviousAttendeesAccess: allowPrevious,
+        blockQrWhenRenewalUnpaid: blockUnpaid,
+        ...payment,
+        qrDeniedReason: 'no_membership',
         upgradeMembershipIds: catalog.map((item) => item.id),
       });
     }

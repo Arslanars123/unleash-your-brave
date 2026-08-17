@@ -102,7 +102,9 @@ export class CheckoutService {
     const normalizedEmail = email.trim().toLowerCase();
     const existing = await this.users.findByEmail(normalizedEmail);
 
-    if (!existing || existing.role !== 'member' || !existing.membershipId) {
+    // Any role with a membership is an attendee for upgrade/renew rules
+    // (speakers/sponsors may also purchase).
+    if (!existing || !existing.membershipId) {
       return {
         allowed: true,
         reason: null,
@@ -623,7 +625,8 @@ export class CheckoutService {
       },
     });
 
-    if (upsert.created && upsert.inviteCode) {
+    // Send whenever we issued a code (new member, or speaker/sponsor first-time app setup).
+    if (upsert.inviteCode) {
       await this.mail.sendInviteCode({
         to: email,
         name: upsert.user.name,

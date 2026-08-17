@@ -59,9 +59,12 @@ export class SessionService {
   ): Promise<PaginatedResult<PublicSession>> {
     let listQuery = query;
 
-    if (viewer?.role === 'member') {
+    if (viewer) {
       const ids = await this.resolveAccessibleMembershipIds(viewer.userId, query.eventId);
-      listQuery = { ...query, accessibleToMembershipIds: ids };
+      // Members always; speakers/sponsors only when they also hold a membership.
+      if (viewer.role === 'member' || ids.length > 0) {
+        listQuery = { ...query, accessibleToMembershipIds: ids };
+      }
     }
 
     const { items, total } = await this.sessions.list(listQuery);
@@ -72,10 +75,12 @@ export class SessionService {
   async getById(id: string, viewer?: SessionViewerContext): Promise<PublicSession> {
     const session = await this.requireSession(id);
 
-    if (viewer?.role === 'member') {
+    if (viewer) {
       const ids = await this.resolveAccessibleMembershipIds(viewer.userId, session.eventId);
-      if (!isSessionAccessible(session, ids)) {
-        throw new ForbiddenError('You do not have access to this session');
+      if (viewer.role === 'member' || ids.length > 0) {
+        if (!isSessionAccessible(session, ids)) {
+          throw new ForbiddenError('You do not have access to this session');
+        }
       }
     }
 

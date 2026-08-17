@@ -17,6 +17,7 @@ export interface ListUsersParams {
   search?: string;
   role?: UserRole;
   status?: UserStatus;
+  attendeesOnly?: boolean;
 }
 
 export interface ListUsersResult {

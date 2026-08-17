@@ -214,4 +214,6 @@ export interface ListUsersQuery {
   search?: string;
   role?: UserRole;
   status?: UserStatus;
+  /** When true: members + any role that holds a membership (speaker/sponsor attendees). */
+  attendeesOnly?: boolean;
 }
