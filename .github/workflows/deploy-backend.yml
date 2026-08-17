@@ -84,6 +84,7 @@ jobs:
           cors = env.get("CORS_ORIGINS", "")
           needed = [
               "http://unleash-admin-dashboard-773063618702.s3-website-ap-southeast-2.amazonaws.com",
+              "https://d20hqnztq6snl9.cloudfront.net",
               "http://localhost:5173",
               "https://fittoprofit.com",
               "https://www.fittoprofit.com",
