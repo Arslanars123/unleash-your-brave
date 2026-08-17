@@ -234,6 +234,8 @@ export class CheckoutService {
       throw new ConflictError(eligibility.reason ?? 'Purchase is not allowed');
     }
 
+    this.assertMembershipUnchanged(membership, input);
+
     if (!(membership.price > 0)) {
       throw new BadRequestError('Membership must have a price greater than zero for Stripe checkout');
     }
@@ -653,6 +655,35 @@ export class CheckoutService {
       },
       'Membership purchase fulfilled from Stripe',
     );
+  }
+
+  private assertMembershipUnchanged(
+    membership: Membership,
+    input: Pick<CreateCheckoutSessionInput, 'expectedPrice' | 'expectedUpdatedAt'>,
+  ): void {
+    const liveCents = Math.round(membership.price * 100);
+    if (input.expectedPrice != null && Number.isFinite(input.expectedPrice)) {
+      const shownCents = Math.round(input.expectedPrice * 100);
+      if (shownCents !== liveCents) {
+        throw new ConflictError(
+          `This membership was updated. The current price is ${moneyLabel(membership.price, env.stripe.currency)}. Review the new details before paying.`,
+          { membership: toPublicMembership(membership) },
+          'MEMBERSHIP_CHANGED',
+        );
+      }
+    }
+
+    if (input.expectedUpdatedAt) {
+      const shown = Date.parse(input.expectedUpdatedAt);
+      const live = membership.updatedAt.getTime();
+      if (!Number.isNaN(shown) && shown !== live) {
+        throw new ConflictError(
+          'This membership was updated. Please review the new price and details before paying.',
+          { membership: toPublicMembership(membership) },
+          'MEMBERSHIP_CHANGED',
+        );
+      }
+    }
   }
 
   private resolveRedirectUrl(

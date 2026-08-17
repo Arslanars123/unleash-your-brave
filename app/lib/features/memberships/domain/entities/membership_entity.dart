@@ -15,6 +15,7 @@ class MembershipEntity {
     this.upgradeToMembershipId,
     this.billingKind = 'one_time',
     this.durationDays = 0,
+    this.updatedAt,
   });
 
   final String id;
@@ -32,6 +33,23 @@ class MembershipEntity {
   final String? upgradeToMembershipId;
   final String billingKind;
   final int durationDays;
+  final String? updatedAt;
+
+  bool get isRenewable => billingKind == 'renewable';
+
+  /// Rank used for upgrade rules (tierRank when set, otherwise price).
+  double get upgradeRank => tierRank > 0 ? tierRank.toDouble() : price;
+
+  String get checkoutFingerprint => [
+        name,
+        price.toStringAsFixed(2),
+        description,
+        features.join('|'),
+        paymentPlanNote,
+        billingKind,
+        durationDays.toString(),
+        updatedAt ?? '',
+      ].join('::');
 
   bool get isRenewable => billingKind == 'renewable';
 

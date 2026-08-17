@@ -113,6 +113,10 @@ export interface CreateCheckoutSessionInput {
   successUrl?: string;
   cancelUrl?: string;
   couponCode?: string;
+  /** Price the attendee was shown. Reject if the live membership price differs. */
+  expectedPrice?: number;
+  /** `updatedAt` the attendee last loaded. Reject if the membership changed since. */
+  expectedUpdatedAt?: string;
 }
 
 export interface CreateCheckoutSessionResult {

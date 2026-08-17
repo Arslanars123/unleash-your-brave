@@ -8,6 +8,8 @@ export const createCheckoutSessionSchema = z.object({
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
   couponCode: z.string().trim().min(1).max(64).optional(),
+  expectedPrice: z.number().finite().min(0).optional(),
+  expectedUpdatedAt: z.string().trim().min(1).max(40).optional(),
 });
 
 export const checkoutEligibilityQuerySchema = z.object({

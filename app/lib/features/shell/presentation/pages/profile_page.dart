@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -332,16 +334,22 @@ class _MembershipSectionState extends State<_MembershipSection>
   String? _error;
   List<MembershipEntity> _memberships = const [];
   EffectiveEventAccess? _access;
+  Timer? _catalogPoll;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
+    _catalogPoll = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (!mounted || _loading) return;
+      unawaited(_load(silent: true));
+    });
   }
 
   @override
   void dispose() {
+    _catalogPoll?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -364,11 +372,13 @@ class _MembershipSectionState extends State<_MembershipSection>
     }
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       String? eventId;
       try {
@@ -399,21 +409,22 @@ class _MembershipSectionState extends State<_MembershipSection>
           });
         _access = access;
         _loading = false;
+        if (!silent) _error = null;
       });
     } on NetworkException catch (error) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = error.message;
       });
     } on ServerException catch (error) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = error.message;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = 'Unable to load memberships';
@@ -505,6 +516,8 @@ class _MembershipSectionState extends State<_MembershipSection>
         successUrl: ApiConstants.checkoutSuccessUrl,
         cancelUrl: ApiConstants.checkoutCancelUrl,
         couponCode: result.couponCode,
+        expectedPrice: result.membership.price,
+        expectedUpdatedAt: result.membership.updatedAt,
       );
 
       final uri = Uri.tryParse(session.checkoutUrl);
@@ -1418,9 +1431,10 @@ class _SettingsLinkTile extends StatelessWidget {
 }
 
 class _CheckoutCouponResult {
-  const _CheckoutCouponResult({this.couponCode});
+  const _CheckoutCouponResult({this.couponCode, required this.membership});
 
   final String? couponCode;
+  final MembershipEntity membership;
 }
 
 class _MembershipCheckoutDialog extends StatefulWidget {
@@ -1442,11 +1456,48 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
   CouponPreview? _preview;
   String? _previewError;
   bool _previewing = false;
+  late MembershipEntity _membership;
+  bool _changedWhileOpen = false;
+  bool _didInitialSync = false;
+  Timer? _livePoll;
+
+  @override
+  void initState() {
+    super.initState();
+    _membership = widget.membership;
+    unawaited(_refreshMembership());
+    _livePoll = Timer.periodic(const Duration(seconds: 8), (_) {
+      unawaited(_refreshMembership());
+    });
+  }
 
   @override
   void dispose() {
+    _livePoll?.cancel();
     _couponController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshMembership() async {
+    try {
+      final latest = await sl<MembershipsRemoteDataSource>().getById(
+        _membership.id,
+      );
+      if (!mounted) return;
+      final changed = latest.checkoutFingerprint != _membership.checkoutFingerprint;
+      setState(() {
+        if (changed && _didInitialSync) {
+          _changedWhileOpen = true;
+        }
+        _didInitialSync = true;
+        _membership = latest;
+      });
+      if (changed && _couponController.text.trim().isNotEmpty) {
+        unawaited(_applyCoupon());
+      }
+    } catch (_) {
+      // Keep showing the last known details if a refresh fails.
+    }
   }
 
   Future<void> _applyCoupon() async {
@@ -1466,7 +1517,7 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
     try {
       final preview = await sl<MembershipsRemoteDataSource>().previewCoupon(
         code: code,
-        membershipId: widget.membership.id,
+        membershipId: _membership.id,
       );
       if (!mounted) return;
       setState(() {
@@ -1507,7 +1558,7 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final membership = widget.membership;
+    final membership = _membership;
     final priceLine = _preview?.valid == true
         ? '${_money(_preview!.originalPrice)} → ${_money(_preview!.finalPrice)} '
             '(${_preview!.percentOff.toStringAsFixed(0)}% off)'
@@ -1547,10 +1598,38 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_changedWhileOpen) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.accentPink.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'This membership was just updated. Please review the new price and details before paying.',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.accentPink,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             Text(
               bodyLead,
               style: AppTypography.caption.copyWith(height: 1.45),
             ),
+            if (membership.description.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                membership.description.trim(),
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Text(
               'Coupon code (optional)',
@@ -1649,6 +1728,7 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
               context,
               _CheckoutCouponResult(
                 couponCode: code.isEmpty ? null : code,
+                membership: _membership,
               ),
             );
           },

@@ -50,6 +50,17 @@ class MembershipsRemoteDataSource {
     }
   }
 
+  Future<MembershipEntity> getById(String id) async {
+    try {
+      final response = await _dioClient.client.get('${ApiConstants.memberships}/$id');
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return _fromJson(data);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
   Future<CheckoutEligibility> checkEligibility({
     required String email,
     required String membershipId,
@@ -120,6 +131,8 @@ class MembershipsRemoteDataSource {
     String? successUrl,
     String? cancelUrl,
     String? couponCode,
+    double? expectedPrice,
+    String? expectedUpdatedAt,
   }) async {
     try {
       final response = await _dioClient.client.post(
@@ -133,6 +146,9 @@ class MembershipsRemoteDataSource {
           if (cancelUrl != null) 'cancelUrl': cancelUrl,
           if (couponCode != null && couponCode.trim().isNotEmpty)
             'couponCode': couponCode.trim(),
+          if (expectedPrice != null) 'expectedPrice': expectedPrice,
+          if (expectedUpdatedAt != null && expectedUpdatedAt.isNotEmpty)
+            'expectedUpdatedAt': expectedUpdatedAt,
         },
       );
       final data =
@@ -211,6 +227,7 @@ class MembershipsRemoteDataSource {
       upgradeToMembershipId: json['upgradeToMembershipId'] as String?,
       billingKind: json['billingKind'] as String? ?? 'one_time',
       durationDays: (json['durationDays'] as num?)?.toInt() ?? 0,
+      updatedAt: json['updatedAt'] as String?,
     );
   }
 }
