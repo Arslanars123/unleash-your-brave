@@ -66,7 +66,6 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
 
   StreamSubscription<Map<String, dynamic>>? _sseSub;
   Timer? _reconnectTimer;
-  Timer? _pollTimer;
   bool _running = false;
 
   Future<void> loadInitial() async {
@@ -237,10 +236,6 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     if (_running) return;
     _running = true;
     _connectRealtime();
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      unawaited(_pollLatest());
-    });
   }
 
   void _connectRealtime() {
@@ -254,45 +249,6 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       onDone: () => _scheduleReconnect(),
       cancelOnError: true,
     );
-  }
-
-  Future<void> _pollLatest() async {
-    if (!_running || isClosed || state.loading) return;
-    final result = await _repository.getMessages(limit: 40);
-    if (!_running || isClosed) return;
-    result.fold((_) {}, (messages) {
-      final byId = <String, ChatMessageEntity>{
-        for (final m in state.messages) m.id: m,
-      };
-      // Keep optimistic locals that are not yet confirmed.
-      for (final m in state.messages) {
-        if (m.clientId != null && m.id == m.clientId) {
-          byId[m.id] = m;
-        }
-      }
-      var addedForeign = 0;
-      for (final m in messages) {
-        final isNew = !byId.containsKey(m.id);
-        byId[m.id] = m;
-        if (isNew && m.senderId != _currentUserId) {
-          addedForeign += 1;
-        }
-        // Drop matching optimistic bubble once server message arrives.
-        byId.removeWhere(
-          (key, value) =>
-              value.clientId != null &&
-              value.clientId == m.clientId &&
-              value.id != m.id,
-        );
-      }
-      final stickToBottom = state.isNearBottom;
-      emit(state.copyWith(
-        messages: _sortedByTimestamp(byId.values.toList()),
-        newMessageCountWhileScrolledUp: stickToBottom
-            ? 0
-            : state.newMessageCountWhileScrolledUp + addedForeign,
-      ));
-    });
   }
 
   void _handleSseEvent(Map<String, dynamic> event) {
@@ -471,7 +427,6 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     _sseSub?.cancel();
     _sseSub = null;
     _reconnectTimer?.cancel();
-    _pollTimer?.cancel();
   }
 
   @override
