@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { eventsApi } from '@/features/events/api/events-api';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
@@ -7,9 +8,19 @@ import type { PublicMembership } from '@/shared/types/api';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
+async function enableContentOnMemberships(items: PublicMembership[]): Promise<number> {
+  const targets = items.filter((item) => !item.validForFutureEvents);
+  if (targets.length === 0) return 0;
+  await Promise.all(
+    targets.map((item) => membershipsApi.update(item.id, { validForFutureEvents: true })),
+  );
+  return targets.length;
+}
+
 export function EventAccessPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const syncedEventRef = useRef<string | null>(null);
 
   const workspaceQuery = useQuery({
     queryKey: ['events', 'workspace'],
@@ -34,17 +45,6 @@ export function EventAccessPage() {
     enabled: Boolean(pastEventId),
   });
 
-  const eventAccessMutation = useMutation({
-    mutationFn: (enabled: boolean) =>
-      eventsApi.update(current!.id, { allowPreviousAttendeesAccess: enabled }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['events'] });
-      toast.success('Event access setting saved');
-    },
-    onError: (error) =>
-      toast.error(getApiErrorMessage(error, 'Unable to update event access')),
-  });
-
   const membershipMutation = useMutation({
     mutationFn: ({
       id,
@@ -64,6 +64,69 @@ export function EventAccessPage() {
     onError: (error) =>
       toast.error(getApiErrorMessage(error, 'Unable to update membership')),
   });
+
+  const eventAccessMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      await eventsApi.update(current!.id, { allowPreviousAttendeesAccess: enabled });
+
+      // When content is enabled for all previous attendees, mark every membership’s
+      // Content flag on as well. QR stays independent — never auto-enabled.
+      if (enabled) {
+        await enableContentOnMemberships([
+          ...(currentMembershipsQuery.data?.items ?? []),
+          ...(pastMembershipsQuery.data?.items ?? []),
+        ]);
+      }
+    },
+    onSuccess: async (_, enabled) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['events'] }),
+        queryClient.invalidateQueries({ queryKey: ['memberships'] }),
+      ]);
+      toast.success(
+        enabled
+          ? 'Content enabled for all attendees — membership Content flags updated (QR unchanged)'
+          : 'Event content access setting saved',
+      );
+    },
+    onError: (error) =>
+      toast.error(getApiErrorMessage(error, 'Unable to update event access')),
+  });
+
+  // If content-for-all is already on, sync any membership Content boxes that are still off.
+  useEffect(() => {
+    if (!current?.id || !current.allowPreviousAttendeesAccess) return;
+    if (currentMembershipsQuery.isLoading || pastMembershipsQuery.isLoading) return;
+    if (syncedEventRef.current === current.id) return;
+
+    const all = [
+      ...(currentMembershipsQuery.data?.items ?? []),
+      ...(pastMembershipsQuery.data?.items ?? []),
+    ];
+    if (all.length === 0) return;
+
+    const needsSync = all.some((item) => !item.validForFutureEvents);
+    syncedEventRef.current = current.id;
+    if (!needsSync) return;
+
+    void enableContentOnMemberships(all)
+      .then(async (updated) => {
+        if (updated > 0) {
+          await queryClient.invalidateQueries({ queryKey: ['memberships'] });
+        }
+      })
+      .catch(() => {
+        syncedEventRef.current = null;
+      });
+  }, [
+    current?.id,
+    current?.allowPreviousAttendeesAccess,
+    currentMembershipsQuery.isLoading,
+    currentMembershipsQuery.data?.items,
+    pastMembershipsQuery.isLoading,
+    pastMembershipsQuery.data?.items,
+    queryClient,
+  ]);
 
   if (workspaceQuery.isLoading) return <Spinner label="Loading access settings…" />;
 
@@ -85,9 +148,11 @@ export function EventAccessPage() {
 
   const currentMemberships = currentMembershipsQuery.data?.items ?? [];
   const pastMemberships = pastMembershipsQuery.data?.items ?? [];
+  const contentForAll = Boolean(current.allowPreviousAttendeesAccess);
   const savingId = membershipMutation.isPending
     ? (membershipMutation.variables?.id ?? null)
     : null;
+  const eventBusy = eventAccessMutation.isPending;
 
   return (
     <div className="page">
@@ -109,8 +174,8 @@ export function EventAccessPage() {
         <label className="field" style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <input
             type="checkbox"
-            checked={Boolean(current.allowPreviousAttendeesAccess)}
-            disabled={eventAccessMutation.isPending}
+            checked={contentForAll}
+            disabled={eventBusy}
             onChange={(e) => eventAccessMutation.mutate(e.target.checked)}
             style={{ marginTop: 4 }}
           />
@@ -118,22 +183,24 @@ export function EventAccessPage() {
             <strong>Allow previous attendees to access this event’s content</strong>
             <br />
             <span className="hint">
-              When enabled, attendees who bought a pass for an older edition can see sessions and
-              content on this edition (matched by membership name/tier when possible). This does{' '}
-              <strong>not</strong> issue a check-in QR — use “QR for future events” on specific
-              memberships below.
+              When enabled, Content is turned on for <strong>all</strong> memberships below
+              automatically. Check-in QR is <strong>not</strong> enabled — select QR only on the
+              membership types you want.
             </span>
           </span>
         </label>
+        {eventBusy ? <p className="hint">Saving content access for all memberships…</p> : null}
       </section>
 
       <MembershipAccessTable
         title="Current edition memberships"
-        subtitle="Mark which tiers carry content and/or QR to future events, and set the next upgrade level shown in the app."
+        subtitle="Content follows the “all attendees” toggle above when it is on. QR is always selected per membership."
         items={currentMemberships}
         siblings={currentMemberships}
         loading={currentMembershipsQuery.isLoading}
         savingId={savingId}
+        contentLockedOn={contentForAll}
+        busy={eventBusy}
         onToggleFuture={(membership, enabled) =>
           membershipMutation.mutate({
             id: membership.id,
@@ -157,11 +224,13 @@ export function EventAccessPage() {
       {pastEventId ? (
         <MembershipAccessTable
           title={`Previous edition memberships (${pastEditions[0]?.startDate?.slice(0, 10) ?? 'past'})`}
-          subtitle="Turn on “QR for future events” only for the membership types that should get a check-in QR on the new edition. Content can still use the event-wide toggle above."
+          subtitle="Turn on “QR for future events” only for the membership types that should get a check-in QR. Content is selected for all when the event-wide toggle is on."
           items={pastMemberships}
           siblings={pastMemberships}
           loading={pastMembershipsQuery.isLoading}
           savingId={savingId}
+          contentLockedOn={contentForAll}
+          busy={eventBusy}
           onToggleFuture={(membership, enabled) =>
             membershipMutation.mutate({
               id: membership.id,
@@ -203,6 +272,8 @@ function MembershipAccessTable({
   siblings,
   loading,
   savingId,
+  contentLockedOn,
+  busy,
   onToggleFuture,
   onToggleQr,
   onChangeUpgrade,
@@ -213,6 +284,9 @@ function MembershipAccessTable({
   siblings: PublicMembership[];
   loading: boolean;
   savingId: string | null;
+  /** When event-wide content is on, every Content box shows checked and is locked. */
+  contentLockedOn: boolean;
+  busy?: boolean;
   onToggleFuture: (membership: PublicMembership, enabled: boolean) => void;
   onToggleQr: (membership: PublicMembership, enabled: boolean) => void;
   onChangeUpgrade: (
@@ -245,7 +319,9 @@ function MembershipAccessTable({
             </thead>
             <tbody>
               {items.map((membership) => {
-                const busy = savingId === membership.id;
+                const rowBusy = busy || savingId === membership.id;
+                const contentChecked =
+                  contentLockedOn || Boolean(membership.validForFutureEvents);
                 return (
                   <tr key={membership.id}>
                     <td>
@@ -259,11 +335,14 @@ function MembershipAccessTable({
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                         <input
                           type="checkbox"
-                          checked={Boolean(membership.validForFutureEvents)}
-                          disabled={busy}
+                          checked={contentChecked}
+                          disabled={rowBusy || contentLockedOn}
                           onChange={(e) => onToggleFuture(membership, e.target.checked)}
                         />
                         Content
+                        {contentLockedOn ? (
+                          <span className="hint"> (all attendees)</span>
+                        ) : null}
                       </label>
                     </td>
                     <td>
@@ -271,7 +350,7 @@ function MembershipAccessTable({
                         <input
                           type="checkbox"
                           checked={Boolean(membership.validForFutureQr)}
-                          disabled={busy}
+                          disabled={rowBusy}
                           onChange={(e) => onToggleQr(membership, e.target.checked)}
                         />
                         Check-in QR
@@ -280,7 +359,7 @@ function MembershipAccessTable({
                     <td>
                       <select
                         value={membership.upgradeToMembershipId ?? ''}
-                        disabled={busy}
+                        disabled={rowBusy}
                         onChange={(e) =>
                           onChangeUpgrade(
                             membership,
@@ -305,7 +384,7 @@ function MembershipAccessTable({
           </table>
         </div>
       )}
-      {savingId ? <p className="hint">Saving…</p> : null}
+      {savingId && !busy ? <p className="hint">Saving…</p> : null}
     </section>
   );
 }
