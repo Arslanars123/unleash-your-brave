@@ -37,8 +37,8 @@ export class UnauthorizedError extends AppError {
 }
 
 export class ForbiddenError extends AppError {
-  constructor(message = 'You do not have access to this resource') {
-    super(message, 403, 'FORBIDDEN');
+  constructor(message = 'You do not have access to this resource', code = 'FORBIDDEN', details?: unknown) {
+    super(message, 403, code, details);
   }
 }
 

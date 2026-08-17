@@ -365,6 +365,9 @@ export class UserService {
       ...(input.renewalReminderSentAt !== undefined
         ? { renewalReminderSentAt: input.renewalReminderSentAt }
         : {}),
+      ...(input.qrRenewalBlockedNoticeSentAt !== undefined
+        ? { qrRenewalBlockedNoticeSentAt: input.qrRenewalBlockedNoticeSentAt }
+        : {}),
       ...(input.photoUrl !== undefined ? { photoUrl: input.photoUrl } : {}),
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.business !== undefined ? { business: input.business } : {}),

@@ -150,7 +150,19 @@ function PurchaseCard({ item }: { item: PublicMembershipPurchase }) {
 }
 
 interface MembershipRecordPanelProps {
-  summary: AttendeePurchaseSummary;
+  summary: AttendeePurchaseSummary & {
+    membershipIdAtCheckIn?: string | null;
+    membershipNameAtCheckIn?: string | null;
+    isRecurring?: boolean;
+    paymentPeriodActive?: boolean;
+    qrEntitled?: boolean;
+    qrDeniedReason?: string | null;
+    qrStatusLabel?: string;
+    eligibleForEventContent?: boolean;
+    eligibleForEventQr?: boolean;
+    blockQrWhenRenewalUnpaid?: boolean;
+    carriedFromPrevious?: boolean;
+  };
   sourceLabel: string;
   ghlContactId?: string | null;
   productTitle?: string | null;
@@ -167,6 +179,10 @@ export function MembershipRecordPanel({
     (a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime(),
   );
 
+  const isRecurring =
+    summary.isRecurring ?? summary.currentBillingKind === 'renewable';
+  const showAccess = summary.qrStatusLabel != null || summary.qrEntitled != null;
+
   return (
     <div className="membership-record">
       <div className="membership-summary-cards">
@@ -175,7 +191,7 @@ export function MembershipRecordPanel({
           <strong>{display(summary.currentMembershipName)}</strong>
           <span className="membership-summary-sub">
             {membershipStatusLabel(summary.currentMembershipStatus)}
-            {summary.currentBillingKind === 'renewable' ? ' · renewable' : ''}
+            {isRecurring ? ' · recurring' : ''}
             {summary.currentMembershipExpiresAt
               ? ` · expires ${formatDate(summary.currentMembershipExpiresAt)}`
               : ''}
@@ -208,15 +224,62 @@ export function MembershipRecordPanel({
           <dd>{membershipStatusLabel(summary.currentMembershipStatus)}</dd>
         </div>
         <div className="attendee-detail-row">
+          <dt>Plan type</dt>
+          <dd>{isRecurring ? 'Recurring / renewable' : 'One-time'}</dd>
+        </div>
+        <div className="attendee-detail-row">
           <dt>Renewal / expiry</dt>
           <dd>
             {summary.currentMembershipExpiresAt
               ? formatDate(summary.currentMembershipExpiresAt)
-              : summary.currentBillingKind === 'renewable'
+              : isRecurring
                 ? 'Not set'
                 : 'No expiry (one-time)'}
           </dd>
         </div>
+        <div className="attendee-detail-row">
+          <dt>Payment period</dt>
+          <dd>
+            {summary.paymentPeriodActive == null
+              ? summary.currentMembershipStatus === 'expired'
+                ? 'Inactive / unpaid'
+                : membershipStatusLabel(summary.currentMembershipStatus)
+              : summary.paymentPeriodActive
+                ? 'Active (paid period valid)'
+                : 'Inactive — renewal unpaid or expired'}
+          </dd>
+        </div>
+        {showAccess ? (
+          <>
+            <div className="attendee-detail-row">
+              <dt>QR code status</dt>
+              <dd>
+                {summary.qrStatusLabel ??
+                  (summary.qrEntitled ? 'Valid for this event' : 'Invalid / not entitled')}
+                {summary.qrDeniedReason === 'renewal_payment_required' ? (
+                  <span className="hint" style={{ display: 'block', marginTop: 4 }}>
+                    QR was not updated for the next event because the required renewal payment is
+                    still pending.
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+            <div className="attendee-detail-row">
+              <dt>Eligible for event content</dt>
+              <dd>{summary.eligibleForEventContent ? 'Yes' : 'No'}</dd>
+            </div>
+            <div className="attendee-detail-row">
+              <dt>Eligible for event QR</dt>
+              <dd>{summary.eligibleForEventQr || summary.qrEntitled ? 'Yes' : 'No'}</dd>
+            </div>
+            {summary.carriedFromPrevious ? (
+              <div className="attendee-detail-row">
+                <dt>Access source</dt>
+                <dd>Carried from previous edition</dd>
+              </div>
+            ) : null}
+          </>
+        ) : null}
         <div className="attendee-detail-row">
           <dt>Signup source</dt>
           <dd>{sourceLabel}</dd>

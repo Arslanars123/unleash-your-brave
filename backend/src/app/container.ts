@@ -141,6 +141,7 @@ export async function createContainer() {
     membershipRepository,
     mailService,
     pushNotificationService,
+    eventService,
   );
   const announcementService = new AnnouncementService(
     announcementRepository,
@@ -176,6 +177,7 @@ export async function createContainer() {
     membershipRepository,
     checkoutService,
     effectiveAccessService,
+    membershipLifecycleService,
   );
   const postService = new PostService(postRepository, userRepository);
   const chatHub = new ChatHub();

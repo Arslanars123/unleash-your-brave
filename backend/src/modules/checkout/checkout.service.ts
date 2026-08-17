@@ -536,6 +536,7 @@ export class CheckoutService {
       membershipStatus: period.membershipStatus,
       membershipExpiresAt: period.periodEnd,
       renewalReminderSentAt: null,
+      qrRenewalBlockedNoticeSentAt: null,
     });
 
     const paymentIntentId =

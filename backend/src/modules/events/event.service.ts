@@ -224,6 +224,9 @@ export class EventService {
       allowPreviousAttendeesAccess:
         input.allowPreviousAttendeesAccess ??
         (copy ? Boolean(latest?.allowPreviousAttendeesAccess) : false),
+      blockQrWhenRenewalUnpaid:
+        input.blockQrWhenRenewalUnpaid ??
+        (copy ? latest?.blockQrWhenRenewalUnpaid !== false : true),
       paused: false,
     });
 
@@ -288,6 +291,9 @@ export class EventService {
       ...(input.allowPreviousAttendeesAccess !== undefined
         ? { allowPreviousAttendeesAccess: input.allowPreviousAttendeesAccess }
         : {}),
+      ...(input.blockQrWhenRenewalUnpaid !== undefined
+        ? { blockQrWhenRenewalUnpaid: input.blockQrWhenRenewalUnpaid }
+        : {}),
       ...(input.paused !== undefined ? { paused: nextPaused } : {}),
     });
 
@@ -339,6 +345,7 @@ export class EventService {
       longitude: input.longitude ?? null,
       coverImage: input.coverImage ?? '',
       allowPreviousAttendeesAccess: Boolean(input.allowPreviousAttendeesAccess),
+      blockQrWhenRenewalUnpaid: input.blockQrWhenRenewalUnpaid !== false,
       paused: Boolean(input.paused),
     });
 

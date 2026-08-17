@@ -191,6 +191,15 @@ export interface AttendeePurchaseSummary {
 export interface CheckInScanMembershipSummary extends AttendeePurchaseSummary {
   membershipIdAtCheckIn: string | null;
   membershipNameAtCheckIn: string | null;
+  isRecurring?: boolean;
+  paymentPeriodActive?: boolean;
+  qrEntitled?: boolean;
+  qrDeniedReason?: string | null;
+  qrStatusLabel?: string;
+  eligibleForEventContent?: boolean;
+  eligibleForEventQr?: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
+  carriedFromPrevious?: boolean;
 }
 
 export interface CheckInScanResult {
@@ -263,6 +272,7 @@ export interface PublicEvent {
   longitude: number | null;
   coverImage: string;
   allowPreviousAttendeesAccess?: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -286,6 +296,7 @@ export interface EventPayload {
   longitude?: number | null;
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
   paused?: boolean;
   notifyAttendees?: boolean;
 }
@@ -302,6 +313,7 @@ export interface ScheduleEventPayload {
   coverImage?: string;
   copyDetailsFromPrevious?: boolean;
   allowPreviousAttendeesAccess?: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
   notifyAttendees?: boolean;
 }
 
@@ -370,6 +382,7 @@ export interface MembershipPayload {
 export interface EffectiveEventAccess {
   eventId: string;
   allowPreviousAttendeesAccess: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
   entitled: boolean;
   qrEntitled: boolean;
   carriedFromPrevious: boolean;
@@ -380,6 +393,11 @@ export interface EffectiveEventAccess {
   sourceMembershipName: string | null;
   validForFutureEvents: boolean;
   validForFutureQr: boolean;
+  billingKind?: 'one_time' | 'renewable' | null;
+  membershipStatus?: 'active' | 'expired' | null;
+  membershipExpiresAt?: string | null;
+  paymentPeriodActive?: boolean;
+  qrDeniedReason?: string | null;
   upgradeMembershipIds: string[];
 }
 

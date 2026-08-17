@@ -220,6 +220,20 @@ export function CheckInsPage() {
                       <dt>Membership at check-in</dt>
                       <dd>{membership.membershipNameAtCheckIn ?? '—'}</dd>
                     </div>
+                    {membership.qrStatusLabel ? (
+                      <div className="attendee-detail-row">
+                        <dt>QR eligibility</dt>
+                        <dd>
+                          {membership.qrStatusLabel}
+                          {membership.qrDeniedReason === 'renewal_payment_required' ? (
+                            <span className="hint" style={{ display: 'block', marginTop: 4 }}>
+                              Recurring payment still pending — QR not valid for this / next event
+                              under the current access rule.
+                            </span>
+                          ) : null}
+                        </dd>
+                      </div>
+                    ) : null}
                   </dl>
                   <MembershipRecordPanel
                     summary={membership}

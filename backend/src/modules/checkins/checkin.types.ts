@@ -49,6 +49,20 @@ export interface CheckInScanMembershipSummary {
   purchases: PublicMembershipPurchase[];
   upgrades: PublicMembershipPurchase[];
   latestPurchase: PublicMembershipPurchase | null;
+  /** Staff check-in visibility */
+  isRecurring?: boolean;
+  paymentPeriodActive?: boolean;
+  qrEntitled?: boolean;
+  qrDeniedReason?: string | null;
+  qrStatusLabel?: string;
+  eligibleForEventContent?: boolean;
+  eligibleForEventQr?: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
+  carriedFromPrevious?: boolean;
+  currentMembershipStatus?: 'active' | 'expired' | null;
+  currentMembershipExpiresAt?: string | null;
+  currentBillingKind?: 'one_time' | 'renewable' | null;
+  renewals?: PublicMembershipPurchase[];
 }
 
 export interface CheckInScanResult {

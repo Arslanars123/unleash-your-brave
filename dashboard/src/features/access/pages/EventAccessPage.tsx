@@ -107,6 +107,21 @@ export function EventAccessPage() {
       toast.error(getApiErrorMessage(error, 'Unable to update event access')),
   });
 
+  const qrRenewalRuleMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      eventsApi.update(current!.id, { blockQrWhenRenewalUnpaid: enabled }),
+    onSuccess: async (_, enabled) => {
+      await queryClient.invalidateQueries({ queryKey: ['events'] });
+      toast.success(
+        enabled
+          ? 'Unpaid renewals will block check-in QR updates'
+          : 'Check-in QR can update even when renewal payment is pending',
+      );
+    },
+    onError: (error) =>
+      toast.error(getApiErrorMessage(error, 'Unable to update QR renewal rule')),
+  });
+
   // If content-for-all is already on, sync any membership Content boxes that are still off.
   useEffect(() => {
     if (!current?.id || !current.allowPreviousAttendeesAccess) return;
@@ -163,10 +178,12 @@ export function EventAccessPage() {
   const currentMemberships = currentMembershipsQuery.data?.items ?? [];
   const pastMemberships = pastMembershipsQuery.data?.items ?? [];
   const contentForAll = Boolean(current.allowPreviousAttendeesAccess);
+  const blockQrWhenRenewalUnpaid = current.blockQrWhenRenewalUnpaid !== false;
   const savingId = membershipMutation.isPending
     ? (membershipMutation.variables?.id ?? null)
     : null;
   const eventBusy = eventAccessMutation.isPending;
+  const qrRuleBusy = qrRenewalRuleMutation.isPending;
 
   return (
     <div className="page">
@@ -204,6 +221,33 @@ export function EventAccessPage() {
           </span>
         </label>
         {eventBusy ? <p className="hint">Saving content access for all memberships…</p> : null}
+      </section>
+
+      <section className="panel" style={{ marginBottom: 24 }}>
+        <h2 style={{ marginTop: 0 }}>Recurring membership — QR after expiry</h2>
+        <p className="muted">
+          Controls whether unpaid or expired renewable plans can receive an updated check-in QR
+          for this (or a future) edition.
+        </p>
+        <label className="field" style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <input
+            type="checkbox"
+            checked={blockQrWhenRenewalUnpaid}
+            disabled={qrRuleBusy}
+            onChange={(e) => qrRenewalRuleMutation.mutate(e.target.checked)}
+            style={{ marginTop: 4 }}
+          />
+          <span>
+            <strong>Block QR updates when renewal payment is unpaid or membership is expired</strong>
+            <br />
+            <span className="hint">
+              When enabled (default), attendees on a recurring plan do not get a valid next-event QR
+              until renewal is paid. They are notified that the QR becomes valid after payment.
+              Turn this off to allow QR updates even while renewal is pending.
+            </span>
+          </span>
+        </label>
+        {qrRuleBusy ? <p className="hint">Saving QR renewal rule…</p> : null}
       </section>
 
       <MembershipAccessTable

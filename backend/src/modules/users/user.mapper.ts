@@ -19,6 +19,9 @@ export function toPublicUser(user: User): PublicUser {
     renewalReminderSentAt: user.renewalReminderSentAt
       ? user.renewalReminderSentAt.toISOString()
       : null,
+    qrRenewalBlockedNoticeSentAt: user.qrRenewalBlockedNoticeSentAt
+      ? user.qrRenewalBlockedNoticeSentAt.toISOString()
+      : null,
     photoUrl: user.photoUrl,
     title: user.title,
     business: user.business,

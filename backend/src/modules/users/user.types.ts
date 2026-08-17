@@ -80,6 +80,8 @@ export interface User {
   membershipExpiresAt: Date | null;
   /** Last time a renewal reminder was sent for the current period. */
   renewalReminderSentAt: Date | null;
+  /** Last time we notified that QR is blocked until renewal payment. */
+  qrRenewalBlockedNoticeSentAt: Date | null;
   photoUrl: string;
   title: string;
   business: string;
@@ -126,6 +128,7 @@ export interface PublicUser {
   membershipStatus: MembershipStatus | null;
   membershipExpiresAt: string | null;
   renewalReminderSentAt: string | null;
+  qrRenewalBlockedNoticeSentAt: string | null;
   photoUrl: string;
   title: string;
   business: string;
@@ -187,6 +190,7 @@ export interface UpdateUserInput {
   membershipStatus?: MembershipStatus | null;
   membershipExpiresAt?: Date | null;
   renewalReminderSentAt?: Date | null;
+  qrRenewalBlockedNoticeSentAt?: Date | null;
   photoUrl?: string;
   title?: string;
   business?: string;

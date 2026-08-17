@@ -69,6 +69,7 @@ export const createEventSchema = z
     longitude: optionalCoord,
     coverImage: coverImageSchema,
     allowPreviousAttendeesAccess: z.boolean().optional().default(false),
+    blockQrWhenRenewalUnpaid: z.boolean().optional().default(true),
     paused: z.boolean().optional().default(false),
   })
   .superRefine((value, ctx) => {
@@ -150,6 +151,7 @@ export const updateEventSchema = z
         message: 'Cover image must be a URL or an uploaded file path',
       }),
     allowPreviousAttendeesAccess: z.boolean().optional(),
+    blockQrWhenRenewalUnpaid: z.boolean().optional(),
     paused: z.boolean().optional(),
     notifyAttendees: z.boolean().optional().default(true),
   })
@@ -198,6 +200,7 @@ export const scheduleEventSchema = z
     coverImage: coverImageSchema,
     copyDetailsFromPrevious: z.boolean().optional().default(true),
     allowPreviousAttendeesAccess: z.boolean().optional().default(false),
+    blockQrWhenRenewalUnpaid: z.boolean().optional().default(true),
     notifyAttendees: z.boolean().optional().default(true),
   })
   .superRefine((value, ctx) => {

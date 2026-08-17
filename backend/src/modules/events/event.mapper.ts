@@ -58,6 +58,7 @@ export function toPublicEvent(event: Event): PublicEvent {
     longitude: event.longitude ?? null,
     coverImage: event.coverImage,
     allowPreviousAttendeesAccess: Boolean(event.allowPreviousAttendeesAccess),
+    blockQrWhenRenewalUnpaid: event.blockQrWhenRenewalUnpaid !== false,
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
   };

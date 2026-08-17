@@ -1,8 +1,9 @@
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
 import type { CheckInRepository } from '../../db/repositories/mongo-checkin.repository.js';
-import type { EffectiveAccessService } from '../access/access.service.js';
+import type { EffectiveAccessService, QrDeniedReason } from '../access/access.service.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
 import type { EventService } from '../events/event.service.js';
+import type { MembershipLifecycleService } from '../memberships/membership-lifecycle.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import { toPublicUser } from '../users/user.mapper.js';
 import type { UserRepository } from '../users/user.repository.js';
@@ -16,6 +17,20 @@ import type {
   PublicCheckIn,
 } from './checkin.types.js';
 
+function qrDeniedMessage(reason: QrDeniedReason): string {
+  switch (reason) {
+    case 'renewal_payment_required':
+      return 'Your check-in QR will become valid once your membership renewal payment is completed.';
+    case 'membership_not_valid_for_qr':
+      return 'Your membership does not include a check-in QR for this event. Purchase a pass or contact support.';
+    case 'account_inactive':
+      return 'Your account is not eligible for a check-in QR.';
+    case 'no_membership':
+    default:
+      return 'Your membership does not include a check-in QR for this event. Purchase a pass or contact support.';
+  }
+}
+
 export class CheckInService {
   constructor(
     private readonly checkIns: CheckInRepository,
@@ -24,6 +39,7 @@ export class CheckInService {
     private readonly memberships: MembershipRepository,
     private readonly checkout: CheckoutService,
     private readonly access?: EffectiveAccessService,
+    private readonly membershipLifecycle?: MembershipLifecycleService,
   ) {}
 
   async getMyQr(userId: string, eventId?: string): Promise<MyCheckInQr> {
@@ -38,8 +54,25 @@ export class CheckInService {
     if (this.access) {
       const resolved = await this.access.resolveForUser(userId, event.id);
       if (!resolved.qrEntitled) {
+        if (
+          resolved.qrDeniedReason === 'renewal_payment_required' &&
+          this.membershipLifecycle
+        ) {
+          await this.membershipLifecycle.notifyQrBlockedPendingRenewal(
+            userId,
+            resolved.sourceMembershipName ?? 'membership',
+          );
+        }
         throw new ForbiddenError(
-          'Your membership does not include a check-in QR for this event. Purchase a pass or contact support.',
+          qrDeniedMessage(resolved.qrDeniedReason),
+          resolved.qrDeniedReason === 'renewal_payment_required'
+            ? 'QR_RENEWAL_PAYMENT_REQUIRED'
+            : 'FORBIDDEN',
+          {
+            qrDeniedReason: resolved.qrDeniedReason,
+            paymentPeriodActive: resolved.paymentPeriodActive,
+            blockQrWhenRenewalUnpaid: resolved.blockQrWhenRenewalUnpaid,
+          },
         );
       }
     }
@@ -214,6 +247,18 @@ export class CheckInService {
     eventId: string,
   ): Promise<CheckInScanResult> {
     const summary = await this.checkout.getAttendeePurchaseSummary(user.id, eventId);
+    const access = this.access
+      ? await this.access.resolveForUser(user.id, eventId)
+      : null;
+
+    const qrEntitled = access?.qrEntitled ?? true;
+    const qrDeniedReason = access?.qrDeniedReason ?? null;
+    const qrStatusLabel = qrEntitled
+      ? 'Valid for this event'
+      : qrDeniedReason === 'renewal_payment_required'
+        ? 'Not updated — renewal payment pending'
+        : 'Invalid / not entitled for this event';
+
     return {
       checkIn: toPublicCheckIn(checkIn, toPublicUser(user)),
       alreadyCheckedIn,
@@ -222,6 +267,15 @@ export class CheckInService {
         ...summary,
         membershipIdAtCheckIn: checkIn.membershipIdAtCheckIn ?? null,
         membershipNameAtCheckIn: checkIn.membershipNameAtCheckIn ?? null,
+        isRecurring: summary.currentBillingKind === 'renewable',
+        paymentPeriodActive: access?.paymentPeriodActive ?? summary.currentMembershipStatus !== 'expired',
+        qrEntitled,
+        qrDeniedReason,
+        qrStatusLabel,
+        eligibleForEventContent: access?.entitled ?? Boolean(summary.currentMembershipId),
+        eligibleForEventQr: qrEntitled,
+        blockQrWhenRenewalUnpaid: access?.blockQrWhenRenewalUnpaid ?? true,
+        carriedFromPrevious: access?.carriedFromPrevious ?? false,
       },
     };
   }

@@ -119,6 +119,7 @@ export class MongoUserRepository implements UserRepository {
       membershipStatus: data.membershipStatus ?? null,
       membershipExpiresAt: data.membershipExpiresAt ?? null,
       renewalReminderSentAt: data.renewalReminderSentAt ?? null,
+      qrRenewalBlockedNoticeSentAt: data.qrRenewalBlockedNoticeSentAt ?? null,
       photoUrl: data.photoUrl ?? EMPTY_ATTENDEE_PROFILE.photoUrl,
       title: data.title ?? EMPTY_ATTENDEE_PROFILE.title,
       business: data.business ?? EMPTY_ATTENDEE_PROFILE.business,

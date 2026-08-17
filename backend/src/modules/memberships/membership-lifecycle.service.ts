@@ -1,10 +1,17 @@
 import { logger } from '../../core/logger.js';
 import type { MailService } from '../mail/mail.service.js';
 import type { PushNotificationService } from '../chat/push.service.js';
+import { isBlockQrWhenRenewalUnpaid } from '../access/access.service.js';
+import type { EventService } from '../events/event.service.js';
 import type { MembershipRepository } from './membership.repository.js';
 import type { UserRepository } from '../users/user.repository.js';
 
 const DEFAULT_REMINDER_DAYS = 14;
+
+const QR_BLOCKED_PUSH = {
+  title: 'Check-in QR on hold',
+  body: 'Your check-in QR will become valid for the next event once your membership renewal payment is completed.',
+};
 
 /**
  * Marks expired renewable memberships and sends renewal reminders.
@@ -15,6 +22,7 @@ export class MembershipLifecycleService {
     private readonly memberships: MembershipRepository,
     private readonly mail: MailService,
     private readonly push?: PushNotificationService,
+    private readonly events?: EventService,
     private readonly reminderDays = DEFAULT_REMINDER_DAYS,
   ) {}
 
@@ -27,6 +35,9 @@ export class MembershipLifecycleService {
 
   async expireDueMemberships(now: Date = new Date()): Promise<number> {
     const due = await this.users.listDueForMembershipExpiry(now);
+    const latest = this.events ? await this.events.getLatest() : null;
+    const shouldNotifyQrBlock = latest ? isBlockQrWhenRenewalUnpaid(latest) : true;
+
     let count = 0;
     for (const user of due) {
       await this.users.update(user.id, {
@@ -41,6 +52,13 @@ export class MembershipLifecycleService {
         },
         'Membership marked expired',
       );
+
+      if (shouldNotifyQrBlock && user.membershipId) {
+        const membership = await this.memberships.findById(user.membershipId);
+        if (membership?.billingKind === 'renewable') {
+          await this.notifyQrBlockedPendingRenewal(user.id, membership.name, now);
+        }
+      }
     }
     return count;
   }
@@ -78,5 +96,34 @@ export class MembershipLifecycleService {
       count += 1;
     }
     return count;
+  }
+
+  /** One-shot push when QR is held until renewal payment (expiry or QR fetch). */
+  async notifyQrBlockedPendingRenewal(
+    userId: string,
+    membershipName: string,
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    const user = await this.users.findById(userId);
+    if (!user) return false;
+    if (user.qrRenewalBlockedNoticeSentAt) return false;
+
+    if (this.push) {
+      await this.push.notifyUsers({
+        userIds: [userId],
+        title: QR_BLOCKED_PUSH.title,
+        body: QR_BLOCKED_PUSH.body,
+        data: {
+          type: 'qr_renewal_blocked',
+          membershipId: user.membershipId ?? '',
+          membershipName,
+        },
+      });
+    }
+
+    await this.users.update(userId, {
+      qrRenewalBlockedNoticeSentAt: now,
+    });
+    return true;
   }
 }

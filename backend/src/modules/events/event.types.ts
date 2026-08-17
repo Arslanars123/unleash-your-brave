@@ -45,6 +45,12 @@ export interface Event {
    */
   allowPreviousAttendeesAccess: boolean;
   /**
+   * When true (default), unpaid/expired renewable memberships cannot get a
+   * check-in QR for this (or future) edition until they renew.
+   * Admin can turn this off to allow QR even when renewal is pending.
+   */
+  blockQrWhenRenewalUnpaid: boolean;
+  /**
    * Admin pause — event is temporarily on hold. Status surfaces as `paused`
    * and attendees are notified when this toggles or when dates change.
    */
@@ -71,6 +77,7 @@ export interface PublicEvent {
   longitude: number | null;
   coverImage: string;
   allowPreviousAttendeesAccess: boolean;
+  blockQrWhenRenewalUnpaid: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -97,6 +104,7 @@ export interface CreateEventInput {
   longitude?: number | null;
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
   paused?: boolean;
 }
 
@@ -114,6 +122,7 @@ export interface ScheduleEventInput {
   /** When true, copies tagline/description/venue/cover from the previous edition. */
   copyDetailsFromPrevious?: boolean;
   allowPreviousAttendeesAccess?: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
   /** When false, skip the “new dates announced” push. Default true. */
   notifyAttendees?: boolean;
 }
@@ -131,6 +140,7 @@ export interface UpdateEventInput {
   longitude?: number | null;
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
+  blockQrWhenRenewalUnpaid?: boolean;
   paused?: boolean;
   /** When false, skip pause/date-change push. Default true. */
   notifyAttendees?: boolean;

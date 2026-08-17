@@ -3,10 +3,21 @@ import type { EventService } from '../events/event.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { Membership } from '../memberships/membership.types.js';
 import type { UserRepository } from '../users/user.repository.js';
+import type { MembershipStatus, User } from '../users/user.types.js';
+
+/** Why check-in QR is not available (null when qrEntitled). */
+export type QrDeniedReason =
+  | null
+  | 'no_membership'
+  | 'account_inactive'
+  | 'renewal_payment_required'
+  | 'membership_not_valid_for_qr';
 
 export interface EffectiveEventAccess {
   eventId: string;
   allowPreviousAttendeesAccess: boolean;
+  /** Admin rule: unpaid/expired renewable memberships block QR (default true). */
+  blockQrWhenRenewalUnpaid: boolean;
   /** User may view this edition’s app content (sessions/open areas). */
   entitled: boolean;
   /** User may receive a check-in QR for this edition. */
@@ -22,12 +33,43 @@ export interface EffectiveEventAccess {
   sourceMembershipName: string | null;
   validForFutureEvents: boolean;
   validForFutureQr: boolean;
+  billingKind: 'one_time' | 'renewable' | null;
+  membershipStatus: MembershipStatus | null;
+  membershipExpiresAt: string | null;
+  /** True when the paid period is still valid (independent of admin QR rule). */
+  paymentPeriodActive: boolean;
+  /** Set when qrEntitled is false. */
+  qrDeniedReason: QrDeniedReason;
   /**
    * Upgrade options the app should show for this user on this event.
    * Empty = show purchase catalog as-is (no current pass).
    * One id = only that next level.
    */
   upgradeMembershipIds: string[];
+}
+
+/** Default true when the field is missing on older event documents. */
+export function isBlockQrWhenRenewalUnpaid(
+  event: { blockQrWhenRenewalUnpaid?: boolean | null },
+): boolean {
+  return event.blockQrWhenRenewalUnpaid !== false;
+}
+
+/**
+ * Whether payment status allows QR under the admin rule.
+ * When the rule is off, renewable members keep QR even if unpaid/expired.
+ */
+export function paymentAllowsQr(input: {
+  billingKind: Membership['billingKind'] | null | undefined;
+  paymentActive: boolean;
+  blockQrWhenRenewalUnpaid: boolean;
+  hasMembership: boolean;
+}): boolean {
+  if (!input.hasMembership) return false;
+  if (input.billingKind === 'renewable' && !input.blockQrWhenRenewalUnpaid) {
+    return true;
+  }
+  return input.paymentActive;
 }
 
 function normalizeName(value: string): string {
@@ -79,6 +121,16 @@ function nextUpgradeIds(
   return higher[0] ? [higher[0].id] : [];
 }
 
+function userPaymentFields(user: User | null | undefined) {
+  return {
+    membershipStatus: (user?.membershipStatus ?? null) as MembershipStatus | null,
+    membershipExpiresAt: user?.membershipExpiresAt
+      ? user.membershipExpiresAt.toISOString()
+      : null,
+    paymentPeriodActive: user ? isMembershipPaymentActive(user) : false,
+  };
+}
+
 function emptyAccess(
   eventId: string,
   extras: Partial<EffectiveEventAccess> = {},
@@ -86,6 +138,7 @@ function emptyAccess(
   return {
     eventId,
     allowPreviousAttendeesAccess: false,
+    blockQrWhenRenewalUnpaid: true,
     entitled: false,
     qrEntitled: false,
     carriedFromPrevious: false,
@@ -96,9 +149,32 @@ function emptyAccess(
     sourceMembershipName: null,
     validForFutureEvents: false,
     validForFutureQr: false,
+    billingKind: null,
+    membershipStatus: null,
+    membershipExpiresAt: null,
+    paymentPeriodActive: false,
+    qrDeniedReason: 'no_membership',
     upgradeMembershipIds: [],
     ...extras,
   };
+}
+
+function denyReasonForUnpaidRenewable(input: {
+  billingKind: Membership['billingKind'];
+  paymentActive: boolean;
+  blockUnpaid: boolean;
+  qrWouldOtherwiseApply: boolean;
+}): QrDeniedReason {
+  if (!input.qrWouldOtherwiseApply) return 'membership_not_valid_for_qr';
+  if (
+    input.billingKind === 'renewable' &&
+    input.blockUnpaid &&
+    !input.paymentActive
+  ) {
+    return 'renewal_payment_required';
+  }
+  if (!input.paymentActive) return 'renewal_payment_required';
+  return 'membership_not_valid_for_qr';
 }
 
 /**
@@ -108,6 +184,9 @@ function emptyAccess(
  * Content and QR are independent for previous-edition holders:
  * - content: `validForFutureEvents` OR event `allowPreviousAttendeesAccess`
  * - QR: `validForFutureQr` only (never granted by the event-wide content toggle alone)
+ *
+ * Renewable QR can additionally be blocked when payment is unpaid/expired if
+ * `blockQrWhenRenewalUnpaid` is enabled (default).
  */
 export class EffectiveAccessService {
   constructor(
@@ -128,6 +207,7 @@ export class EffectiveAccessService {
     }
 
     const allowPrevious = Boolean(event.allowPreviousAttendeesAccess);
+    const blockUnpaid = isBlockQrWhenRenewalUnpaid(event);
     const { items: catalog } = await this.memberships.list({
       page: 1,
       perPage: 100,
@@ -135,9 +215,14 @@ export class EffectiveAccessService {
     });
 
     const user = await this.users.findById(userId);
+    const payment = userPaymentFields(user);
+
     if (!user || user.status !== 'active' || user.role !== 'member') {
       return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
+        blockQrWhenRenewalUnpaid: blockUnpaid,
+        ...payment,
+        qrDeniedReason: 'account_inactive',
         upgradeMembershipIds: catalog.map((item) => item.id),
       });
     }
@@ -146,6 +231,9 @@ export class EffectiveAccessService {
     if (!sourceId) {
       return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
+        blockQrWhenRenewalUnpaid: blockUnpaid,
+        ...payment,
+        qrDeniedReason: 'no_membership',
         upgradeMembershipIds: catalog.map((item) => item.id),
       });
     }
@@ -154,22 +242,34 @@ export class EffectiveAccessService {
     if (!source) {
       return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
+        blockQrWhenRenewalUnpaid: blockUnpaid,
         sourceMembershipId: sourceId,
+        ...payment,
+        qrDeniedReason: 'no_membership',
         upgradeMembershipIds: catalog.map((item) => item.id),
       });
     }
 
     const validForFutureEvents = Boolean(source.validForFutureEvents);
     const validForFutureQr = Boolean(source.validForFutureQr);
-    const paymentActive = isMembershipPaymentActive(user);
+    const paymentActive = payment.paymentPeriodActive;
+    const billingKind = source.billingKind ?? 'one_time';
+    const paymentOk = paymentAllowsQr({
+      billingKind,
+      paymentActive,
+      blockQrWhenRenewalUnpaid: blockUnpaid,
+      hasMembership: true,
+    });
 
-    // Same-edition membership — content when they hold the tier; QR only while payment period is active.
+    // Same-edition membership — content when they hold the tier; QR gated by payment rule.
     if (source.eventId === event.id) {
+      const qrEntitled = paymentOk;
       return {
         eventId: event.id,
         allowPreviousAttendeesAccess: allowPrevious,
+        blockQrWhenRenewalUnpaid: blockUnpaid,
         entitled: true,
-        qrEntitled: paymentActive,
+        qrEntitled,
         carriedFromPrevious: false,
         accessibleMembershipIds: [source.id],
         effectiveMembershipId: source.id,
@@ -178,20 +278,44 @@ export class EffectiveAccessService {
         sourceMembershipName: source.name,
         validForFutureEvents,
         validForFutureQr,
+        billingKind,
+        membershipStatus: payment.membershipStatus,
+        membershipExpiresAt: payment.membershipExpiresAt,
+        paymentPeriodActive: paymentActive,
+        qrDeniedReason: qrEntitled
+          ? null
+          : denyReasonForUnpaidRenewable({
+              billingKind,
+              paymentActive,
+              blockUnpaid,
+              qrWouldOtherwiseApply: true,
+            }),
         upgradeMembershipIds: nextUpgradeIds(source, catalog),
       };
     }
 
     const contentCarry = validForFutureEvents || allowPrevious;
-    const qrCarry = validForFutureQr && paymentActive;
+    const qrCarryBase = validForFutureQr;
+    const qrCarry = qrCarryBase && paymentOk;
 
     if (!contentCarry && !qrCarry) {
       return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
+        blockQrWhenRenewalUnpaid: blockUnpaid,
         sourceMembershipId: source.id,
         sourceMembershipName: source.name,
         validForFutureEvents,
         validForFutureQr,
+        billingKind,
+        membershipStatus: payment.membershipStatus,
+        membershipExpiresAt: payment.membershipExpiresAt,
+        paymentPeriodActive: paymentActive,
+        qrDeniedReason: denyReasonForUnpaidRenewable({
+          billingKind,
+          paymentActive,
+          blockUnpaid,
+          qrWouldOtherwiseApply: qrCarryBase,
+        }),
         upgradeMembershipIds: catalog.map((item) => item.id),
       });
     }
@@ -201,6 +325,7 @@ export class EffectiveAccessService {
       return {
         eventId: event.id,
         allowPreviousAttendeesAccess: allowPrevious,
+        blockQrWhenRenewalUnpaid: blockUnpaid,
         entitled: contentCarry,
         qrEntitled: qrCarry,
         carriedFromPrevious: true,
@@ -211,6 +336,18 @@ export class EffectiveAccessService {
         sourceMembershipName: source.name,
         validForFutureEvents,
         validForFutureQr,
+        billingKind,
+        membershipStatus: payment.membershipStatus,
+        membershipExpiresAt: payment.membershipExpiresAt,
+        paymentPeriodActive: paymentActive,
+        qrDeniedReason: qrCarry
+          ? null
+          : denyReasonForUnpaidRenewable({
+              billingKind,
+              paymentActive,
+              blockUnpaid,
+              qrWouldOtherwiseApply: qrCarryBase,
+            }),
         upgradeMembershipIds: contentCarry
           ? nextUpgradeIds(mapped, catalog)
           : catalog.map((item) => item.id),
@@ -218,10 +355,11 @@ export class EffectiveAccessService {
     }
 
     // Carry-eligible but no matching tier on the new edition:
-    // open sessions when content carry is on; QR only when membership QR flag + payment are active.
+    // open sessions when content carry is on; QR only when membership QR flag + payment rule allow.
     return {
       eventId: event.id,
       allowPreviousAttendeesAccess: allowPrevious,
+      blockQrWhenRenewalUnpaid: blockUnpaid,
       entitled: contentCarry,
       qrEntitled: qrCarry,
       carriedFromPrevious: true,
@@ -232,6 +370,18 @@ export class EffectiveAccessService {
       sourceMembershipName: source.name,
       validForFutureEvents,
       validForFutureQr,
+      billingKind,
+      membershipStatus: payment.membershipStatus,
+      membershipExpiresAt: payment.membershipExpiresAt,
+      paymentPeriodActive: paymentActive,
+      qrDeniedReason: qrCarry
+        ? null
+        : denyReasonForUnpaidRenewable({
+            billingKind,
+            paymentActive,
+            blockUnpaid,
+            qrWouldOtherwiseApply: qrCarryBase,
+          }),
       upgradeMembershipIds: catalog.map((item) => item.id),
     };
   }
