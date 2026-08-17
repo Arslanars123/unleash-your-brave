@@ -28,8 +28,8 @@ class ApiConstants {
 
   /// Stripe success / cancel pages on the marketing site.
   static const checkoutSuccessUrl =
-      'https://www.fittoprofit.com/checkout/success?session_id={CHECKOUT_SESSION_ID}';
-  static const checkoutCancelUrl = 'https://www.fittoprofit.com/checkout';
+      'https://www.fittoprofit.com/checkout-test/success?session_id={CHECKOUT_SESSION_ID}';
+  static const checkoutCancelUrl = 'https://www.fittoprofit.com/checkout-test';
 
   // Chat endpoints
   static const chatGroup = '/chat/group';
