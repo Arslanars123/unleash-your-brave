@@ -21,7 +21,7 @@ class SessionCard extends StatelessWidget {
     final description = session.description.trim();
     final materialCount = session.materials.length;
     final address = session.address.trim();
-    final isSideEvent = session.isSideEvent;
+    final isExtraActivity = session.isExtraActivity;
 
     return Material(
       color: Colors.transparent,
@@ -39,9 +39,9 @@ class SessionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (isSideEvent) ...[
+              if (isExtraActivity) ...[
                 Text(
-                  'SIDE EVENT',
+                  'EXTRA ACTIVITY',
                   style: AppTypography.microLabel.copyWith(
                     letterSpacing: 1.2,
                     color: AppColors.accentPink,
@@ -70,7 +70,7 @@ class SessionCard extends StatelessWidget {
                   ),
                 ),
               ],
-              if (speakerName.isNotEmpty && !isSideEvent) ...[
+              if (speakerName.isNotEmpty && !isExtraActivity) ...[
                 const SizedBox(height: 14),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,7 +105,7 @@ class SessionCard extends StatelessWidget {
                   ],
                 ),
               ],
-              if (address.isNotEmpty && isSideEvent) ...[
+              if (address.isNotEmpty && isExtraActivity) ...[
                 const SizedBox(height: 14),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,7 +125,7 @@ class SessionCard extends StatelessWidget {
                   ],
                 ),
               ],
-              if (materialCount > 0 && !isSideEvent) ...[
+              if (materialCount > 0 && !isExtraActivity) ...[
                 const SizedBox(height: 12),
                 Row(
                   children: [

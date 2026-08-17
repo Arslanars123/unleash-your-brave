@@ -14,12 +14,17 @@ import type {
   CreateSessionInput,
   PublicSession,
   Session,
+  SessionKind,
   SessionMaterial,
   SessionMaterialInput,
   SessionSpeakerSummary,
   ListSessionsQuery,
   UpdateSessionInput,
 } from './session.types.js';
+import {
+  findScheduleConflict,
+  scheduleConflictMessage,
+} from './session-schedule.js';
 
 function normalizeMaterials(materials: SessionMaterialInput[] | undefined): SessionMaterial[] {
   return (materials ?? []).map((material) => ({
@@ -100,6 +105,18 @@ export class SessionService {
     await this.assertValidEventDay(input.eventId, input.eventDayNumber);
     await this.assertMembershipsForEvent(input.membershipIds ?? [], input.eventId);
 
+    const startTime = input.startTime ?? '';
+    const endTime = input.endTime ?? '';
+    await this.assertNoScheduleConflict(
+      {
+        eventId: input.eventId,
+        eventDayNumber: input.eventDayNumber,
+        startTime,
+        endTime,
+        kind,
+      },
+    );
+
     const created = await this.sessions.create({
       eventId: input.eventId,
       kind,
@@ -108,8 +125,8 @@ export class SessionService {
       speakerId,
       address: input.address ?? '',
       eventDayNumber: input.eventDayNumber,
-      startTime: input.startTime ?? '',
-      endTime: input.endTime ?? '',
+      startTime,
+      endTime,
       location: input.location ?? '',
       membershipIds: input.membershipIds ?? [],
       materials: kind === 'session' ? normalizeMaterials(input.materials) : [],
@@ -130,6 +147,8 @@ export class SessionService {
           ? input.speakerId
           : existing.speakerId;
     const eventDayNumber = input.eventDayNumber ?? existing.eventDayNumber;
+    const startTime = input.startTime ?? existing.startTime;
+    const endTime = input.endTime ?? existing.endTime;
 
     if (kind === 'session' && !speakerId) {
       throw new BadRequestError('Select a speaker');
@@ -143,6 +162,17 @@ export class SessionService {
     if (input.membershipIds !== undefined) {
       await this.assertMembershipsForEvent(input.membershipIds, existing.eventId);
     }
+
+    await this.assertNoScheduleConflict(
+      {
+        eventId: existing.eventId,
+        eventDayNumber,
+        startTime,
+        endTime,
+        kind,
+      },
+      existing.id,
+    );
 
     const updated = await this.sessions.update(id, {
       ...(input.kind !== undefined ? { kind } : {}),
@@ -253,6 +283,29 @@ export class SessionService {
       if (membership.eventId !== eventId) {
         throw new BadRequestError('Membership must belong to the same event edition');
       }
+    }
+  }
+
+  private async assertNoScheduleConflict(
+    candidate: {
+      eventId: string;
+      eventDayNumber: number;
+      startTime: string;
+      endTime: string;
+      kind: SessionKind;
+    },
+    excludeId?: string,
+  ): Promise<void> {
+    const { items } = await this.sessions.list({
+      eventId: candidate.eventId,
+      eventDayNumber: candidate.eventDayNumber,
+      page: 1,
+      perPage: 500,
+    });
+
+    const conflict = findScheduleConflict(candidate, items, excludeId);
+    if (conflict) {
+      throw new BadRequestError(scheduleConflictMessage(conflict));
     }
   }
 

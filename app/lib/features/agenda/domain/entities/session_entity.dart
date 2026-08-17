@@ -59,7 +59,7 @@ class SessionEntity {
   final String id;
   final String eventId;
 
-  /// `session` = speaker talk; `event` = side event (VIP dinner, etc.).
+  /// `session` = speaker talk; `event` = extra activity (VIP dinner, etc.).
   final String kind;
   final String name;
   final String description;
@@ -77,5 +77,5 @@ class SessionEntity {
   final bool feedbackEnabled;
   final SessionFeedbackSummaryEntity? feedbackSummary;
 
-  bool get isSideEvent => kind == 'event';
+  bool get isExtraActivity => kind == 'event';
 }

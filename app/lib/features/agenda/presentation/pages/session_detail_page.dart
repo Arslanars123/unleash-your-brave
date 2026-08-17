@@ -331,7 +331,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           },
         ),
         title: Text(
-          session?.isSideEvent == true ? 'Event' : 'Session',
+          session?.isExtraActivity == true ? 'Extra activity' : 'Session',
           style: AppTypography.body.copyWith(
             fontWeight: FontWeight.w600,
             fontSize: 17,
@@ -385,7 +385,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
         formatSessionTimeRange(session.startTime, session.endTime);
     final location = session.location.trim();
     final address = session.address.trim();
-    final isSideEvent = session.isSideEvent;
+    final isExtraActivity = session.isExtraActivity;
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(
@@ -435,7 +435,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                             icon: Icons.location_on_outlined,
                             label: address,
                           ),
-                        if (!isSideEvent && ratingsCount > 0 && summary != null)
+                        if (!isExtraActivity && ratingsCount > 0 && summary != null)
                           _MetaChip(
                             icon: Icons.star_rounded,
                             label:
@@ -448,7 +448,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                       session.name,
                       style: AppTypography.headline.copyWith(fontSize: 28),
                     ),
-                    if (speaker != null && speaker.name.trim().isNotEmpty && !isSideEvent) ...[
+                    if (speaker != null && speaker.name.trim().isNotEmpty && !isExtraActivity) ...[
                       const SizedBox(height: 20),
                       _SpeakerBlock(speaker: speaker),
                     ],
@@ -462,8 +462,8 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                     const SizedBox(height: 10),
                     Text(
                       description.isEmpty
-                          ? isSideEvent
-                              ? 'No description available for this event.'
+                          ? isExtraActivity
+                              ? 'No description available for this extra activity.'
                               : 'No description available for this session.'
                           : description,
                       style: AppTypography.body.copyWith(
@@ -474,7 +474,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                             : AppColors.textPrimary,
                       ),
                     ),
-                    if (!isSideEvent) ...[
+                    if (!isExtraActivity) ...[
                       const SizedBox(height: 32),
                       Text(
                         'RESOURCES',

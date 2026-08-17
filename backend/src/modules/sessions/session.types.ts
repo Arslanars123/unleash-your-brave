@@ -34,12 +34,12 @@ export interface SessionSpeakerSummary {
 export interface Session {
   id: string;
   eventId: string;
-  /** `session` = speaker talk; `event` = side event (VIP dinner, etc.). */
+  /** `session` = speaker talk; `event` = extra activity (VIP dinner, etc.). */
   kind: SessionKind;
   name: string;
   description: string;
   speakerId: string | null;
-  /** Optional street / venue address for side events. */
+  /** Optional street / venue address for extra activities. */
   address: string;
   /** 1-based day number on this edition's schedule. */
   eventDayNumber: number;

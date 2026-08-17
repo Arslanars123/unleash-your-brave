@@ -167,7 +167,7 @@ export function SessionsPage() {
           <div className="page-header-actions">
             <Button onClick={() => openCreate('event')} disabled={!eventDays.length}>
               <Plus size={16} />
-              Add side event
+              Add extra activity
             </Button>
             <Button onClick={() => openCreate('session')} disabled={!speakers.length || !eventDays.length}>
               <Plus size={16} />
@@ -243,7 +243,7 @@ export function SessionsPage() {
               <div className="empty-state-actions">
                 <Button onClick={() => openCreate('event')} disabled={!eventDays.length}>
                   <Plus size={16} />
-                  Add side event
+                  Add extra activity
                 </Button>
                 <Button onClick={() => openCreate('session')} disabled={!speakers.length || !eventDays.length}>
                   <Plus size={16} />
@@ -279,7 +279,7 @@ export function SessionsPage() {
                     <tr key={session.id}>
                       <td>
                         <span className={`badge ${isEvent ? 'role-sponsor' : 'role-member'}`}>
-                          {isEvent ? 'Side event' : 'Session'}
+                          {isEvent ? 'Extra activity' : 'Session'}
                         </span>
                       </td>
                       <td>

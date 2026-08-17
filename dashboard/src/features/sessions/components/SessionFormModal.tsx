@@ -278,10 +278,10 @@ export function SessionFormModal({
   const title =
     mode === 'create'
       ? isEvent
-        ? 'Add side event'
+        ? 'Add extra activity'
         : 'Create session'
       : isEvent
-        ? 'Edit side event'
+        ? 'Edit extra activity'
         : 'Edit session';
 
   return (
@@ -318,7 +318,7 @@ export function SessionFormModal({
                 }}
               >
                 <option value="session">Session (speaker talk)</option>
-                <option value="event">Side event (VIP dinner, etc.)</option>
+                <option value="event">Extra activity (VIP dinner, etc.)</option>
               </select>
             </label>
           ) : null}
@@ -408,7 +408,8 @@ export function SessionFormModal({
             />
           </div>
           <p className="hint" style={{ marginTop: '-0.35rem' }}>
-            Optional. Example: 9:00 AM – 10:00 AM.
+            Optional. Example: 9:00 AM – 10:00 AM. Sessions and extra activities cannot
+            overlap on the same day when both have start and end times.
           </p>
 
           <Input
@@ -564,7 +565,7 @@ export function SessionFormModal({
             <Button type="submit" loading={busy}>
               {mode === 'create'
                 ? isEvent
-                  ? 'Add side event'
+                  ? 'Add extra activity'
                   : 'Create session'
                 : 'Save changes'}
             </Button>
