@@ -1,6 +1,4 @@
-import { Copy, ExternalLink } from 'lucide-react';
 import type { AttendeePurchaseSummary, PublicMembershipPurchase } from '@/shared/types/api';
-import { useToast } from '@/shared/ui/toast';
 
 function display(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '—';
@@ -58,55 +56,6 @@ function membershipStatusLabel(status: AttendeePurchaseSummary['currentMembershi
   return '—';
 }
 
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function StripePaymentRef({ paymentIntentId }: { paymentIntentId: string }) {
-  const toast = useToast();
-  const stripeUrl = `https://dashboard.stripe.com/payments/${paymentIntentId}`;
-
-  return (
-    <div className="purchase-ref">
-      <span className="purchase-ref-label">Stripe payment ID</span>
-      <div className="purchase-ref-row">
-        <code className="purchase-ref-code" title="Stripe Payment Intent ID">
-          {paymentIntentId}
-        </code>
-        <button
-          type="button"
-          className="purchase-ref-btn"
-          aria-label="Copy Stripe payment ID"
-          onClick={() => {
-            void copyText(paymentIntentId).then((ok) => {
-              toast[ok ? 'success' : 'error'](
-                ok ? 'Payment ID copied' : 'Could not copy',
-              );
-            });
-          }}
-        >
-          <Copy size={14} />
-        </button>
-        <a
-          className="purchase-ref-btn"
-          href={stripeUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Open in Stripe"
-          title="Open in Stripe"
-        >
-          <ExternalLink size={14} />
-        </a>
-      </div>
-    </div>
-  );
-}
-
 function PurchaseCard({ item }: { item: PublicMembershipPurchase }) {
   const planLabel =
     item.kind === 'upgrade'
@@ -139,12 +88,6 @@ function PurchaseCard({ item }: { item: PublicMembershipPurchase }) {
           </div>
         ) : null}
       </dl>
-
-      {item.stripePaymentIntentId ? (
-        <StripePaymentRef paymentIntentId={item.stripePaymentIntentId} />
-      ) : (
-        <p className="muted purchase-card-note">No Stripe payment ID on this record</p>
-      )}
     </article>
   );
 }
@@ -164,7 +107,6 @@ interface MembershipRecordPanelProps {
     carriedFromPrevious?: boolean;
   };
   sourceLabel: string;
-  ghlContactId?: string | null;
   productTitle?: string | null;
 }
 
@@ -172,7 +114,6 @@ interface MembershipRecordPanelProps {
 export function MembershipRecordPanel({
   summary,
   sourceLabel,
-  ghlContactId,
   productTitle,
 }: MembershipRecordPanelProps) {
   const history = [...summary.purchases].sort(
@@ -283,10 +224,6 @@ export function MembershipRecordPanel({
         <div className="attendee-detail-row">
           <dt>Signup source</dt>
           <dd>{sourceLabel}</dd>
-        </div>
-        <div className="attendee-detail-row">
-          <dt>GHL contact ID</dt>
-          <dd>{display(ghlContactId)}</dd>
         </div>
         <div className="attendee-detail-row">
           <dt>Listed product / title</dt>

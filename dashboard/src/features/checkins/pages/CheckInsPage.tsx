@@ -243,7 +243,6 @@ export function CheckInsPage() {
                         ? 'GoHighLevel webhook'
                         : 'Manual / admin / Stripe'
                     }
-                    ghlContactId={scanDetail.user.ghlContactId}
                     productTitle={scanDetail.user.title}
                   />
                 </div>

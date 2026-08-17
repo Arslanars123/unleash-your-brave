@@ -10,7 +10,7 @@ import { speakersApi } from '@/features/speakers/api/speakers-api';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { formatSessionTimeRange } from '@/shared/lib/datetime';
-import type { PublicSession, SessionPayload } from '@/shared/types/api';
+import type { PublicSession, SessionKind, SessionPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { ListPagination } from '@/shared/ui/ListPagination';
@@ -24,6 +24,7 @@ export function SessionsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
+  const [createKind, setCreateKind] = useState<SessionKind>('session');
   const [editing, setEditing] = useState<PublicSession | null>(null);
   const [feedbackSession, setFeedbackSession] = useState<PublicSession | null>(null);
   const queryClient = useQueryClient();
@@ -96,7 +97,8 @@ export function SessionsPage() {
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to delete session')),
   });
 
-  function openCreate() {
+  function openCreate(kind: SessionKind = 'session') {
+    setCreateKind(kind);
     setEditing(null);
     setModalOpen(true);
   }
@@ -162,10 +164,16 @@ export function SessionsPage() {
           </p>
         </div>
         {canEdit ? (
-          <Button onClick={openCreate} disabled={!speakers.length || !eventDays.length}>
-            <Plus size={16} />
-            Create session
-          </Button>
+          <div className="page-header-actions">
+            <Button onClick={() => openCreate('event')} disabled={!eventDays.length}>
+              <Plus size={16} />
+              Add side event
+            </Button>
+            <Button onClick={() => openCreate('session')} disabled={!speakers.length || !eventDays.length}>
+              <Plus size={16} />
+              Create session
+            </Button>
+          </div>
         ) : null}
       </header>
 
@@ -232,10 +240,16 @@ export function SessionsPage() {
                 : 'Create sessions for this edition. Past editions keep their agenda.'}
             </p>
             {canEdit ? (
-              <Button onClick={openCreate} disabled={!speakers.length || !eventDays.length}>
-                <Plus size={16} />
-                Create session
-              </Button>
+              <div className="empty-state-actions">
+                <Button onClick={() => openCreate('event')} disabled={!eventDays.length}>
+                  <Plus size={16} />
+                  Add side event
+                </Button>
+                <Button onClick={() => openCreate('session')} disabled={!speakers.length || !eventDays.length}>
+                  <Plus size={16} />
+                  Create session
+                </Button>
+              </div>
             ) : null}
           </div>
         ) : (
@@ -243,7 +257,8 @@ export function SessionsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Session</th>
+                  <th>Type</th>
+                  <th>Item</th>
                   <th>Day</th>
                   <th>Time</th>
                   <th>Location</th>
@@ -258,16 +273,25 @@ export function SessionsPage() {
                   const summary = session.feedbackSummary;
                   const hasRatings = (summary?.ratingsCount ?? 0) > 0;
                   const timeRange = formatSessionTimeRange(session.startTime, session.endTime);
+                  const isEvent = session.kind === 'event';
 
                   return (
                     <tr key={session.id}>
+                      <td>
+                        <span className={`badge ${isEvent ? 'role-sponsor' : 'role-member'}`}>
+                          {isEvent ? 'Side event' : 'Session'}
+                        </span>
+                      </td>
                       <td>
                         <div className="cell-stack">
                           <strong>{session.name}</strong>
                           {session.description ? (
                             <span className="muted cell-clamp">{session.description}</span>
                           ) : null}
-                          {!session.feedbackEnabled ? (
+                          {isEvent && session.address?.trim() ? (
+                            <span className="hint cell-clamp">{session.address}</span>
+                          ) : null}
+                          {!isEvent && !session.feedbackEnabled ? (
                             <span className="hint">Feedback off</span>
                           ) : null}
                         </div>
@@ -289,9 +313,11 @@ export function SessionsPage() {
                           <span className="muted">—</span>
                         )}
                       </td>
-                      <td>{session.speaker?.name ?? '—'}</td>
+                      <td>{isEvent ? '—' : (session.speaker?.name ?? '—')}</td>
                       <td>
-                        {hasRatings ? (
+                        {isEvent ? (
+                          <span className="muted">—</span>
+                        ) : hasRatings ? (
                           <span className="session-rating-cell">
                             <Star size={14} fill="currentColor" strokeWidth={0} />
                             <strong>{summary.averageRating.toFixed(1)}</strong>
@@ -303,7 +329,7 @@ export function SessionsPage() {
                       </td>
                       <td>
                         <div className="material-badges">
-                          {session.materials.length === 0 ? (
+                          {isEvent || session.materials.length === 0 ? (
                             <span className="muted">None</span>
                           ) : (
                             session.materials.map((material) => (
@@ -315,10 +341,12 @@ export function SessionsPage() {
                         </div>
                       </td>
                       <td className="actions">
-                        <Button variant="secondary" onClick={() => setFeedbackSession(session)}>
-                          <MessageSquareText size={14} />
-                          Reviews
-                        </Button>
+                        {!isEvent ? (
+                          <Button variant="secondary" onClick={() => setFeedbackSession(session)}>
+                            <MessageSquareText size={14} />
+                            Reviews
+                          </Button>
+                        ) : null}
                         {canEdit ? (
                           <>
                             <Button variant="secondary" onClick={() => openEdit(session)}>
@@ -358,6 +386,7 @@ export function SessionsPage() {
           open={modalOpen}
           mode={editing ? 'edit' : 'create'}
           initialSession={editing}
+          defaultKind={createKind}
           speakers={speakers}
           memberships={memberships}
           eventDays={eventDays}

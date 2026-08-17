@@ -331,7 +331,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           },
         ),
         title: Text(
-          'Session',
+          session?.isSideEvent == true ? 'Event' : 'Session',
           style: AppTypography.body.copyWith(
             fontWeight: FontWeight.w600,
             fontSize: 17,
@@ -384,6 +384,8 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     final timeRange =
         formatSessionTimeRange(session.startTime, session.endTime);
     final location = session.location.trim();
+    final address = session.address.trim();
+    final isSideEvent = session.isSideEvent;
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(
@@ -428,7 +430,12 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                             icon: Icons.place_outlined,
                             label: location,
                           ),
-                        if (ratingsCount > 0 && summary != null)
+                        if (address.isNotEmpty)
+                          _MetaChip(
+                            icon: Icons.location_on_outlined,
+                            label: address,
+                          ),
+                        if (!isSideEvent && ratingsCount > 0 && summary != null)
                           _MetaChip(
                             icon: Icons.star_rounded,
                             label:
@@ -441,7 +448,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                       session.name,
                       style: AppTypography.headline.copyWith(fontSize: 28),
                     ),
-                    if (speaker != null && speaker.name.trim().isNotEmpty) ...[
+                    if (speaker != null && speaker.name.trim().isNotEmpty && !isSideEvent) ...[
                       const SizedBox(height: 20),
                       _SpeakerBlock(speaker: speaker),
                     ],
@@ -455,7 +462,9 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                     const SizedBox(height: 10),
                     Text(
                       description.isEmpty
-                          ? 'No description available for this session.'
+                          ? isSideEvent
+                              ? 'No description available for this event.'
+                              : 'No description available for this session.'
                           : description,
                       style: AppTypography.body.copyWith(
                         fontSize: 15,
@@ -465,44 +474,46 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                             : AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 32),
-                    Text(
-                      'RESOURCES',
-                      style: AppTypography.microLabel.copyWith(
-                        letterSpacing: 1.4,
+                    if (!isSideEvent) ...[
+                      const SizedBox(height: 32),
+                      Text(
+                        'RESOURCES',
+                        style: AppTypography.microLabel.copyWith(
+                          letterSpacing: 1.4,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      materials.isEmpty
-                          ? 'No materials for this session yet.'
-                          : '${materials.length} ${materials.length == 1 ? 'item' : 'items'} available',
-                      style: AppTypography.caption,
-                    ),
-                    const SizedBox(height: 14),
-                    if (materials.isEmpty)
-                      const _EmptyMaterials()
-                    else
-                      ...materials.map(
-                        (material) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _MaterialTile(
-                            material: material,
-                            onOpen: () => _openMaterial(material),
+                      const SizedBox(height: 6),
+                      Text(
+                        materials.isEmpty
+                            ? 'No materials for this session yet.'
+                            : '${materials.length} ${materials.length == 1 ? 'item' : 'items'} available',
+                        style: AppTypography.caption,
+                      ),
+                      const SizedBox(height: 14),
+                      if (materials.isEmpty)
+                        const _EmptyMaterials()
+                      else
+                        ...materials.map(
+                          (material) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _MaterialTile(
+                              material: material,
+                              onOpen: () => _openMaterial(material),
+                            ),
                           ),
                         ),
-                      ),
-                    if (session.feedbackEnabled) ...[
-                      const SizedBox(height: 32),
-                      KeyedSubtree(
-                        key: _reviewSectionKey,
-                        child: _SessionReviewsSection(
-                          loading: _feedbackLoading,
-                          reviews: _reviews,
-                          hasMyReview: _myFeedback != null,
-                          onAddOrEdit: _openReviewForm,
+                      if (session.feedbackEnabled) ...[
+                        const SizedBox(height: 32),
+                        KeyedSubtree(
+                          key: _reviewSectionKey,
+                          child: _SessionReviewsSection(
+                            loading: _feedbackLoading,
+                            reviews: _reviews,
+                            hasMyReview: _myFeedback != null,
+                            onAddOrEdit: _openReviewForm,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ],
                 ),

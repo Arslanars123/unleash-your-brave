@@ -430,6 +430,8 @@ export interface CouponPayload {
   membershipDiscounts: CouponMembershipDiscount[];
 }
 
+export type SessionKind = 'session' | 'event';
+
 export interface PublicSessionMaterial {
   id: string;
   type: SessionMaterialType;
@@ -459,9 +461,11 @@ export interface SessionFeedbackSummary {
 export interface PublicSession {
   id: string;
   eventId: string;
+  kind: SessionKind;
   name: string;
   description: string;
-  speakerId: string;
+  speakerId: string | null;
+  address: string;
   speaker: SessionSpeakerSummary | null;
   eventDayNumber: number;
   startTime: string;
@@ -477,9 +481,11 @@ export interface PublicSession {
 
 export interface SessionPayload {
   eventId?: string;
+  kind?: SessionKind;
   name: string;
   description?: string;
-  speakerId: string;
+  speakerId?: string | null;
+  address?: string;
   eventDayNumber: number;
   startTime?: string;
   endTime?: string;

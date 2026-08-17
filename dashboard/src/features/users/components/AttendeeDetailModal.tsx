@@ -131,7 +131,6 @@ export function AttendeeDetailModal({
               <MembershipRecordPanel
                 summary={summary}
                 sourceLabel={sourceLabel}
-                ghlContactId={user.ghlContactId}
                 productTitle={user.title}
               />
             ) : null}

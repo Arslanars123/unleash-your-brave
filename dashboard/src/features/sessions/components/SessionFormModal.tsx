@@ -8,6 +8,7 @@ import type {
   PublicMembership,
   PublicSession,
   PublicSpeaker,
+  SessionKind,
   SessionMaterialType,
   SessionPayload,
 } from '@/shared/types/api';
@@ -24,9 +25,11 @@ interface MaterialRow {
 }
 
 export interface SessionFormValues {
+  kind: SessionKind;
   name: string;
   description: string;
   speakerId: string;
+  address: string;
   eventDayNumber: string;
   startTime: string;
   endTime: string;
@@ -49,9 +52,11 @@ function emptyMaterial(): MaterialRow {
 }
 
 const emptyForm: SessionFormValues = {
+  kind: 'session',
   name: '',
   description: '',
   speakerId: '',
+  address: '',
   eventDayNumber: '',
   startTime: '',
   endTime: '',
@@ -63,9 +68,11 @@ const emptyForm: SessionFormValues = {
 
 function sessionToForm(session: PublicSession): SessionFormValues {
   return {
+    kind: session.kind ?? 'session',
     name: session.name,
     description: session.description,
-    speakerId: session.speakerId,
+    speakerId: session.speakerId ?? '',
+    address: session.address ?? '',
     eventDayNumber: String(session.eventDayNumber),
     startTime: session.startTime ?? '',
     endTime: session.endTime ?? '',
@@ -83,11 +90,12 @@ function sessionToForm(session: PublicSession): SessionFormValues {
 
 function validate(values: SessionFormValues): FieldErrors {
   const errors: FieldErrors = {};
+  const isEvent = values.kind === 'event';
 
   if (!values.name.trim()) errors.name = 'Name is required';
   else if (values.name.trim().length < 2) errors.name = 'Name must be at least 2 characters';
 
-  if (!values.speakerId) errors.speakerId = 'Select a speaker';
+  if (!isEvent && !values.speakerId) errors.speakerId = 'Select a speaker';
   if (!values.eventDayNumber) errors.eventDayNumber = 'Select an event day';
 
   const start = values.startTime.trim();
@@ -103,33 +111,44 @@ function validate(values: SessionFormValues): FieldErrors {
     errors.location = 'Location must be 160 characters or fewer';
   }
 
-  values.materials.forEach((material, index) => {
-    if (!material.title.trim()) errors[`material-title-${index}`] = 'Title is required';
-    if (!material.url.trim()) errors[`material-url-${index}`] = 'URL or file is required';
-    else if (!isValidMediaRef(material.url.trim())) {
-      errors[`material-url-${index}`] = 'Enter a valid URL or upload a file';
-    }
-  });
+  if (values.address.trim().length > 500) {
+    errors.address = 'Address must be 500 characters or fewer';
+  }
+
+  if (!isEvent) {
+    values.materials.forEach((material, index) => {
+      if (!material.title.trim()) errors[`material-title-${index}`] = 'Title is required';
+      if (!material.url.trim()) errors[`material-url-${index}`] = 'URL or file is required';
+      else if (!isValidMediaRef(material.url.trim())) {
+        errors[`material-url-${index}`] = 'Enter a valid URL or upload a file';
+      }
+    });
+  }
 
   return errors;
 }
 
 export function toSessionPayload(values: SessionFormValues): SessionPayload {
+  const isEvent = values.kind === 'event';
   return {
+    kind: values.kind,
     name: values.name.trim(),
     description: values.description.trim(),
-    speakerId: values.speakerId,
+    speakerId: isEvent ? null : values.speakerId,
+    address: values.address.trim(),
     eventDayNumber: Number(values.eventDayNumber),
     startTime: values.startTime.trim(),
     endTime: values.endTime.trim(),
     location: values.location.trim(),
     membershipIds: values.membershipIds,
-    materials: values.materials.map((material) => ({
-      type: material.type,
-      title: material.title.trim(),
-      url: material.url.trim(),
-    })),
-    feedbackEnabled: values.feedbackEnabled,
+    materials: isEvent
+      ? []
+      : values.materials.map((material) => ({
+          type: material.type,
+          title: material.title.trim(),
+          url: material.url.trim(),
+        })),
+    feedbackEnabled: isEvent ? false : values.feedbackEnabled,
   };
 }
 
@@ -137,6 +156,7 @@ interface SessionFormModalProps {
   open: boolean;
   mode: 'create' | 'edit';
   initialSession?: PublicSession | null;
+  defaultKind?: SessionKind;
   speakers: PublicSpeaker[];
   memberships: PublicMembership[];
   eventDays: PublicEventDay[];
@@ -149,6 +169,7 @@ export function SessionFormModal({
   open,
   mode,
   initialSession,
+  defaultKind = 'session',
   speakers,
   memberships,
   eventDays,
@@ -173,11 +194,13 @@ export function SessionFormModal({
         ? sessionToForm(initialSession)
         : {
             ...emptyForm,
+            kind: defaultKind,
             eventDayNumber: eventDays[0] ? String(eventDays[0].dayNumber) : '',
             speakerId: speakers[0]?.id ?? '',
+            feedbackEnabled: defaultKind === 'session',
           },
     );
-  }, [open, initialSession, eventDays, speakers]);
+  }, [open, initialSession, eventDays, speakers, defaultKind]);
 
   if (!open) return null;
 
@@ -251,6 +274,15 @@ export function SessionFormModal({
   }
 
   const busy = loading || uploadingKey !== null;
+  const isEvent = values.kind === 'event';
+  const title =
+    mode === 'create'
+      ? isEvent
+        ? 'Add side event'
+        : 'Create session'
+      : isEvent
+        ? 'Edit side event'
+        : 'Edit session';
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -262,13 +294,35 @@ export function SessionFormModal({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="modal-header">
-          <h2 id="session-form-title">{mode === 'create' ? 'Create Session' : 'Edit Session'}</h2>
+          <h2 id="session-form-title">{title}</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </header>
 
         <form className="modal-body event-form" onSubmit={handleSubmit} noValidate>
+          {mode === 'create' ? (
+            <label className="field">
+              <span className="field-label">Type</span>
+              <select
+                className="field-input"
+                value={values.kind}
+                onChange={(e) => {
+                  const kind = e.target.value as SessionKind;
+                  setForm({
+                    ...values,
+                    kind,
+                    feedbackEnabled: kind === 'session',
+                    materials: kind === 'event' ? [] : values.materials,
+                  });
+                }}
+              >
+                <option value="session">Session (speaker talk)</option>
+                <option value="event">Side event (VIP dinner, etc.)</option>
+              </select>
+            </label>
+          ) : null}
+
           <Input
             label="Name"
             requiredMark
@@ -276,7 +330,7 @@ export function SessionFormModal({
             value={values.name}
             error={errors.name}
             onChange={(e) => update('name', e.target.value)}
-            placeholder="Opening Keynote"
+            placeholder={isEvent ? 'VIP Dinner' : 'Opening Keynote'}
           />
           <TextArea
             label="Description"
@@ -284,28 +338,34 @@ export function SessionFormModal({
             value={values.description}
             error={errors.description}
             onChange={(e) => update('description', e.target.value)}
-            placeholder="What this session covers..."
+            placeholder={
+              isEvent
+                ? 'Who it is for, dress code, what to expect...'
+                : 'What this session covers...'
+            }
           />
 
-          <label className="field">
-            <span className="field-label">
-              Assigned speaker <span className="required-mark">*</span>
-            </span>
-            <select
-              className={`field-input${errors.speakerId ? ' field-input-error' : ''}`}
-              value={values.speakerId}
-              onChange={(e) => update('speakerId', e.target.value)}
-            >
-              <option value="">Select speaker</option>
-              {speakers.map((speaker) => (
-                <option key={speaker.id} value={speaker.id}>
-                  {speaker.name}
-                  {speaker.title ? ` — ${speaker.title}` : ''}
-                </option>
-              ))}
-            </select>
-            {errors.speakerId ? <span className="field-error">{errors.speakerId}</span> : null}
-          </label>
+          {!isEvent ? (
+            <label className="field">
+              <span className="field-label">
+                Assigned speaker <span className="required-mark">*</span>
+              </span>
+              <select
+                className={`field-input${errors.speakerId ? ' field-input-error' : ''}`}
+                value={values.speakerId}
+                onChange={(e) => update('speakerId', e.target.value)}
+              >
+                <option value="">Select speaker</option>
+                {speakers.map((speaker) => (
+                  <option key={speaker.id} value={speaker.id}>
+                    {speaker.name}
+                    {speaker.title ? ` — ${speaker.title}` : ''}
+                  </option>
+                ))}
+              </select>
+              {errors.speakerId ? <span className="field-error">{errors.speakerId}</span> : null}
+            </label>
+          ) : null}
 
           <label className="field">
             <span className="field-label">
@@ -357,9 +417,20 @@ export function SessionFormModal({
             value={values.location}
             error={errors.location}
             onChange={(e) => update('location', e.target.value)}
-            placeholder="Main Ballroom"
+            placeholder={isEvent ? 'Private dining room' : 'Main Ballroom'}
             maxLength={160}
           />
+
+          {isEvent ? (
+            <TextArea
+              label="Address"
+              name="address"
+              value={values.address}
+              error={errors.address}
+              onChange={(e) => update('address', e.target.value)}
+              placeholder="123 Example St, Sydney NSW (optional)"
+            />
+          ) : null}
 
           <div className="field">
             <span className="field-label">Allowed memberships</span>
@@ -382,20 +453,23 @@ export function SessionFormModal({
             )}
           </div>
 
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={values.feedbackEnabled}
-              onChange={(e) => update('feedbackEnabled', e.target.checked)}
-            />
-            <span>
-              Allow ratings &amp; reviews for this session
-              <span className="hint" style={{ display: 'block', marginTop: '0.15rem' }}>
-                Members can submit a 1–5 star rating and optional comment in the app.
+          {!isEvent ? (
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={values.feedbackEnabled}
+                onChange={(e) => update('feedbackEnabled', e.target.checked)}
+              />
+              <span>
+                Allow ratings &amp; reviews for this session
+                <span className="hint" style={{ display: 'block', marginTop: '0.15rem' }}>
+                  Members can submit a 1–5 star rating and optional comment in the app.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+          ) : null}
 
+          {!isEvent ? (
           <fieldset className="schedule-fieldset">
             <legend>Materials</legend>
             <p className="hint">Add PDFs, videos, docs, or links. Upload a file or paste a URL.</p>
@@ -481,13 +555,18 @@ export function SessionFormModal({
               </Button>
             </div>
           </fieldset>
+          ) : null}
 
           <div className="modal-actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
             <Button type="submit" loading={busy}>
-              {mode === 'create' ? 'Create session' : 'Save changes'}
+              {mode === 'create'
+                ? isEvent
+                  ? 'Add side event'
+                  : 'Create session'
+                : 'Save changes'}
             </Button>
           </div>
         </form>

@@ -42,12 +42,14 @@ class SessionEntity {
   const SessionEntity({
     required this.id,
     required this.eventId,
+    this.kind = 'session',
     required this.name,
     required this.description,
     required this.eventDayNumber,
     this.startTime = '',
     this.endTime = '',
     this.location = '',
+    this.address = '',
     this.speaker,
     this.materials = const [],
     this.feedbackEnabled = true,
@@ -56,6 +58,9 @@ class SessionEntity {
 
   final String id;
   final String eventId;
+
+  /// `session` = speaker talk; `event` = side event (VIP dinner, etc.).
+  final String kind;
   final String name;
   final String description;
   final int eventDayNumber;
@@ -66,8 +71,11 @@ class SessionEntity {
   /// Wall-clock end on the event day, `HH:mm` (24h). Empty if unset.
   final String endTime;
   final String location;
+  final String address;
   final SessionSpeakerEntity? speaker;
   final List<SessionMaterialEntity> materials;
   final bool feedbackEnabled;
   final SessionFeedbackSummaryEntity? feedbackSummary;
+
+  bool get isSideEvent => kind == 'event';
 }

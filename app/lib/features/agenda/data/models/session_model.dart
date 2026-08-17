@@ -4,12 +4,14 @@ class SessionModel extends SessionEntity {
   const SessionModel({
     required super.id,
     required super.eventId,
+    super.kind,
     required super.name,
     required super.description,
     required super.eventDayNumber,
     super.startTime,
     super.endTime,
     super.location,
+    super.address,
     super.speaker,
     super.materials,
     super.feedbackEnabled,
@@ -24,12 +26,14 @@ class SessionModel extends SessionEntity {
     return SessionModel(
       id: json['id'] as String,
       eventId: json['eventId'] as String? ?? '',
+      kind: json['kind'] as String? ?? 'session',
       name: json['name'] as String? ?? '',
       description: json['description'] as String? ?? '',
       eventDayNumber: (json['eventDayNumber'] as num?)?.toInt() ?? 0,
       startTime: json['startTime'] as String? ?? '',
       endTime: json['endTime'] as String? ?? '',
       location: json['location'] as String? ?? '',
+      address: json['address'] as String? ?? '',
       speaker: speakerJson is Map<String, dynamic>
           ? SessionSpeakerModel.fromJson(speakerJson)
           : null,
@@ -50,12 +54,14 @@ class SessionModel extends SessionEntity {
     return {
       'id': id,
       'eventId': eventId,
+      'kind': kind,
       'name': name,
       'description': description,
       'eventDayNumber': eventDayNumber,
       'startTime': startTime,
       'endTime': endTime,
       'location': location,
+      'address': address,
       'speaker': speaker == null
           ? null
           : {

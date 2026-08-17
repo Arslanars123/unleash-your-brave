@@ -24,9 +24,11 @@ export function toPublicSession(
   return {
     id: session.id,
     eventId: session.eventId,
+    kind: session.kind ?? 'session',
     name: session.name,
     description: session.description,
-    speakerId: session.speakerId,
+    speakerId: session.speakerId ?? null,
+    address: session.address ?? '',
     speaker,
     eventDayNumber: session.eventDayNumber,
     startTime: session.startTime,

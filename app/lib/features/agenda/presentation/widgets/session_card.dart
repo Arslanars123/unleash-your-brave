@@ -20,6 +20,8 @@ class SessionCard extends StatelessWidget {
     final speakerTitle = session.speaker?.title.trim() ?? '';
     final description = session.description.trim();
     final materialCount = session.materials.length;
+    final address = session.address.trim();
+    final isSideEvent = session.isSideEvent;
 
     return Material(
       color: Colors.transparent,
@@ -37,6 +39,16 @@ class SessionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (isSideEvent) ...[
+                Text(
+                  'SIDE EVENT',
+                  style: AppTypography.microLabel.copyWith(
+                    letterSpacing: 1.2,
+                    color: AppColors.accentPink,
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
               Text(
                 session.name,
                 style: AppTypography.body.copyWith(
@@ -58,7 +70,7 @@ class SessionCard extends StatelessWidget {
                   ),
                 ),
               ],
-              if (speakerName.isNotEmpty) ...[
+              if (speakerName.isNotEmpty && !isSideEvent) ...[
                 const SizedBox(height: 14),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,7 +105,27 @@ class SessionCard extends StatelessWidget {
                   ],
                 ),
               ],
-              if (materialCount > 0) ...[
+              if (address.isNotEmpty && isSideEvent) ...[
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.location_on_outlined,
+                      size: 16,
+                      color: AppColors.accentPink,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        address,
+                        style: AppTypography.caption.copyWith(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (materialCount > 0 && !isSideEvent) ...[
                 const SizedBox(height: 12),
                 Row(
                   children: [

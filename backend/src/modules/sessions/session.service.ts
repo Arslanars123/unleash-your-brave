@@ -89,22 +89,31 @@ export class SessionService {
 
   async create(input: CreateSessionInput): Promise<PublicSession> {
     await this.events.requireEvent(input.eventId);
-    await this.requireSpeakerForEvent(input.speakerId, input.eventId);
+    const kind = input.kind ?? 'session';
+    const speakerId = kind === 'session' ? (input.speakerId ?? null) : null;
+    if (kind === 'session' && !speakerId) {
+      throw new BadRequestError('Select a speaker');
+    }
+    if (speakerId) {
+      await this.requireSpeakerForEvent(speakerId, input.eventId);
+    }
     await this.assertValidEventDay(input.eventId, input.eventDayNumber);
     await this.assertMembershipsForEvent(input.membershipIds ?? [], input.eventId);
 
     const created = await this.sessions.create({
       eventId: input.eventId,
+      kind,
       name: input.name,
       description: input.description ?? '',
-      speakerId: input.speakerId,
+      speakerId,
+      address: input.address ?? '',
       eventDayNumber: input.eventDayNumber,
       startTime: input.startTime ?? '',
       endTime: input.endTime ?? '',
       location: input.location ?? '',
       membershipIds: input.membershipIds ?? [],
-      materials: normalizeMaterials(input.materials),
-      feedbackEnabled: input.feedbackEnabled ?? true,
+      materials: kind === 'session' ? normalizeMaterials(input.materials) : [],
+      feedbackEnabled: kind === 'session' ? (input.feedbackEnabled ?? true) : false,
     });
 
     return this.toPublic(created);
@@ -113,10 +122,19 @@ export class SessionService {
   async update(id: string, input: UpdateSessionInput): Promise<PublicSession> {
     const existing = await this.requireSession(id);
 
-    const speakerId = input.speakerId ?? existing.speakerId;
+    const kind = input.kind ?? existing.kind;
+    const speakerId =
+      kind === 'event'
+        ? null
+        : input.speakerId !== undefined
+          ? input.speakerId
+          : existing.speakerId;
     const eventDayNumber = input.eventDayNumber ?? existing.eventDayNumber;
 
-    if (input.speakerId !== undefined) {
+    if (kind === 'session' && !speakerId) {
+      throw new BadRequestError('Select a speaker');
+    }
+    if (speakerId && input.speakerId !== undefined) {
       await this.requireSpeakerForEvent(speakerId, existing.eventId);
     }
     if (input.eventDayNumber !== undefined) {
@@ -127,16 +145,23 @@ export class SessionService {
     }
 
     const updated = await this.sessions.update(id, {
+      ...(input.kind !== undefined ? { kind } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
-      ...(input.speakerId !== undefined ? { speakerId } : {}),
+      ...(input.kind !== undefined || input.speakerId !== undefined ? { speakerId } : {}),
+      ...(input.address !== undefined ? { address: input.address } : {}),
       ...(input.eventDayNumber !== undefined ? { eventDayNumber } : {}),
       ...(input.startTime !== undefined ? { startTime: input.startTime } : {}),
       ...(input.endTime !== undefined ? { endTime: input.endTime } : {}),
       ...(input.location !== undefined ? { location: input.location } : {}),
       ...(input.membershipIds !== undefined ? { membershipIds: input.membershipIds } : {}),
-      ...(input.materials !== undefined ? { materials: normalizeMaterials(input.materials) } : {}),
-      ...(input.feedbackEnabled !== undefined ? { feedbackEnabled: input.feedbackEnabled } : {}),
+      ...(input.materials !== undefined && kind === 'session'
+        ? { materials: normalizeMaterials(input.materials) }
+        : {}),
+      ...(input.kind === 'event' ? { materials: [], feedbackEnabled: false } : {}),
+      ...(input.feedbackEnabled !== undefined && kind === 'session'
+        ? { feedbackEnabled: input.feedbackEnabled }
+        : {}),
     });
 
     if (!updated) throw new NotFoundError('Session');
@@ -170,7 +195,9 @@ export class SessionService {
   }
 
   private async toPublic(session: Session): Promise<PublicSession> {
-    const speaker = await this.speakers.findById(session.speakerId);
+    const speaker = session.speakerId
+      ? await this.speakers.findById(session.speakerId)
+      : null;
     const summary: SessionSpeakerSummary | null = speaker
       ? {
           id: speaker.id,
@@ -195,9 +222,12 @@ export class SessionService {
     // Legacy docs may omit membershipIds / feedbackEnabled.
     return {
       ...session,
+      kind: session.kind ?? 'session',
+      address: session.address ?? '',
+      speakerId: session.speakerId ?? null,
       membershipIds: session.membershipIds ?? [],
       materials: session.materials ?? [],
-      feedbackEnabled: session.feedbackEnabled !== false,
+      feedbackEnabled: session.kind === 'event' ? false : session.feedbackEnabled !== false,
     };
   }
 

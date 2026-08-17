@@ -1,3 +1,6 @@
+export const SESSION_KINDS = ['session', 'event'] as const;
+export type SessionKind = (typeof SESSION_KINDS)[number];
+
 export type SessionMaterialType = 'pdf' | 'video' | 'doc' | 'link';
 
 export interface SessionMaterial {
@@ -31,9 +34,13 @@ export interface SessionSpeakerSummary {
 export interface Session {
   id: string;
   eventId: string;
+  /** `session` = speaker talk; `event` = side event (VIP dinner, etc.). */
+  kind: SessionKind;
   name: string;
   description: string;
-  speakerId: string;
+  speakerId: string | null;
+  /** Optional street / venue address for side events. */
+  address: string;
   /** 1-based day number on this edition's schedule. */
   eventDayNumber: number;
   /** Wall-clock start on the event day, `HH:mm` (24h). Empty if unset. */
@@ -59,9 +66,11 @@ export interface SessionFeedbackSummary {
 export interface PublicSession {
   id: string;
   eventId: string;
+  kind: SessionKind;
   name: string;
   description: string;
-  speakerId: string;
+  speakerId: string | null;
+  address: string;
   speaker: SessionSpeakerSummary | null;
   eventDayNumber: number;
   startTime: string;
@@ -77,9 +86,11 @@ export interface PublicSession {
 
 export interface CreateSessionInput {
   eventId: string;
+  kind?: SessionKind;
   name: string;
   description?: string;
-  speakerId: string;
+  speakerId?: string | null;
+  address?: string;
   eventDayNumber: number;
   startTime?: string;
   endTime?: string;
@@ -90,9 +101,11 @@ export interface CreateSessionInput {
 }
 
 export interface UpdateSessionInput {
+  kind?: SessionKind;
   name?: string;
   description?: string;
-  speakerId?: string;
+  speakerId?: string | null;
+  address?: string;
   eventDayNumber?: number;
   startTime?: string;
   endTime?: string;
