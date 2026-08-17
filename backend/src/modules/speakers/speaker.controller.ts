@@ -30,7 +30,7 @@ export class SpeakerController {
     if (!req.auth) throw new UnauthorizedError();
     const id = req.params.id as string;
 
-    if (req.auth.role === 'speaker') {
+    if (req.auth.role !== 'admin') {
       if (!req.auth.speakerId || req.auth.speakerId !== id) {
         throw new ForbiddenError('You can only update your own speaker profile');
       }

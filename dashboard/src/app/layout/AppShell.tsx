@@ -23,7 +23,15 @@ import { Button } from '@/shared/ui/Button';
 export function AppShell() {
   const { user, logout, isAdmin, isSpeaker, isSponsor } = useAuth();
 
-  const portalLabel = isAdmin ? 'Admin' : isSpeaker ? 'Speaker' : isSponsor ? 'Sponsor' : 'Portal';
+  const portalLabel = isAdmin
+    ? 'Admin'
+    : isSpeaker && isSponsor
+      ? 'Speaker & Sponsor'
+      : isSpeaker
+        ? 'Speaker'
+        : isSponsor
+          ? 'Sponsor'
+          : 'Portal';
 
   return (
     <div className="shell">
@@ -96,9 +104,9 @@ export function AppShell() {
 
           {isSpeaker ? (
             <>
-              <NavLink to="/my-profile">
+              <NavLink to="/my-speaker-profile">
                 <UserRound size={18} />
-                My profile
+                Speaker profile
               </NavLink>
               <NavLink to="/my-sessions">
                 <Clapperboard size={18} />
@@ -108,9 +116,9 @@ export function AppShell() {
           ) : null}
 
           {isSponsor ? (
-            <NavLink to="/my-profile">
+            <NavLink to="/my-sponsor-profile">
               <Handshake size={18} />
-              My profile
+              Sponsor profile
             </NavLink>
           ) : null}
         </nav>

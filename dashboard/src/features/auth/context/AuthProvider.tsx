@@ -15,8 +15,6 @@ import {
 import { tokenStorage } from '@/shared/lib/token-storage';
 import type { PublicUser, UserRole } from '@/shared/types/api';
 
-const DASHBOARD_ROLES: UserRole[] = ['admin', 'speaker', 'sponsor'];
-
 interface AuthContextValue {
   user: PublicUser | null;
   isAuthenticated: boolean;
@@ -32,23 +30,33 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function hasDashboardAccess(user: PublicUser): boolean {
+  return (
+    user.role === 'admin' ||
+    user.role === 'speaker' ||
+    user.role === 'sponsor' ||
+    Boolean(user.speakerId) ||
+    Boolean(user.sponsorId)
+  );
+}
+
 function assertDashboardUser(user: PublicUser): PublicUser {
-  if (!DASHBOARD_ROLES.includes(user.role)) {
+  if (!hasDashboardAccess(user)) {
     throw new Error('This portal is for admins, speakers, and sponsors');
   }
   return user;
 }
 
-function homePathForRole(role: UserRole): string {
-  if (role === 'speaker') return '/my-profile';
-  if (role === 'sponsor') return '/my-profile';
+function homePathForUserCapabilities(user: PublicUser): string {
+  if (user.speakerId || user.role === 'speaker') return '/my-speaker-profile';
+  if (user.sponsorId || user.role === 'sponsor') return '/my-sponsor-profile';
   return '/';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(() => {
     const cached = tokenStorage.getUser<PublicUser>();
-    return cached && DASHBOARD_ROLES.includes(cached.role) ? cached : null;
+    return cached && hasDashboardAccess(cached) ? cached : null;
   });
   const [isBootstrapping, setIsBootstrapping] = useState(true);
 
@@ -110,6 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const isSpeaker = Boolean(user?.speakerId) || user?.role === 'speaker';
+  const isSponsor = Boolean(user?.sponsorId) || user?.role === 'sponsor';
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -117,13 +128,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isBootstrapping,
       mustChangePassword: Boolean(user?.mustChangePassword),
       isAdmin: user?.role === 'admin',
-      isSpeaker: user?.role === 'speaker',
-      isSponsor: user?.role === 'sponsor',
+      isSpeaker,
+      isSponsor,
       login,
       changePassword,
       logout,
     }),
-    [user, isBootstrapping, login, changePassword, logout],
+    [user, isBootstrapping, isSpeaker, isSponsor, login, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -140,5 +151,16 @@ export function useAuth(): AuthContextValue {
 export function getHomePathForUser(user: PublicUser | null): string {
   if (!user) return '/login';
   if (user.mustChangePassword) return '/set-password';
-  return homePathForRole(user.role);
+  return homePathForUserCapabilities(user);
+}
+
+/** True when the user may access a route gated by one of the given roles. */
+export function userMatchesRoles(user: PublicUser, roles: UserRole[]): boolean {
+  if (roles.includes(user.role)) return true;
+  if (roles.includes('speaker') && (user.speakerId || user.role === 'speaker')) return true;
+  if (roles.includes('sponsor') && (user.sponsorId || user.role === 'sponsor')) return true;
+  if (roles.includes('member') && (user.role === 'member' || Boolean(user.membershipId))) {
+    return true;
+  }
+  return false;
 }

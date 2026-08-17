@@ -83,20 +83,6 @@ export const createUserSchema = z
         message: 'Link a sponsor profile for sponsor accounts',
       });
     }
-    if (value.role !== 'speaker' && value.speakerId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['speakerId'],
-        message: 'speakerId is only valid for speaker accounts',
-      });
-    }
-    if (value.role !== 'sponsor' && value.sponsorId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['sponsorId'],
-        message: 'sponsorId is only valid for sponsor accounts',
-      });
-    }
   });
 
 export const updateUserSchema = z

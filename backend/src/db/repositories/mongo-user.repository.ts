@@ -75,11 +75,21 @@ export class MongoUserRepository implements UserRepository {
 
   async listActiveIdsByRoles(roles: UserRole[]): Promise<string[]> {
     if (roles.length === 0) return [];
+    const or: Filter<MongoDoc<User>>[] = [{ role: { $in: roles } }];
+    if (roles.includes('speaker')) {
+      or.push({ speakerId: { $ne: null } });
+    }
+    if (roles.includes('sponsor')) {
+      or.push({ sponsorId: { $ne: null } });
+    }
+    if (roles.includes('member')) {
+      or.push({ membershipId: { $ne: null } });
+    }
     const docs = await this.collection
-      .find({ status: 'active', role: { $in: roles } } as Filter<MongoDoc<User>>)
+      .find({ status: 'active', $or: or } as Filter<MongoDoc<User>>)
       .project({ _id: 1 })
       .toArray();
-    return docs.map((doc) => String(doc._id));
+    return [...new Set(docs.map((doc) => String(doc._id)))];
   }
 
   async listDueForMembershipExpiry(now: Date): Promise<User[]> {

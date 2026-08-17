@@ -138,7 +138,14 @@ export class InMemoryUserRepository implements UserRepository {
   async listActiveIdsByRoles(roles: UserRole[]): Promise<string[]> {
     if (roles.length === 0) return [];
     return [...this.users.values()]
-      .filter((user) => user.status === 'active' && roles.includes(user.role))
+      .filter((user) => {
+        if (user.status !== 'active') return false;
+        if (roles.includes(user.role)) return true;
+        if (roles.includes('speaker') && user.speakerId) return true;
+        if (roles.includes('sponsor') && user.sponsorId) return true;
+        if (roles.includes('member') && user.membershipId) return true;
+        return false;
+      })
       .map((user) => user.id);
   }
 

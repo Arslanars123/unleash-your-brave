@@ -30,10 +30,10 @@ function RoleHomeRedirect() {
   return <Navigate to={getHomePathForUser(user)} replace />;
 }
 
-function PortalProfilePage() {
+function PortalProfileRedirect() {
   const { isSpeaker, isSponsor } = useAuth();
-  if (isSpeaker) return <SpeakerProfilePage />;
-  if (isSponsor) return <SponsorProfilePage />;
+  if (isSpeaker) return <Navigate to="/my-speaker-profile" replace />;
+  if (isSponsor) return <Navigate to="/my-sponsor-profile" replace />;
   return <Navigate to="/" replace />;
 }
 
@@ -64,11 +64,16 @@ export function AppRouter() {
             </Route>
 
             <Route element={<ProtectedRoute roles={['speaker', 'sponsor']} />}>
-              <Route path="my-profile" element={<PortalProfilePage />} />
+              <Route path="my-profile" element={<PortalProfileRedirect />} />
             </Route>
 
             <Route element={<ProtectedRoute roles={['speaker']} />}>
+              <Route path="my-speaker-profile" element={<SpeakerProfilePage />} />
               <Route path="my-sessions" element={<SpeakerSessionsPage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute roles={['sponsor']} />}>
+              <Route path="my-sponsor-profile" element={<SponsorProfilePage />} />
             </Route>
 
             <Route path="*" element={<RoleHomeRedirect />} />

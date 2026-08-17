@@ -197,7 +197,8 @@ export class UserService {
   }
 
   /**
-   * Create or refresh a dashboard portal account (speaker/sponsor) with invite code.
+   * Create or refresh a dashboard portal account (speaker and/or sponsor) with invite code.
+   * Merges portal links on the same email so a user can be attendee + speaker + sponsor.
    * Returns plaintext inviteCode on create or when a fresh invite is issued.
    */
   async upsertPortalAccount(input: {
@@ -209,43 +210,61 @@ export class UserService {
     issueInvite?: boolean;
   }): Promise<{ user: PublicUser; created: boolean; inviteCode?: string }> {
     const email = input.email.trim().toLowerCase();
-    const speakerId = input.role === 'speaker' ? (input.speakerId ?? null) : null;
-    const sponsorId = input.role === 'sponsor' ? (input.sponsorId ?? null) : null;
+    const incomingSpeakerId = input.role === 'speaker' ? (input.speakerId ?? null) : null;
+    const incomingSponsorId = input.role === 'sponsor' ? (input.sponsorId ?? null) : null;
 
-    await this.assertProfileLinks(input.role, speakerId, sponsorId);
+    if (input.role === 'speaker' && !incomingSpeakerId) {
+      throw new BadRequestError('Speaker accounts must link a speaker profile');
+    }
+    if (input.role === 'sponsor' && !incomingSponsorId) {
+      throw new BadRequestError('Sponsor accounts must link a sponsor profile');
+    }
+
+    await this.assertProfileLinks(incomingSpeakerId, incomingSponsorId);
 
     const linkedUser =
-      input.role === 'speaker' && speakerId
-        ? await this.users.findBySpeakerId(speakerId)
-        : input.role === 'sponsor' && sponsorId
-          ? await this.users.findBySponsorId(sponsorId)
+      input.role === 'speaker' && incomingSpeakerId
+        ? await this.users.findBySpeakerId(incomingSpeakerId)
+        : input.role === 'sponsor' && incomingSponsorId
+          ? await this.users.findBySponsorId(incomingSponsorId)
           : null;
 
     const byEmail = await this.users.findByEmail(email);
     const existing = linkedUser ?? byEmail;
 
     if (existing) {
-      const canConvertMemberToPortal =
-        existing.role === 'member' &&
-        (input.role === 'speaker' || input.role === 'sponsor');
-
-      if (existing.role !== input.role && !canConvertMemberToPortal) {
-        throw new ConflictError('That email is already used by another account type');
+      if (existing.role === 'admin') {
+        throw new ConflictError('That email is already used by an admin account');
       }
+
       if (
-        speakerId &&
+        incomingSpeakerId &&
         existing.speakerId &&
-        existing.speakerId !== speakerId
+        existing.speakerId !== incomingSpeakerId
       ) {
         throw new ConflictError('That email is linked to a different speaker profile');
       }
       if (
-        sponsorId &&
+        incomingSponsorId &&
         existing.sponsorId &&
-        existing.sponsorId !== sponsorId
+        existing.sponsorId !== incomingSponsorId
       ) {
         throw new ConflictError('That email is linked to a different sponsor profile');
       }
+
+      // Merge capabilities — never drop the other portal link or membership.
+      const nextSpeakerId =
+        input.role === 'speaker' ? incomingSpeakerId : existing.speakerId;
+      const nextSponsorId =
+        input.role === 'sponsor' ? incomingSponsorId : existing.sponsorId;
+
+      await this.assertProfileLinks(nextSpeakerId, nextSponsorId);
+
+      // Keep an existing portal primary role; promote members into the portal being added.
+      const nextRole =
+        existing.role === 'speaker' || existing.role === 'sponsor'
+          ? existing.role
+          : input.role;
 
       // Password already set → never re-invite; unused invite → replace with a fresh code.
       const passwordAlreadySet = !existing.mustChangePassword;
@@ -259,11 +278,10 @@ export class UserService {
       const updated = await this.users.update(existing.id, {
         email,
         name: input.name.trim(),
-        role: input.role,
-        speakerId: input.role === 'speaker' ? speakerId : null,
-        sponsorId: input.role === 'sponsor' ? sponsorId : null,
+        role: nextRole,
+        speakerId: nextSpeakerId,
+        sponsorId: nextSponsorId,
         status: 'active',
-        // Membership entitlement is preserved when an attendee becomes speaker/sponsor.
         ...(shouldIssueInvite
           ? {
               inviteCodeHash: await bcrypt.hash(inviteCode!, PASSWORD_SALT_ROUNDS),
@@ -293,8 +311,8 @@ export class UserService {
       mustChangePassword: true,
       role: input.role,
       status: 'active',
-      speakerId,
-      sponsorId,
+      speakerId: incomingSpeakerId,
+      sponsorId: incomingSponsorId,
       profileCompleted: false,
     });
 
@@ -330,11 +348,19 @@ export class UserService {
     }
 
     const role = input.role ?? 'member';
-    const speakerId = role === 'speaker' ? (input.speakerId ?? null) : null;
-    const sponsorId = role === 'sponsor' ? (input.sponsorId ?? null) : null;
-    const membershipId = role === 'member' ? (input.membershipId ?? null) : null;
+    const speakerId = input.speakerId ?? null;
+    const sponsorId = input.sponsorId ?? null;
+    const membershipId =
+      role === 'admin' ? null : (input.membershipId ?? null);
 
-    await this.assertProfileLinks(role, speakerId, sponsorId);
+    if (role === 'speaker' && !speakerId) {
+      throw new BadRequestError('Speaker accounts must link a speaker profile');
+    }
+    if (role === 'sponsor' && !sponsorId) {
+      throw new BadRequestError('Sponsor accounts must link a sponsor profile');
+    }
+
+    await this.assertProfileLinks(speakerId, sponsorId);
     await this.assertMembership(membershipId);
 
     const created = await this.users.create({
@@ -370,18 +396,9 @@ export class UserService {
     const existing = await this.requireUser(id);
     const role = input.role ?? existing.role;
     const speakerId =
-      input.speakerId !== undefined
-        ? input.speakerId
-        : role === 'speaker'
-          ? existing.speakerId
-          : null;
+      input.speakerId !== undefined ? input.speakerId : existing.speakerId;
     const sponsorId =
-      input.sponsorId !== undefined
-        ? input.sponsorId
-        : role === 'sponsor'
-          ? existing.sponsorId
-          : null;
-    // Speakers/sponsors may also hold a membership (dual attendee access).
+      input.sponsorId !== undefined ? input.sponsorId : existing.sponsorId;
     const membershipId =
       input.membershipId !== undefined
         ? input.membershipId
@@ -389,12 +406,19 @@ export class UserService {
           ? null
           : existing.membershipId;
 
-    if (input.role !== undefined || input.speakerId !== undefined || input.sponsorId !== undefined) {
-      await this.assertProfileLinks(
-        role,
-        role === 'speaker' ? speakerId : null,
-        role === 'sponsor' ? sponsorId : null,
-      );
+    if (role === 'speaker' && !speakerId) {
+      throw new BadRequestError('Speaker accounts must link a speaker profile');
+    }
+    if (role === 'sponsor' && !sponsorId) {
+      throw new BadRequestError('Sponsor accounts must link a sponsor profile');
+    }
+
+    if (
+      input.role !== undefined ||
+      input.speakerId !== undefined ||
+      input.sponsorId !== undefined
+    ) {
+      await this.assertProfileLinks(speakerId, sponsorId);
     }
 
     if (input.membershipId !== undefined || input.role !== undefined) {
@@ -416,10 +440,12 @@ export class UserService {
         : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
-      ...(input.role !== undefined || input.speakerId !== undefined || input.sponsorId !== undefined
+      ...(input.role !== undefined ||
+      input.speakerId !== undefined ||
+      input.sponsorId !== undefined
         ? {
-            speakerId: role === 'speaker' ? speakerId : null,
-            sponsorId: role === 'sponsor' ? sponsorId : null,
+            speakerId: role === 'admin' ? null : speakerId,
+            sponsorId: role === 'admin' ? null : sponsorId,
           }
         : {}),
       ...(input.membershipId !== undefined || input.role !== undefined
@@ -490,21 +516,14 @@ export class UserService {
   }
 
   private async assertProfileLinks(
-    role: User['role'],
     speakerId: string | null,
     sponsorId: string | null,
   ): Promise<void> {
-    if (role === 'speaker') {
-      if (!speakerId) throw new BadRequestError('Speaker accounts must link a speaker profile');
-      if (this.speakers && !(await this.speakers.findById(speakerId))) {
-        throw new BadRequestError('Linked speaker profile was not found');
-      }
+    if (speakerId && this.speakers && !(await this.speakers.findById(speakerId))) {
+      throw new BadRequestError('Linked speaker profile was not found');
     }
-    if (role === 'sponsor') {
-      if (!sponsorId) throw new BadRequestError('Sponsor accounts must link a sponsor profile');
-      if (this.sponsors && !(await this.sponsors.findById(sponsorId))) {
-        throw new BadRequestError('Linked sponsor profile was not found');
-      }
+    if (sponsorId && this.sponsors && !(await this.sponsors.findById(sponsorId))) {
+      throw new BadRequestError('Linked sponsor profile was not found');
     }
   }
 

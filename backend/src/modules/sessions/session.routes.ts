@@ -105,7 +105,9 @@ export function createSessionRouter(
     authorize('admin', 'speaker'),
     (req, res, next) => {
       const bodySchema =
-        req.auth?.role === 'speaker' ? speakerUpdateSessionSchema : updateSessionSchema;
+        req.auth?.role === 'admin' || !req.auth?.speakerId
+          ? updateSessionSchema
+          : speakerUpdateSessionSchema;
       return validate({ params: sessionIdParamSchema, body: bodySchema })(req, res, next);
     },
     asyncHandler(controller.update),

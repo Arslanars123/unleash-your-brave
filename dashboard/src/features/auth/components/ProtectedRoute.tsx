@@ -1,5 +1,9 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { getHomePathForUser, useAuth } from '@/features/auth/context/AuthProvider';
+import {
+  getHomePathForUser,
+  useAuth,
+  userMatchesRoles,
+} from '@/features/auth/context/AuthProvider';
 import type { UserRole } from '@/shared/types/api';
 import { Spinner } from '@/shared/ui/Spinner';
 
@@ -14,7 +18,7 @@ export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
     return <Navigate to="/set-password" replace />;
   }
 
-  if (roles && !roles.includes(user.role)) {
+  if (roles && !userMatchesRoles(user, roles)) {
     return <Navigate to={getHomePathForUser(user)} replace />;
   }
 

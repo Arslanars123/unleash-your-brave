@@ -47,17 +47,28 @@ export const optionalAuthenticate: RequestHandler = (req, _res, next) => {
   next();
 };
 
-/** Route guard. Must run after `authenticate`. */
+/** Route guard. Must run after `authenticate`.
+ * Portal capabilities also match via linked `speakerId` / `sponsorId` so one
+ * account can be speaker and sponsor (and attendee) at the same time.
+ */
 export function authorize(...roles: UserRole[]): RequestHandler {
   return (req, _res, next) => {
     if (!req.auth) {
       next(new UnauthorizedError());
       return;
     }
-    if (!roles.includes(req.auth.role)) {
-      next(new ForbiddenError());
+    if (roles.includes(req.auth.role)) {
+      next();
       return;
     }
-    next();
+    if (roles.includes('speaker') && req.auth.speakerId) {
+      next();
+      return;
+    }
+    if (roles.includes('sponsor') && req.auth.sponsorId) {
+      next();
+      return;
+    }
+    next(new ForbiddenError());
   };
 }

@@ -31,9 +31,9 @@ export class SessionController {
     const id = req.params.id as string;
     const input = req.body as UpdateSessionInput;
 
-    if (req.auth.role === 'speaker') {
+    if (req.auth.role !== 'admin' && req.auth.speakerId) {
       const session = await this.service.getById(id);
-      if (!req.auth.speakerId || session.speakerId !== req.auth.speakerId) {
+      if (session.speakerId !== req.auth.speakerId) {
         throw new ForbiddenError('You can only update sessions assigned to you');
       }
       sendSuccess(

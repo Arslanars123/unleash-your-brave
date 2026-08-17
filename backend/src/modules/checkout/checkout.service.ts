@@ -669,7 +669,7 @@ export class CheckoutService {
         name: upsert.user.name,
         inviteCode: upsert.inviteCode,
         expiresAt: new Date(Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000),
-        dualAccess: upsert.user.role === 'speaker' || upsert.user.role === 'sponsor',
+        dualAccess: Boolean(upsert.user.speakerId || upsert.user.sponsorId),
       });
     } else if (!upsert.created) {
       await this.mail.sendExistingAccountMembershipAccess({
@@ -677,6 +677,8 @@ export class CheckoutService {
         name: upsert.user.name,
         membershipName: membership.name,
         role: upsert.user.role,
+        speakerId: upsert.user.speakerId,
+        sponsorId: upsert.user.sponsorId,
       });
     }
 

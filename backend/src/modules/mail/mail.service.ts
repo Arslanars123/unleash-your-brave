@@ -107,13 +107,14 @@ export class MailService {
     name: string;
     membershipName: string;
     role: string;
+    speakerId?: string | null;
+    sponsorId?: string | null;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const parts: string[] = [];
+    if (input.speakerId || input.role === 'speaker') parts.push('speaker');
+    if (input.sponsorId || input.role === 'sponsor') parts.push('sponsor');
     const roleLabel =
-      input.role === 'speaker'
-        ? 'speaker'
-        : input.role === 'sponsor'
-          ? 'sponsor'
-          : 'account';
+      parts.length > 0 ? parts.join(' and ') : input.role === 'member' ? 'attendee' : 'account';
     const subject = `Your ${env.appName} membership is ready — use your existing login`;
     const text = [
       `Hi ${input.name},`,

@@ -65,11 +65,14 @@ export interface User {
   name: string;
   role: UserRole;
   status: UserStatus;
-  /** Linked speaker profile when role is `speaker`. */
+  /** Linked speaker profile when this account has speaker portal access. */
   speakerId: string | null;
-  /** Linked sponsor profile when role is `sponsor`. */
+  /** Linked sponsor profile when this account has sponsor portal access. */
   sponsorId: string | null;
-  /** Membership tier for `member` role. */
+  /**
+   * Membership tier for attendee access.
+   * May be set together with speakerId/sponsorId (multi-capability accounts).
+   */
   membershipId: string | null;
   /**
    * Payment/lifecycle status for the current membership.

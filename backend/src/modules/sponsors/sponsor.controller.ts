@@ -30,7 +30,7 @@ export class SponsorController {
     if (!req.auth) throw new UnauthorizedError();
     const id = req.params.id as string;
 
-    if (req.auth.role === 'sponsor') {
+    if (req.auth.role !== 'admin') {
       if (!req.auth.sponsorId || req.auth.sponsorId !== id) {
         throw new ForbiddenError('You can only update your own sponsor profile');
       }

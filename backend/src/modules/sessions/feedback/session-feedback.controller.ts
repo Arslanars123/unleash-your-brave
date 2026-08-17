@@ -19,7 +19,7 @@ export class SessionFeedbackController {
     if (!req.auth) throw new UnauthorizedError();
     const sessionId = req.params.id as string;
 
-    if (req.auth.role === 'speaker') {
+    if (req.auth.speakerId) {
       await this.service.assertSpeakerOwnsSession(sessionId, req.auth.speakerId);
     }
 
