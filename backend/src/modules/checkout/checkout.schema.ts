@@ -10,11 +10,14 @@ export const createCheckoutSessionSchema = z.object({
   couponCode: z.string().trim().min(1).max(64).optional(),
   expectedPrice: z.number().finite().min(0).optional(),
   expectedUpdatedAt: z.string().trim().min(1).max(40).optional(),
+  nameUpdateChoice: z.enum(['update', 'keep']).optional(),
 });
 
 export const checkoutEligibilityQuerySchema = z.object({
   email: z.string().email().max(254),
   membershipId: z.string().uuid(),
+  firstName: z.string().trim().min(1).max(100).optional(),
+  lastName: z.string().trim().min(1).max(100).optional(),
 });
 
 export const checkoutCatalogQuerySchema = z.object({

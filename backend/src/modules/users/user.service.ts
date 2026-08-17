@@ -67,6 +67,8 @@ export class UserService {
     lastName?: string;
     product?: string;
     contactId?: string;
+    /** When false, keep the existing account name (checkout chose "keep"). */
+    applyName?: boolean;
   }): Promise<{ user: PublicUser; created: boolean; inviteCode?: string }> {
     const email = input.email.trim().toLowerCase();
     const existing = await this.users.findByEmail(email);
@@ -78,10 +80,12 @@ export class UserService {
       input.name?.trim() ||
       email.split('@')[0] ||
       'Attendee';
+    const applyName = input.applyName !== false;
 
     if (existing) {
       // Speakers/sponsors (and any account) may also buy membership. Keep their
-      // portal role/links; issue a fresh app invite when they still need first login.
+      // portal role/links; issue a fresh app invite when they still need first login
+      // (expires any previous unused invite by replacing the hash).
       const needsAppInvite = existing.mustChangePassword;
       let inviteCode: string | undefined;
       let invitePatch: Partial<{
@@ -104,9 +108,13 @@ export class UserService {
       }
 
       const updated = await this.users.update(existing.id, {
-        name: displayName,
-        ...(firstName ? { firstName } : {}),
-        ...(lastName ? { lastName } : {}),
+        ...(applyName
+          ? {
+              name: displayName,
+              ...(firstName ? { firstName } : {}),
+              ...(lastName ? { lastName } : {}),
+            }
+          : {}),
         ...(input.product?.trim() ? { title: input.product.trim() } : {}),
         ...(input.contactId?.trim() ? { ghlContactId: input.contactId.trim() } : {}),
         status: 'active',
@@ -139,6 +147,40 @@ export class UserService {
     });
 
     return { user: toPublicUser(created), created: true, inviteCode };
+  }
+
+  /**
+   * Update display name on the user and linked speaker/sponsor profiles.
+   */
+  async updateAccountNameEverywhere(
+    email: string,
+    input: { firstName: string; lastName: string; name?: string },
+  ): Promise<PublicUser> {
+    const existing = await this.users.findByEmail(email.trim().toLowerCase());
+    if (!existing) throw new NotFoundError('User');
+
+    const firstName = input.firstName.trim();
+    const lastName = input.lastName.trim();
+    const name =
+      input.name?.trim() ||
+      [firstName, lastName].filter(Boolean).join(' ').trim() ||
+      existing.name;
+
+    const updated = await this.users.update(existing.id, {
+      name,
+      firstName,
+      lastName,
+    });
+    if (!updated) throw new NotFoundError('User');
+
+    if (updated.speakerId && this.speakers) {
+      await this.speakers.update(updated.speakerId, { name });
+    }
+    if (updated.sponsorId && this.sponsors) {
+      await this.sponsors.update(updated.sponsorId, { name });
+    }
+
+    return toPublicUser(updated);
   }
 
   async setPassword(userId: string, newPassword: string): Promise<PublicUser> {
@@ -183,7 +225,11 @@ export class UserService {
     const existing = linkedUser ?? byEmail;
 
     if (existing) {
-      if (existing.role !== input.role) {
+      const canConvertMemberToPortal =
+        existing.role === 'member' &&
+        (input.role === 'speaker' || input.role === 'sponsor');
+
+      if (existing.role !== input.role && !canConvertMemberToPortal) {
         throw new ConflictError('That email is already used by another account type');
       }
       if (
@@ -201,32 +247,30 @@ export class UserService {
         throw new ConflictError('That email is linked to a different sponsor profile');
       }
 
-      const shouldIssueInvite = input.issueInvite ?? false;
+      // Password already set → never re-invite; unused invite → replace with a fresh code.
+      const passwordAlreadySet = !existing.mustChangePassword;
+      const shouldIssueInvite = !passwordAlreadySet && Boolean(input.issueInvite);
       let inviteCode: string | undefined;
-      let inviteCodeHash = existing.inviteCodeHash;
-      let inviteCodeExpiresAt = existing.inviteCodeExpiresAt;
-      let mustChangePassword = existing.mustChangePassword;
 
       if (shouldIssueInvite) {
         inviteCode = generateInviteCode();
-        inviteCodeExpiresAt = new Date(
-          Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
-        );
-        inviteCodeHash = await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS);
-        mustChangePassword = true;
       }
 
       const updated = await this.users.update(existing.id, {
         email,
         name: input.name.trim(),
-        speakerId,
-        sponsorId,
+        role: input.role,
+        speakerId: input.role === 'speaker' ? speakerId : null,
+        sponsorId: input.role === 'sponsor' ? sponsorId : null,
         status: 'active',
+        // Membership entitlement is preserved when an attendee becomes speaker/sponsor.
         ...(shouldIssueInvite
           ? {
-              inviteCodeHash,
-              inviteCodeExpiresAt,
-              mustChangePassword,
+              inviteCodeHash: await bcrypt.hash(inviteCode!, PASSWORD_SALT_ROUNDS),
+              inviteCodeExpiresAt: new Date(
+                Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+              ),
+              mustChangePassword: true,
               passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
             }
           : {}),

@@ -50,6 +50,7 @@ export class GhlWebhookService {
           name: user.name,
           inviteCode,
           expiresAt,
+          dualAccess: user.role === 'speaker' || user.role === 'sponsor',
         });
         inviteEmailSent = result.sent;
         if (!result.sent && env.nodeEnv !== 'production') {
@@ -60,6 +61,17 @@ export class GhlWebhookService {
         }
       } catch (error) {
         logger.error({ err: error, email: user.email }, 'Failed to send invite email');
+      }
+    } else if (!created) {
+      try {
+        await this.mail.sendExistingAccountMembershipAccess({
+          to: user.email,
+          name: user.name,
+          membershipName: payload.product?.trim() || 'membership',
+          role: user.role,
+        });
+      } catch (error) {
+        logger.error({ err: error, email: user.email }, 'Failed to send existing-account access email');
       }
     }
 

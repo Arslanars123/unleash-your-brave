@@ -92,6 +92,21 @@ export interface CreateMembershipPurchaseInput {
   purchasedAt: Date;
 }
 
+export type NameUpdateChoice = 'update' | 'keep';
+
+/** Present when the checkout email already belongs to an account (any role). */
+export interface CheckoutExistingAccount {
+  exists: true;
+  role: 'admin' | 'member' | 'speaker' | 'sponsor';
+  existingName: string;
+  proposedName: string | null;
+  nameConflict: boolean;
+  /** Password already set — no new invite after purchase. */
+  hasPassword: boolean;
+  /** Invite still required (never finished first-time setup). */
+  needsInvite: boolean;
+}
+
 export interface CheckoutEligibility {
   allowed: boolean;
   reason: string | null;
@@ -103,6 +118,7 @@ export interface CheckoutEligibility {
   targetMembershipName: string;
   targetMembershipPrice: number;
   eventId: string;
+  existingAccount: CheckoutExistingAccount | null;
 }
 
 export interface CreateCheckoutSessionInput {
@@ -117,6 +133,11 @@ export interface CreateCheckoutSessionInput {
   expectedPrice?: number;
   /** `updatedAt` the attendee last loaded. Reject if the membership changed since. */
   expectedUpdatedAt?: string;
+  /**
+   * Required when eligibility reports a name conflict.
+   * `update` = change name everywhere; `keep` = keep the existing account name.
+   */
+  nameUpdateChoice?: NameUpdateChoice;
 }
 
 export interface CreateCheckoutSessionResult {

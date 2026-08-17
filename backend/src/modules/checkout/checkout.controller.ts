@@ -14,7 +14,14 @@ export class CheckoutController {
   eligibility = async (req: Request, res: Response): Promise<void> => {
     const email = String(req.query.email ?? '');
     const membershipId = String(req.query.membershipId ?? '');
-    sendSuccess(res, await this.service.checkEligibility(email, membershipId));
+    const firstName =
+      typeof req.query.firstName === 'string' ? req.query.firstName : undefined;
+    const lastName =
+      typeof req.query.lastName === 'string' ? req.query.lastName : undefined;
+    sendSuccess(
+      res,
+      await this.service.checkEligibility(email, membershipId, { firstName, lastName }),
+    );
   };
 
   createSession = async (req: Request, res: Response): Promise<void> => {

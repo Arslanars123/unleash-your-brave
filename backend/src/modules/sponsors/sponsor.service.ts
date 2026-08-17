@@ -117,6 +117,13 @@ export class SponsorService {
         name: sponsor.name,
         inviteCode,
         expiresAt,
+        dualAccess: true,
+      });
+    } else if (issueInvite) {
+      await this.mail.sendExistingAccountPortalAccess({
+        to: email,
+        name: sponsor.name,
+        portalRole: 'sponsor',
       });
     }
   }

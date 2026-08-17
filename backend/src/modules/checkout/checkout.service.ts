@@ -39,6 +39,17 @@ function moneyLabel(amount: number, currency: string): string {
   }
 }
 
+function normalizePersonName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function splitDisplayName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: 'Attendee', lastName: 'Attendee' };
+  if (parts.length === 1) return { firstName: parts[0]!, lastName: parts[0]! };
+  return { firstName: parts[0]!, lastName: parts.slice(1).join(' ') };
+}
+
 export class CheckoutService {
   private stripe: Stripe | null = null;
 
@@ -97,15 +108,20 @@ export class CheckoutService {
   async checkEligibility(
     email: string,
     membershipId: string,
+    nameInput?: { firstName?: string; lastName?: string },
   ): Promise<CheckoutEligibility> {
     const membership = await this.requireMembership(membershipId);
     const normalizedEmail = email.trim().toLowerCase();
     const existing = await this.users.findByEmail(normalizedEmail);
 
+    const withAccount = (
+      base: Omit<CheckoutEligibility, 'existingAccount'>,
+    ): CheckoutEligibility => this.attachExistingAccount(base, existing, nameInput);
+
     // Any role with a membership is an attendee for upgrade/renew rules
     // (speakers/sponsors may also purchase).
     if (!existing || !existing.membershipId) {
-      return {
+      return withAccount({
         allowed: true,
         reason: null,
         kind: 'purchase',
@@ -116,12 +132,12 @@ export class CheckoutService {
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
         eventId: membership.eventId,
-      };
+      });
     }
 
     if (existing.membershipId === membership.id) {
       if (membership.billingKind === 'renewable') {
-        return {
+        return withAccount({
           allowed: true,
           reason: null,
           kind: 'renew',
@@ -132,9 +148,9 @@ export class CheckoutService {
           targetMembershipName: membership.name,
           targetMembershipPrice: membership.price,
           eventId: membership.eventId,
-        };
+        });
       }
-      return {
+      return withAccount({
         allowed: false,
         reason: 'You already have this membership for the current event',
         kind: null,
@@ -145,13 +161,13 @@ export class CheckoutService {
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
         eventId: membership.eventId,
-      };
+      });
     }
 
     const current = await this.memberships.findById(existing.membershipId);
     if (current && current.eventId !== membership.eventId) {
       // Different event edition on record — treat as a fresh purchase for this membership's event.
-      return {
+      return withAccount({
         allowed: true,
         reason: null,
         kind: 'purchase',
@@ -162,7 +178,7 @@ export class CheckoutService {
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
         eventId: membership.eventId,
-      };
+      });
     }
 
     const currentPrice = current?.price ?? 0;
@@ -177,7 +193,7 @@ export class CheckoutService {
         existing.membershipExpiresAt.getTime() <= Date.now());
 
     if (isExpired && membership.billingKind === 'renewable' && targetRank === currentRank) {
-      return {
+      return withAccount({
         allowed: true,
         reason: null,
         kind: 'renew',
@@ -188,11 +204,11 @@ export class CheckoutService {
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
         eventId: membership.eventId,
-      };
+      });
     }
 
     if (targetRank <= currentRank) {
-      return {
+      return withAccount({
         allowed: false,
         reason:
           'You cannot purchase this membership. You can only continue with your current plan or upgrade to a higher membership plan.',
@@ -204,10 +220,10 @@ export class CheckoutService {
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
         eventId: membership.eventId,
-      };
+      });
     }
 
-    return {
+    return withAccount({
       allowed: true,
       reason: null,
       kind: 'upgrade',
@@ -218,7 +234,7 @@ export class CheckoutService {
       targetMembershipName: membership.name,
       targetMembershipPrice: membership.price,
       eventId: membership.eventId,
-    };
+    });
   }
 
   async createCheckoutSession(
@@ -226,14 +242,29 @@ export class CheckoutService {
   ): Promise<CreateCheckoutSessionResult> {
     const stripe = this.requireStripe();
     const email = input.email.trim().toLowerCase();
-    const firstName = input.firstName.trim();
-    const lastName = input.lastName.trim();
+    let firstName = input.firstName.trim();
+    let lastName = input.lastName.trim();
     const membership = await this.requireMembership(input.membershipId);
     const event = await this.events.requireEvent(membership.eventId);
 
-    const eligibility = await this.checkEligibility(email, membership.id);
+    const eligibility = await this.checkEligibility(email, membership.id, {
+      firstName,
+      lastName,
+    });
     if (!eligibility.allowed || !eligibility.kind) {
       throw new ConflictError(eligibility.reason ?? 'Purchase is not allowed');
+    }
+
+    const nameUpdateChoice = await this.resolveNameUpdateChoice(eligibility, input);
+    if (nameUpdateChoice === 'keep' && eligibility.existingAccount) {
+      const parts = splitDisplayName(eligibility.existingAccount.existingName);
+      firstName = parts.firstName;
+      lastName = parts.lastName;
+    } else if (nameUpdateChoice === 'update' && eligibility.existingAccount) {
+      await this.userService.updateAccountNameEverywhere(email, {
+        firstName,
+        lastName,
+      });
     }
 
     this.assertMembershipUnchanged(membership, input);
@@ -322,6 +353,7 @@ export class CheckoutService {
         originalPrice: String(originalPrice),
         discountAmount: String(discountAmount),
         chargedPrice: String(chargedPrice),
+        nameUpdateChoice: nameUpdateChoice ?? '',
       },
     });
 
@@ -521,11 +553,15 @@ export class CheckoutService {
     const previousMembershipId = eligibility.currentMembershipId;
     const previousMembershipName = eligibility.currentMembershipName;
 
+    const nameUpdateChoice = metadata.nameUpdateChoice?.trim();
+    const applyName = nameUpdateChoice !== 'keep';
+
     const upsert = await this.userService.upsertFromPurchase({
       email,
       firstName,
       lastName,
       product: membership.name,
+      applyName,
     });
 
     const existingUser = await this.users.findById(upsert.user.id);
@@ -625,13 +661,22 @@ export class CheckoutService {
       },
     });
 
-    // Send whenever we issued a code (new member, or speaker/sponsor first-time app setup).
+    // Fresh invite when first-time setup is still needed; otherwise tell them to use
+    // their existing email + password (speaker/sponsor/member with password already set).
     if (upsert.inviteCode) {
       await this.mail.sendInviteCode({
         to: email,
         name: upsert.user.name,
         inviteCode: upsert.inviteCode,
         expiresAt: new Date(Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000),
+        dualAccess: upsert.user.role === 'speaker' || upsert.user.role === 'sponsor',
+      });
+    } else if (!upsert.created) {
+      await this.mail.sendExistingAccountMembershipAccess({
+        to: email,
+        name: upsert.user.name,
+        membershipName: membership.name,
+        role: upsert.user.role,
       });
     }
 
@@ -657,6 +702,65 @@ export class CheckoutService {
         periodEnd: period.periodEnd?.toISOString() ?? null,
       },
       'Membership purchase fulfilled from Stripe',
+    );
+  }
+
+  private attachExistingAccount(
+    base: Omit<CheckoutEligibility, 'existingAccount'>,
+    existing: Awaited<ReturnType<UserRepository['findByEmail']>>,
+    nameInput?: { firstName?: string; lastName?: string },
+  ): CheckoutEligibility {
+    if (!existing) {
+      return { ...base, existingAccount: null };
+    }
+
+    const hasNameInput = Boolean(
+      nameInput?.firstName?.trim() || nameInput?.lastName?.trim(),
+    );
+    const proposedName = hasNameInput
+      ? [nameInput?.firstName?.trim(), nameInput?.lastName?.trim()]
+          .filter(Boolean)
+          .join(' ')
+          .trim()
+      : null;
+    const existingName = existing.name.trim();
+    const nameConflict =
+      proposedName != null &&
+      normalizePersonName(existingName) !== normalizePersonName(proposedName);
+
+    return {
+      ...base,
+      existingAccount: {
+        exists: true,
+        role: existing.role,
+        existingName,
+        proposedName,
+        nameConflict,
+        hasPassword: !existing.mustChangePassword,
+        needsInvite: existing.mustChangePassword,
+      },
+    };
+  }
+
+  private async resolveNameUpdateChoice(
+    eligibility: CheckoutEligibility,
+    input: CreateCheckoutSessionInput,
+  ): Promise<'update' | 'keep' | null> {
+    const account = eligibility.existingAccount;
+    if (!account?.nameConflict) {
+      return null;
+    }
+    if (input.nameUpdateChoice === 'update' || input.nameUpdateChoice === 'keep') {
+      return input.nameUpdateChoice;
+    }
+    throw new ConflictError(
+      `This email is already registered under the name ${account.existingName}. Would you like to update your name to ${account.proposedName} across your account?`,
+      {
+        existingName: account.existingName,
+        proposedName: account.proposedName,
+        role: account.role,
+      },
+      'NAME_CONFLICT',
     );
   }
 

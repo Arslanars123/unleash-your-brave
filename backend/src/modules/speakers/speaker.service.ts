@@ -98,6 +98,14 @@ export class SpeakerService {
         name: speaker.name,
         inviteCode,
         expiresAt,
+        dualAccess: true,
+      });
+    } else if (issueInvite) {
+      // Attendee (or other) already has a password — same login unlocks dashboard.
+      await this.mail.sendExistingAccountPortalAccess({
+        to: email,
+        name: speaker.name,
+        portalRole: 'speaker',
       });
     }
   }

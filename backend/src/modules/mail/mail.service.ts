@@ -58,9 +58,21 @@ export class MailService {
     name: string;
     inviteCode: string;
     expiresAt: Date;
+    /** Speaker/sponsor (or dual) accounts — same code unlocks app + dashboard. */
+    dualAccess?: boolean;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
     const expiresLabel = input.expiresAt.toUTCString();
     const subject = `Your ${env.appName} login code`;
+    const setupLines = input.dualAccess
+      ? [
+          'Use this code to finish setting up your password.',
+          'The same email and password will work for both the mobile app and the speaker/sponsor dashboard, with the access roles assigned to your account.',
+        ]
+      : [
+          'Open the app, sign in with your email and this code, then set your own password.',
+          'If you also have dashboard access, the same password will work there too.',
+        ];
+
     const text = [
       `Hi ${input.name},`,
       '',
@@ -68,8 +80,10 @@ export class MailService {
       '',
       `Your one-time login code is: ${input.inviteCode}`,
       '',
-      'Open the app, sign in with your email and this code, then set your own password.',
+      ...setupLines,
       `This code expires on ${expiresLabel}.`,
+      '',
+      'Any previous unused login code for this email is no longer valid.',
       '',
       'If you did not expect this email, you can ignore it.',
     ].join('\n');
@@ -79,9 +93,79 @@ export class MailService {
       <p>Welcome to <strong>${escapeHtml(env.appName)}</strong>.</p>
       <p>Your one-time login code is:</p>
       <p style="font-size:24px;font-weight:700;letter-spacing:2px">${escapeHtml(input.inviteCode)}</p>
-      <p>Open the app, sign in with your email and this code, then set your own password.</p>
+      ${setupLines.map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
       <p>This code expires on ${escapeHtml(expiresLabel)}.</p>
+      <p>Any previous unused login code for this email is no longer valid.</p>
       <p>If you did not expect this email, you can ignore it.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
+
+  async sendExistingAccountMembershipAccess(input: {
+    to: string;
+    name: string;
+    membershipName: string;
+    role: string;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const roleLabel =
+      input.role === 'speaker'
+        ? 'speaker'
+        : input.role === 'sponsor'
+          ? 'sponsor'
+          : 'account';
+    const subject = `Your ${env.appName} membership is ready — use your existing login`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `Your ${input.membershipName} membership is now active on your existing ${roleLabel} account.`,
+      '',
+      'You do not need a new invitation code.',
+      'Sign in to the mobile app with the same email address and password you already use.',
+      `That login also continues to work for your ${roleLabel} dashboard access.`,
+      '',
+      'If you forgot your password, use Forgot password in the app or dashboard.',
+      '',
+      'If you did not expect this email, you can ignore it.',
+    ].join('\n');
+
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>Your <strong>${escapeHtml(input.membershipName)}</strong> membership is now active on your existing ${escapeHtml(roleLabel)} account.</p>
+      <p><strong>You do not need a new invitation code.</strong></p>
+      <p>Sign in to the mobile app with the same email address and password you already use. That login also continues to work for your ${escapeHtml(roleLabel)} dashboard access.</p>
+      <p>If you forgot your password, use Forgot password in the app or dashboard.</p>
+      <p>If you did not expect this email, you can ignore it.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
+
+  async sendExistingAccountPortalAccess(input: {
+    to: string;
+    name: string;
+    portalRole: 'speaker' | 'sponsor';
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const roleLabel = input.portalRole;
+    const subject = `Your ${env.appName} ${roleLabel} dashboard access is ready`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `You now have ${roleLabel} access on your existing account.`,
+      '',
+      'You do not need a new invitation code.',
+      'Sign in to the dashboard with the same email and password you already use for the mobile app.',
+      'Your attendee/membership access (if any) remains on the same login.',
+      '',
+      'If you forgot your password, use Forgot password in the app or dashboard.',
+    ].join('\n');
+
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>You now have <strong>${escapeHtml(roleLabel)}</strong> access on your existing account.</p>
+      <p><strong>You do not need a new invitation code.</strong></p>
+      <p>Sign in to the dashboard with the same email and password you already use for the mobile app. Your attendee/membership access (if any) remains on the same login.</p>
+      <p>If you forgot your password, use Forgot password in the app or dashboard.</p>
     `;
 
     return this.send({ to: input.to, subject, text, html });
