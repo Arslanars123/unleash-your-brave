@@ -15,6 +15,7 @@ class ChatRoomState extends Equatable {
     this.error,
     this.newMessageCountWhileScrolledUp = 0,
     this.isNearBottom = true,
+    this.realtimeConnected = false,
   });
 
   final List<ChatMessageEntity> messages;
@@ -24,6 +25,7 @@ class ChatRoomState extends Equatable {
   final String? error;
   final int newMessageCountWhileScrolledUp;
   final bool isNearBottom;
+  final bool realtimeConnected;
 
   ChatRoomState copyWith({
     List<ChatMessageEntity>? messages,
@@ -33,6 +35,7 @@ class ChatRoomState extends Equatable {
     String? error,
     int? newMessageCountWhileScrolledUp,
     bool? isNearBottom,
+    bool? realtimeConnected,
   }) {
     return ChatRoomState(
       messages: messages ?? this.messages,
@@ -40,8 +43,10 @@ class ChatRoomState extends Equatable {
       loadingMore: loadingMore ?? this.loadingMore,
       sending: sending ?? this.sending,
       error: error,
-      newMessageCountWhileScrolledUp: newMessageCountWhileScrolledUp ?? this.newMessageCountWhileScrolledUp,
+      newMessageCountWhileScrolledUp:
+          newMessageCountWhileScrolledUp ?? this.newMessageCountWhileScrolledUp,
       isNearBottom: isNearBottom ?? this.isNearBottom,
+      realtimeConnected: realtimeConnected ?? this.realtimeConnected,
     );
   }
 
@@ -54,6 +59,7 @@ class ChatRoomState extends Equatable {
         error,
         newMessageCountWhileScrolledUp,
         isNearBottom,
+        realtimeConnected,
       ];
 }
 
@@ -67,6 +73,8 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
   StreamSubscription<Map<String, dynamic>>? _sseSub;
   Timer? _reconnectTimer;
   bool _running = false;
+  bool _catchingUp = false;
+  DateTime? _lastEventAt;
 
   Future<void> loadInitial() async {
     if (state.loading) return;
@@ -77,9 +85,13 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     result.fold(
       (failure) => emit(state.copyWith(loading: false, error: failure.message)),
       (messages) {
+        final sorted = _sortedByTimestamp(messages);
+        if (sorted.isNotEmpty) {
+          _lastEventAt = sorted.last.createdAt;
+        }
         emit(state.copyWith(
           loading: false,
-          messages: _sortedByTimestamp(messages),
+          messages: sorted,
           error: null,
         ));
         _startRealtime();
@@ -169,6 +181,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
         ));
       },
       (sentMessage) {
+        _lastEventAt = sentMessage.createdAt;
         final updatedMessages = state.messages.map((m) {
           if (m.clientId == clientId || m.id == clientId) {
             return sentMessage;
@@ -199,7 +212,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     final result = await _repository.addReaction(messageId: messageId, emoji: emoji);
     result.fold(
       (failure) => emit(state.copyWith(error: failure.message)),
-      (_) {}, // Success handled by SSE event
+      (_) {},
     );
   }
 
@@ -207,7 +220,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     final result = await _repository.removeReaction(messageId);
     result.fold(
       (failure) => emit(state.copyWith(error: failure.message)),
-      (_) {}, // Success handled by SSE event
+      (_) {},
     );
   }
 
@@ -223,7 +236,6 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     ));
   }
 
-  /// Clears the while-scrolled-up unread badge (e.g. after jumping to latest).
   void clearScrolledUpUnread() {
     if (state.newMessageCountWhileScrolledUp == 0 && state.isNearBottom) return;
     emit(state.copyWith(
@@ -243,12 +255,93 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     _sseSub?.cancel();
     _sseSub = _repository.getEventStream().listen(
       (event) {
+        if (!state.realtimeConnected) {
+          emit(state.copyWith(realtimeConnected: true));
+          // Catch anything missed while the stream was down.
+          unawaited(_catchUpSinceLastEvent());
+        }
         _handleSseEvent(event);
       },
-      onError: (_) => _scheduleReconnect(),
-      onDone: () => _scheduleReconnect(),
+      onError: (_) {
+        emit(state.copyWith(realtimeConnected: false));
+        _scheduleReconnect();
+      },
+      onDone: () {
+        emit(state.copyWith(realtimeConnected: false));
+        _scheduleReconnect();
+      },
       cancelOnError: true,
     );
+  }
+
+  Future<void> _catchUpSinceLastEvent() async {
+    if (_catchingUp || isClosed) return;
+    final since = _lastEventAt?.subtract(const Duration(seconds: 2));
+    if (since == null) {
+      // No cursor yet — pull latest page.
+      final result = await _repository.getMessages(limit: 40);
+      if (isClosed) return;
+      result.fold((_) {}, (messages) {
+        _mergeMessages(messages, countForeignAsUnread: false);
+      });
+      return;
+    }
+
+    _catchingUp = true;
+    try {
+      final result = await _repository.sync(since);
+      if (isClosed) return;
+      result.fold((_) {}, (syncData) {
+        final raw = syncData['messages'];
+        if (raw is! List) return;
+        final messages = raw
+            .whereType<Map<String, dynamic>>()
+            .map(_messageFromJson)
+            .whereType<ChatMessageEntity>()
+            .toList();
+        _mergeMessages(messages, countForeignAsUnread: true);
+      });
+    } finally {
+      _catchingUp = false;
+    }
+  }
+
+  void _mergeMessages(
+    List<ChatMessageEntity> incoming, {
+    required bool countForeignAsUnread,
+  }) {
+    if (incoming.isEmpty) return;
+    final byId = <String, ChatMessageEntity>{
+      for (final m in state.messages) m.id: m,
+    };
+    var addedForeign = 0;
+    for (final m in incoming) {
+      final isNew = !byId.containsKey(m.id);
+      byId[m.id] = m;
+      if (m.createdAt.isAfter(_lastEventAt ?? DateTime.fromMillisecondsSinceEpoch(0))) {
+        _lastEventAt = m.createdAt;
+      }
+      if (isNew && countForeignAsUnread && m.senderId != _currentUserId) {
+        addedForeign += 1;
+        markDelivered(m.id);
+        if (state.isNearBottom) {
+          markVisibleRead(m.id);
+        }
+      }
+      byId.removeWhere(
+        (key, value) =>
+            value.clientId != null &&
+            value.clientId == m.clientId &&
+            value.id != m.id,
+      );
+    }
+    final stickToBottom = state.isNearBottom;
+    emit(state.copyWith(
+      messages: _sortedByTimestamp(byId.values.toList()),
+      newMessageCountWhileScrolledUp: stickToBottom
+          ? 0
+          : state.newMessageCountWhileScrolledUp + addedForeign,
+    ));
   }
 
   void _handleSseEvent(Map<String, dynamic> event) {
@@ -267,16 +360,23 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
       case 'receipt.read':
         _handleReceiptRead(event);
         break;
-      case 'reaction.added':
-      case 'reaction.removed':
       case 'reaction.updated':
         _handleReactionUpdated(event);
+        break;
+      case 'connected':
+        unawaited(_catchUpSinceLastEvent());
         break;
     }
   }
 
+  Map<String, dynamic> _payload(Map<String, dynamic> event) {
+    final payload = event['payload'];
+    if (payload is Map<String, dynamic>) return payload;
+    return event;
+  }
+
   void _handleMessageDeleted(Map<String, dynamic> event) {
-    final payload = event['payload'] as Map<String, dynamic>? ?? event;
+    final payload = _payload(event);
     final messageId = payload['messageId'] as String?;
     if (messageId == null) return;
     emit(state.copyWith(
@@ -284,102 +384,147 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     ));
   }
 
-  void _handleMessageCreated(Map<String, dynamic> event) {
+  ChatMessageEntity? _messageFromJson(Map<String, dynamic> messageData) {
     try {
-      final payload = event['payload'] as Map<String, dynamic>? ?? event;
-      final messageData = payload['message'] as Map<String, dynamic>?;
-      if (messageData == null) return;
+      final reactionsRaw = messageData['reactions'];
+      final reactions = reactionsRaw is List
+          ? reactionsRaw
+              .whereType<Map<String, dynamic>>()
+              .map(
+                (r) => ChatReactionEntity(
+                  emoji: r['emoji'] as String? ?? '',
+                  count: (r['count'] as num?)?.toInt() ?? 0,
+                  reactedByMe: r['reactedByMe'] as bool? ?? false,
+                ),
+              )
+              .toList()
+          : const <ChatReactionEntity>[];
 
-      final serverClientId = messageData['clientId'] as String?;
-      final message = ChatMessageEntity(
+      final delivery = messageData['deliveryStatus'] as String?;
+      return ChatMessageEntity(
         id: messageData['id'] as String,
         groupId: messageData['groupId'] as String,
         senderId: messageData['senderId'] as String,
         senderName: messageData['senderName'] as String? ?? 'Member',
         senderRole: messageData['senderRole'] as String? ?? 'member',
         senderPhotoUrl: messageData['senderPhotoUrl'] as String?,
-        clientId: serverClientId,
+        clientId: messageData['clientId'] as String?,
         type: messageData['type'] == 'gif' ? ChatMessageType.gif : ChatMessageType.text,
         body: messageData['body'] as String?,
         gifUrl: messageData['gifUrl'] as String?,
         createdAt: DateTime.parse(messageData['createdAt'] as String),
-        deliveryStatus: DeliveryStatus.sent,
+        reactions: reactions,
+        deliveryStatus: switch (delivery) {
+          'delivered' => DeliveryStatus.delivered,
+          'read' => DeliveryStatus.read,
+          _ => DeliveryStatus.sent,
+        },
       );
-
-      final isMine = message.senderId == _currentUserId;
-
-      if (isMine) {
-        final updatedMessages = state.messages.map((m) {
-          final matchesOptimistic = (serverClientId != null && m.clientId == serverClientId) ||
-              m.id == message.id ||
-              (m.senderId == _currentUserId &&
-                  m.clientId != null &&
-                  m.id == m.clientId &&
-                  m.createdAt.difference(message.createdAt).abs() <
-                      const Duration(seconds: 8));
-          return matchesOptimistic ? message : m;
-        }).toList();
-        final hasMatch = updatedMessages.any((m) => m.id == message.id);
-        emit(state.copyWith(
-          messages: _sortedByTimestamp(
-            hasMatch ? updatedMessages : [...updatedMessages, message],
-          ),
-          isNearBottom: true,
-          newMessageCountWhileScrolledUp: 0,
-        ));
-      } else {
-        if (state.messages.any((m) => m.id == message.id)) return;
-
-        markDelivered(message.id);
-
-        final stickToBottom = state.isNearBottom;
-        final newCount =
-            stickToBottom ? 0 : state.newMessageCountWhileScrolledUp + 1;
-
-        emit(state.copyWith(
-          messages: _sortedByTimestamp([...state.messages, message]),
-          newMessageCountWhileScrolledUp: newCount,
-        ));
-
-        if (stickToBottom) {
-          markVisibleRead(message.id);
-        }
-      }
     } catch (_) {
-      // Skip malformed message events
+      return null;
+    }
+  }
+
+  void _handleMessageCreated(Map<String, dynamic> event) {
+    final payload = _payload(event);
+    final messageData = payload['message'] as Map<String, dynamic>?;
+    if (messageData == null) return;
+
+    final message = _messageFromJson(messageData);
+    if (message == null) return;
+
+    _lastEventAt = message.createdAt;
+    final serverClientId = message.clientId;
+    final isMine = message.senderId == _currentUserId;
+
+    if (isMine) {
+      final updatedMessages = state.messages.map((m) {
+        final matchesOptimistic = (serverClientId != null && m.clientId == serverClientId) ||
+            m.id == message.id ||
+            (m.senderId == _currentUserId &&
+                m.clientId != null &&
+                m.id == m.clientId &&
+                m.createdAt.difference(message.createdAt).abs() <
+                    const Duration(seconds: 8));
+        return matchesOptimistic ? message : m;
+      }).toList();
+      final hasMatch = updatedMessages.any((m) => m.id == message.id);
+      emit(state.copyWith(
+        messages: _sortedByTimestamp(
+          hasMatch ? updatedMessages : [...updatedMessages, message],
+        ),
+        isNearBottom: true,
+        newMessageCountWhileScrolledUp: 0,
+      ));
+    } else {
+      if (state.messages.any((m) => m.id == message.id)) return;
+
+      markDelivered(message.id);
+
+      final stickToBottom = state.isNearBottom;
+      final newCount =
+          stickToBottom ? 0 : state.newMessageCountWhileScrolledUp + 1;
+
+      emit(state.copyWith(
+        messages: _sortedByTimestamp([...state.messages, message]),
+        newMessageCountWhileScrolledUp: newCount,
+      ));
+
+      if (stickToBottom) {
+        markVisibleRead(message.id);
+      }
     }
   }
 
   void _handleReceiptDelivered(Map<String, dynamic> event) {
-    final messageId = event['messageId'] as String?;
+    final payload = _payload(event);
+    final messageId = payload['messageId'] as String?;
     if (messageId == null) return;
-
     _updateMessageDeliveryStatus(messageId, DeliveryStatus.delivered);
   }
 
   void _handleReceiptRead(Map<String, dynamic> event) {
-    final messageId = event['messageId'] as String?;
+    final payload = _payload(event);
+    final messageId = payload['messageId'] as String?;
     if (messageId == null) return;
-
     _updateMessageDeliveryStatus(messageId, DeliveryStatus.read);
   }
 
   void _updateMessageDeliveryStatus(String messageId, DeliveryStatus status) {
+    var changed = false;
     final updatedMessages = state.messages.map((m) {
       if (m.id == messageId && m.senderId == _currentUserId) {
+        if (m.deliveryStatus == DeliveryStatus.read) return m;
+        if (m.deliveryStatus == status) return m;
+        if (status == DeliveryStatus.delivered &&
+            m.deliveryStatus == DeliveryStatus.read) {
+          return m;
+        }
+        changed = true;
         return m.copyWith(deliveryStatus: status);
       }
       return m;
     }).toList();
 
-    if (updatedMessages != state.messages) {
+    if (changed) {
       emit(state.copyWith(messages: updatedMessages));
     }
   }
 
   void _handleReactionUpdated(Map<String, dynamic> event) {
-    // TODO: Implement reaction updates when message model includes reactions
-    // This would require updating the message with new reaction counts
+    final payload = _payload(event);
+    final messageData = payload['message'] as Map<String, dynamic>?;
+    if (messageData == null) return;
+    final updated = _messageFromJson(messageData);
+    if (updated == null) return;
+
+    final messages = state.messages.map((m) {
+      if (m.id == updated.id) {
+        return m.copyWith(reactions: updated.reactions);
+      }
+      return m;
+    }).toList();
+    emit(state.copyWith(messages: messages));
   }
 
   Future<void> syncSince(DateTime since) async {
@@ -387,17 +532,21 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     result.fold(
       (failure) => emit(state.copyWith(error: failure.message)),
       (syncData) {
-        // Handle sync response - could include new messages, reactions, etc.
-        // For now, just refresh by reloading
-        loadInitial();
+        final raw = syncData['messages'];
+        if (raw is! List) return;
+        final messages = raw
+            .whereType<Map<String, dynamic>>()
+            .map(_messageFromJson)
+            .whereType<ChatMessageEntity>()
+            .toList();
+        _mergeMessages(messages, countForeignAsUnread: true);
       },
     );
   }
 
   void flushPending() {
-    // Remove any pending messages that failed to send
     final nonPendingMessages = state.messages.where((m) {
-      return m.id != m.clientId; // Real messages have different id than clientId
+      return m.id != m.clientId;
     }).toList();
 
     if (nonPendingMessages.length != state.messages.length) {
@@ -405,7 +554,6 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     }
   }
 
-  /// Oldest → newest by createdAt (stable by id).
   List<ChatMessageEntity> _sortedByTimestamp(List<ChatMessageEntity> messages) {
     final sorted = [...messages];
     sorted.sort((a, b) {
