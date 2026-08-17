@@ -140,8 +140,6 @@ export function CouponsPage() {
     }
   }
 
-  const createMutationPending = useMutation;
-
   return (
     <div className="page">
       <header className="page-header">
@@ -161,10 +159,21 @@ export function CouponsPage() {
 
       <div className="toolbar">
         <SearchSuggest
+          label="Search"
           value={search}
           onChange={applySearch}
           placeholder="Search code or name…"
-          suggestions={[]}
+          loadSuggestions={async (draft) => {
+            const result = await couponsApi.list({
+              search: draft,
+              perPage: 6,
+            });
+            return result.items.map((coupon) => ({
+              id: coupon.id,
+              title: coupon.code,
+              subtitle: coupon.name,
+            }));
+          }}
         />
       </div>
 
