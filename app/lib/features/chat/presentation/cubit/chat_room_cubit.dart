@@ -238,7 +238,7 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     _running = true;
     _connectRealtime();
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       unawaited(_pollLatest());
     });
   }
