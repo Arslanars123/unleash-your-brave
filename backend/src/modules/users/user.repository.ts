@@ -158,9 +158,7 @@ export class InMemoryUserRepository implements UserRepository {
       if (user.membershipStatus === 'expired') return false;
       const expires = user.membershipExpiresAt.getTime();
       if (expires <= now.getTime() || expires > horizon) return false;
-      if (user.renewalReminderSentAt && user.renewalReminderSentAt.getTime() >= expires - withinDays * 24 * 60 * 60 * 1000) {
-        return false;
-      }
+      // Service decides early vs final reminder.
       return true;
     });
   }

@@ -96,12 +96,7 @@ export class MongoUserRepository implements UserRepository {
       } as Filter<MongoDoc<User>>)
       .limit(500)
       .toArray();
-    const windowMs = withinDays * 24 * 60 * 60 * 1000;
-    return fromDocs<User>(docs).filter((user) => {
-      if (!user.membershipExpiresAt) return false;
-      if (!user.renewalReminderSentAt) return true;
-      return user.renewalReminderSentAt.getTime() < user.membershipExpiresAt.getTime() - windowMs;
-    });
+    return fromDocs<User>(docs).filter((user) => Boolean(user.membershipExpiresAt));
   }
 
   async create(data: CreateUserRecord): Promise<User> {

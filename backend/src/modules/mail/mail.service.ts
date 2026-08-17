@@ -169,27 +169,62 @@ export class MailService {
     name: string;
     membershipName: string;
     expiresAt: Date;
+    urgency?: 'upcoming' | 'final';
   }): Promise<{ sent: boolean; skipped?: boolean }> {
     const expiresLabel = input.expiresAt.toUTCString();
-    const subject = `Renew your ${env.appName} membership`;
+    const isFinal = input.urgency === 'final';
+    const subject = isFinal
+      ? `Final reminder: renew your ${env.appName} membership`
+      : `Renew your ${env.appName} membership`;
+    const lead = isFinal
+      ? `Your ${input.membershipName} membership expires very soon (${expiresLabel}).`
+      : `Your ${input.membershipName} membership expires on ${expiresLabel}.`;
     const text = [
       `Hi ${input.name},`,
       '',
-      `Your ${input.membershipName} membership expires on ${expiresLabel}.`,
+      lead,
       '',
-      'Renew before then to keep your membership active and your event check-in QR enabled.',
+      'Renew now to keep your membership active and your event check-in QR enabled.',
+      'If payment is still pending, complete checkout in the app to finish renewal.',
       '',
-      'Open the app → Profile → renew or upgrade your membership to complete payment.',
+      'Open the app → Profile → renew your membership.',
       '',
       'If you already renewed, you can ignore this email.',
     ].join('\n');
 
     const html = `
       <p>Hi ${escapeHtml(input.name)},</p>
-      <p>Your <strong>${escapeHtml(input.membershipName)}</strong> membership expires on <strong>${escapeHtml(expiresLabel)}</strong>.</p>
-      <p>Renew before then to keep your membership active and your event check-in QR enabled.</p>
-      <p>Open the app → Profile → renew or upgrade your membership to complete payment.</p>
+      <p>${escapeHtml(lead)}</p>
+      <p>Renew now to keep your membership active and your event check-in QR enabled.</p>
+      <p>If payment is still pending, complete checkout in the app to finish renewal.</p>
+      <p>Open the app → Profile → renew your membership.</p>
       <p>If you already renewed, you can ignore this email.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
+
+  async sendMembershipExpiredNotice(input: {
+    to: string;
+    name: string;
+    membershipName: string;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const subject = `Your ${env.appName} membership has expired`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `Your ${input.membershipName} membership has expired, and renewal payment is still pending.`,
+      '',
+      'Your check-in QR will only become valid again after you complete renewal payment in the app.',
+      '',
+      'Open the app → Profile → renew your membership.',
+    ].join('\n');
+
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>Your <strong>${escapeHtml(input.membershipName)}</strong> membership has expired, and renewal payment is still pending.</p>
+      <p>Your check-in QR will only become valid again after you complete renewal payment in the app.</p>
+      <p>Open the app → Profile → renew your membership.</p>
     `;
 
     return this.send({ to: input.to, subject, text, html });
