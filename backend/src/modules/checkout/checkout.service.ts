@@ -193,7 +193,7 @@ export class CheckoutService {
       return {
         allowed: false,
         reason:
-          'You can only upgrade to a higher-level membership. Downgrades and same-tier purchases are not allowed for this event.',
+          'You cannot purchase this membership. You can only continue with your current plan or upgrade to a higher membership plan.',
         kind: null,
         currentMembershipId: existing.membershipId,
         currentMembershipName: currentName,

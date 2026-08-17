@@ -432,6 +432,9 @@ class _MembershipSectionState extends State<_MembershipSection>
     }
   }
 
+  static const _ineligiblePurchaseMessage =
+      'You cannot purchase this membership. You can only continue with your current plan or upgrade to a higher membership plan.';
+
   MembershipEntity? get _current {
     final effectiveId = _access?.effectiveMembershipId;
     if (effectiveId != null && effectiveId.isNotEmpty) {
@@ -447,39 +450,91 @@ class _MembershipSectionState extends State<_MembershipSection>
     return null;
   }
 
-  List<MembershipEntity> get _upgrades {
-    final accessIds = _access?.upgradeMembershipIds;
-    if (accessIds != null && accessIds.isNotEmpty) {
-      final byId = {for (final m in _memberships) m.id: m};
-      return [
-        for (final id in accessIds)
-          if (byId[id] != null) byId[id]!,
-      ];
-    }
+  List<MembershipEntity> get _allPlans {
+    final items = [..._memberships]
+      ..sort((a, b) {
+        final byRank = a.upgradeRank.compareTo(b.upgradeRank);
+        if (byRank != 0) return byRank;
+        final bySort = a.sortOrder.compareTo(b.sortOrder);
+        if (bySort != 0) return bySort;
+        return a.price.compareTo(b.price);
+      });
+    return items;
+  }
 
-    final id = widget.user.membershipId;
-    if (id == null || id.isEmpty) {
-      return _memberships;
-    }
-
+  bool _isCurrentPlan(MembershipEntity membership) {
     final current = _current;
-    if (current?.upgradeToMembershipId != null &&
-        current!.upgradeToMembershipId!.isNotEmpty) {
-      return _memberships
-          .where((m) => m.id == current.upgradeToMembershipId)
-          .toList(growable: false);
-    }
+    if (current == null) return false;
+    return current.id == membership.id;
+  }
 
-    final currentRank = current?.upgradeRank ?? 0;
-    final higher = _memberships
-        .where((m) => m.id != id && m.upgradeRank > currentRank)
-        .toList()
-      ..sort((a, b) => a.upgradeRank.compareTo(b.upgradeRank));
-    if (higher.isEmpty) return const [];
-    return [higher.first];
+  bool _isUpgradeEligible(MembershipEntity membership) {
+    final current = _current;
+    if (current == null) return true;
+    if (membership.id == current.id) return false;
+    return membership.upgradeRank > current.upgradeRank;
+  }
+
+  bool _canCheckout(MembershipEntity membership) {
+    if (_isCurrentPlan(membership)) {
+      return membership.isRenewable;
+    }
+    return _isUpgradeEligible(membership) || _current == null;
+  }
+
+  String? _planActionLabel(MembershipEntity membership) {
+    if (_isCurrentPlan(membership)) {
+      return membership.isRenewable ? 'Renew ${membership.priceLabel}' : null;
+    }
+    if (_current == null) return 'Purchase ${membership.priceLabel}';
+    if (_isUpgradeEligible(membership)) {
+      return 'Upgrade · ${membership.priceLabel}';
+    }
+    return 'Not available';
+  }
+
+  void _showIneligibleMessage() {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        ),
+        title: Text(
+          'Upgrade only',
+          style: AppTypography.body.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
+        content: Text(
+          _ineligiblePurchaseMessage,
+          style: AppTypography.caption.copyWith(height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Got it',
+              style: AppTypography.button.copyWith(
+                color: AppColors.accentPink,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _upgrade(MembershipEntity membership) async {
+    if (!_canCheckout(membership)) {
+      _showIneligibleMessage();
+      return;
+    }
+
     final currentId = widget.user.membershipId;
     final isRenew =
         currentId != null && currentId.isNotEmpty && currentId == membership.id;
@@ -503,7 +558,15 @@ class _MembershipSectionState extends State<_MembershipSection>
         membershipId: membership.id,
       );
       if (!eligibility.allowed) {
-        AppToast.error(eligibility.reason ?? 'This purchase is not allowed');
+        final reason = eligibility.reason ?? '';
+        final looksLikeDowngrade = reason.toLowerCase().contains('upgrade') ||
+            reason.toLowerCase().contains('downgrade') ||
+            reason.toLowerCase().contains('same-tier');
+        if (looksLikeDowngrade || reason.isEmpty) {
+          _showIneligibleMessage();
+        } else {
+          AppToast.error(reason);
+        }
         return;
       }
 
@@ -538,16 +601,26 @@ class _MembershipSectionState extends State<_MembershipSection>
     } on NetworkException catch (error) {
       AppToast.error(error.message);
     } on ServerException catch (error) {
-      AppToast.error(error.message);
+      final message = error.message.toLowerCase();
+      if (message.contains('upgrade') ||
+          message.contains('downgrade') ||
+          message.contains('same-tier') ||
+          message.contains('higher-level')) {
+        _showIneligibleMessage();
+      } else {
+        AppToast.error(error.message);
+      }
     } catch (_) {
       AppToast.error('Unable to start checkout');
     } finally {
       if (mounted) setState(() => _upgrading = false);
     }
   }
+
   void _showUpgradeSheet() {
-    final upgrades = _upgrades;
+    final plans = _allPlans;
     final current = _current;
+    final hasUpgrade = plans.any(_isUpgradeEligible);
 
     showModalBottomSheet<void>(
       context: context,
@@ -580,14 +653,14 @@ class _MembershipSectionState extends State<_MembershipSection>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        current == null ? 'Choose membership' : 'Upgrade membership',
+                        current == null ? 'Membership plans' : 'Membership plans',
                         style: AppTypography.headline.copyWith(fontSize: 26),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         current == null
-                            ? 'Pay securely with Stripe to unlock your pass and event access.'
-                            : 'Upgrade to a higher tier with Stripe. Your current pass stays until payment succeeds.',
+                            ? 'Browse every plan below. Pay securely with Stripe to unlock your pass.'
+                            : 'All plans are shown below. You can keep your current plan or upgrade to a higher membership only.',
                         style: AppTypography.caption.copyWith(height: 1.4),
                       ),
                     ],
@@ -598,44 +671,13 @@ class _MembershipSectionState extends State<_MembershipSection>
                     shrinkWrap: true,
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                     children: [
-                      if (current != null) ...[
-                        Text(
-                          'CURRENT',
-                          style: AppTypography.microLabel.copyWith(
-                            letterSpacing: 1.4,
-                            color: AppColors.textTertiary,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        _MembershipTierheetCard(
-                          membership: current,
-                          isCurrent: true,
-                          onSelect: current.isRenewable && !_upgrading
-                              ? () {
-                                  Navigator.pop(context);
-                                  _upgrade(current);
-                                }
-                              : null,
-                          selectLabel: current.isRenewable
-                              ? 'Renew ${current.priceLabel}'
-                              : null,
-                        ),
-                        const SizedBox(height: 22),
-                      ],
-                      Text(
-                        upgrades.isEmpty ? 'AVAILABLE' : 'UPGRADE OPTIONS',
-                        style: AppTypography.microLabel.copyWith(
-                          letterSpacing: 1.4,
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      if (upgrades.isEmpty)
+                      if (current != null && !hasUpgrade) ...[
                         Container(
                           width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 14),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 22,
+                            horizontal: 14,
+                            vertical: 12,
                           ),
                           decoration: BoxDecoration(
                             color: AppColors.bgCard,
@@ -645,27 +687,57 @@ class _MembershipSectionState extends State<_MembershipSection>
                           ),
                           child: Text(
                             'You’re already on the highest available membership for this event.',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.body.copyWith(
+                            style: AppTypography.caption.copyWith(
                               color: AppColors.textSecondary,
-                              height: 1.45,
+                              height: 1.4,
                             ),
                           ),
-                        )
-                      else
-                        for (var i = 0; i < upgrades.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 12),
-                          _MembershipTierheetCard(
-                            membership: upgrades[i],
-                            featured: i == upgrades.length - 1,
-                            onSelect: _upgrading
-                                ? null
-                                : () {
-                                    Navigator.pop(context);
-                                    _upgrade(upgrades[i]);
-                                  },
-                          ),
-                        ],
+                        ),
+                      ],
+                      Text(
+                        'ALL PLANS',
+                        style: AppTypography.microLabel.copyWith(
+                          letterSpacing: 1.4,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      for (var i = 0; i < plans.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 12),
+                        Builder(
+                          builder: (_) {
+                            final plan = plans[i];
+                            final isCurrent = _isCurrentPlan(plan);
+                            final canBuy = _canCheckout(plan);
+                            final isUpgrade = _isUpgradeEligible(plan);
+                            return _MembershipTierheetCard(
+                              membership: plan,
+                              isCurrent: isCurrent,
+                              featured: isUpgrade &&
+                                  plan.upgradeRank ==
+                                      plans.map((p) => p.upgradeRank).fold<double>(
+                                            0,
+                                            (max, v) => v > max ? v : max,
+                                          ),
+                              unavailable: !canBuy && !isCurrent,
+                              unavailableMessage: !canBuy && !isCurrent
+                                  ? _ineligiblePurchaseMessage
+                                  : null,
+                              selectLabel: _planActionLabel(plan),
+                              onSelect: _upgrading || (!canBuy && isCurrent)
+                                  ? null
+                                  : () {
+                                      if (!canBuy) {
+                                        _showIneligibleMessage();
+                                        return;
+                                      }
+                                      Navigator.pop(context);
+                                      _upgrade(plan);
+                                    },
+                            );
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -862,8 +934,8 @@ class _MembershipSectionState extends State<_MembershipSection>
                             children: [
                               Text(
                                 current == null
-                                    ? 'Purchase with Stripe'
-                                    : 'Upgrade with Stripe',
+                                    ? 'Browse membership plans'
+                                    : 'View all plans & upgrades',
                                 style: AppTypography.caption.copyWith(
                                   color: AppColors.textPrimary,
                                   fontWeight: FontWeight.w600,
@@ -895,6 +967,8 @@ class _MembershipTierheetCard extends StatelessWidget {
     required this.membership,
     this.isCurrent = false,
     this.featured = false,
+    this.unavailable = false,
+    this.unavailableMessage,
     this.onSelect,
     this.selectLabel,
   });
@@ -902,6 +976,8 @@ class _MembershipTierheetCard extends StatelessWidget {
   final MembershipEntity membership;
   final bool isCurrent;
   final bool featured;
+  final bool unavailable;
+  final String? unavailableMessage;
   final VoidCallback? onSelect;
   final String? selectLabel;
 
@@ -909,132 +985,173 @@ class _MembershipTierheetCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final borderColor = isCurrent
         ? AppColors.accentPink.withValues(alpha: 0.45)
-        : featured
-            ? AppColors.accentPink.withValues(alpha: 0.28)
-            : AppColors.borderSubtle;
+        : unavailable
+            ? AppColors.borderSubtle
+            : featured
+                ? AppColors.accentPink.withValues(alpha: 0.28)
+                : AppColors.borderSubtle;
     final showAction = onSelect != null;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isCurrent || featured ? AppColors.bgMaroon : AppColors.bgCard,
-        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (isCurrent || featured) ...[
+    return Opacity(
+      opacity: unavailable ? 0.78 : 1,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isCurrent || featured ? AppColors.bgMaroon : AppColors.bgCard,
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+          border: Border.all(color: borderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isCurrent || featured || unavailable) ...[
+                        Text(
+                          isCurrent
+                              ? 'YOUR TIER'
+                              : unavailable
+                                  ? 'LOWER / UNAVAILABLE'
+                                  : 'UPGRADE',
+                          style: AppTypography.microLabel.copyWith(
+                            color: unavailable
+                                ? AppColors.textTertiary
+                                : AppColors.accentPink,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
                       Text(
-                        isCurrent ? 'YOUR TIER' : 'TOP TIER',
-                        style: AppTypography.microLabel.copyWith(
-                          color: AppColors.accentPink,
-                          letterSpacing: 1.2,
+                        membership.name,
+                        style: AppTypography.body.copyWith(
                           fontWeight: FontWeight.w700,
-                          fontSize: 10,
+                          fontSize: 17,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                    ],
-                    Text(
-                      membership.name,
-                      style: AppTypography.body.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 17,
-                      ),
-                    ),
-                    if (membership.isRenewable) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        membership.durationDays > 0
-                            ? 'Renewable · ${membership.durationDays} days'
-                            : 'Renewable',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Text(
-                membership.priceLabel,
-                style: AppTypography.headline.copyWith(
-                  fontSize: 22,
-                  color: AppColors.accentPink,
-                ),
-              ),
-            ],
-          ),
-          if (membership.paymentPlanNote.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              membership.paymentPlanNote,
-              style: AppTypography.caption.copyWith(
-                color: AppColors.textTertiary,
-              ),
-            ),
-          ],
-          if (membership.features.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            ...membership.features.take(4).map(
-                  (f) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('•  ', style: TextStyle(color: AppColors.accentPink)),
-                        Expanded(
-                          child: Text(
-                            f,
-                            style: AppTypography.caption.copyWith(
-                              height: 1.4,
-                              color: AppColors.textSecondary,
-                            ),
+                      if (membership.isRenewable) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          membership.durationDays > 0
+                              ? 'Renewable · ${membership.durationDays} days'
+                              : 'Renewable',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textTertiary,
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                ),
+                Text(
+                  membership.priceLabel,
+                  style: AppTypography.headline.copyWith(
+                    fontSize: 22,
+                    color: unavailable
+                        ? AppColors.textTertiary
+                        : AppColors.accentPink,
+                  ),
+                ),
+              ],
+            ),
+            if (membership.paymentPlanNote.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                membership.paymentPlanNote,
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textTertiary,
+                ),
+              ),
+            ],
+            if (membership.features.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              ...membership.features.take(4).map(
+                    (f) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '•  ',
+                            style: TextStyle(
+                              color: unavailable
+                                  ? AppColors.textTertiary
+                                  : AppColors.accentPink,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              f,
+                              style: AppTypography.caption.copyWith(
+                                height: 1.4,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+            ] else if (membership.description.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                membership.description,
+                style: AppTypography.caption.copyWith(
+                  height: 1.45,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+            if (unavailable && unavailableMessage != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                unavailableMessage!,
+                style: AppTypography.caption.copyWith(
+                  height: 1.4,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+            if (showAction) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: onSelect,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: unavailable
+                        ? AppColors.bgCard
+                        : featured || isCurrent
+                            ? AppColors.accentPink
+                            : AppColors.accentPink.withValues(alpha: 0.85),
+                    foregroundColor: unavailable
+                        ? AppColors.textSecondary
+                        : null,
+                    side: unavailable
+                        ? const BorderSide(color: AppColors.borderSubtle)
+                        : null,
+                  ),
+                  child: Text(
+                    selectLabel ?? 'Pay ${membership.priceLabel}',
+                    style: AppTypography.button.copyWith(
+                      fontSize: 14,
+                      color: unavailable ? AppColors.textSecondary : null,
                     ),
                   ),
                 ),
-          ] else if (membership.description.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              membership.description,
-              style: AppTypography.caption.copyWith(
-                height: 1.45,
-                color: AppColors.textSecondary,
               ),
-            ),
+            ],
           ],
-          if (showAction) ...[
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: ElevatedButton(
-                onPressed: onSelect,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: featured || isCurrent
-                      ? AppColors.accentPink
-                      : AppColors.accentPink.withValues(alpha: 0.85),
-                ),
-                child: Text(
-                  selectLabel ?? 'Pay ${membership.priceLabel}',
-                  style: AppTypography.button.copyWith(fontSize: 14),
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
