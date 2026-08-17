@@ -93,32 +93,45 @@ export class MailService {
     eventName: string;
     membershipName: string;
     previousMembershipName: string | null;
-    kind: 'purchase' | 'upgrade';
+    kind: 'purchase' | 'upgrade' | 'renew';
     priceLabel: string;
     purchasedAt: Date;
     stripePaymentIntentId: string | null;
+    periodEnd?: Date | null;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
     const when = input.purchasedAt.toUTCString();
     const isUpgrade = input.kind === 'upgrade' && input.previousMembershipName;
+    const isRenew = input.kind === 'renew';
     const upgradeLine = isUpgrade
       ? `${input.previousMembershipName} → ${input.membershipName}`
       : input.membershipName;
 
     const subject = isUpgrade
       ? `Membership upgraded: ${upgradeLine}`
-      : `Membership confirmed: ${input.membershipName}`;
+      : isRenew
+        ? `Membership renewed: ${input.membershipName}`
+        : `Membership confirmed: ${input.membershipName}`;
+
+    const intro = isUpgrade
+      ? `Your ${env.appName} membership has been upgraded.`
+      : isRenew
+        ? `Your ${env.appName} membership has been renewed.`
+        : `Thank you for your ${env.appName} membership purchase.`;
+
+    const expiresLine = input.periodEnd
+      ? `Valid until: ${input.periodEnd.toUTCString()}`
+      : null;
 
     const text = [
       `Hi ${input.name},`,
       '',
-      isUpgrade
-        ? `Your ${env.appName} membership has been upgraded.`
-        : `Thank you for your ${env.appName} membership purchase.`,
+      intro,
       '',
       isUpgrade ? `Upgrade: ${upgradeLine}` : `Membership: ${input.membershipName}`,
       `Event: ${input.eventName}`,
       `Amount: ${input.priceLabel}`,
       `Date: ${when}`,
+      expiresLine,
       input.stripePaymentIntentId ? `Transaction: ${input.stripePaymentIntentId}` : null,
       '',
       'If you have any questions, reply to this email.',
@@ -128,16 +141,17 @@ export class MailService {
 
     const html = `
       <p>Hi ${escapeHtml(input.name)},</p>
-      <p>${
-        isUpgrade
-          ? `Your <strong>${escapeHtml(env.appName)}</strong> membership has been upgraded.`
-          : `Thank you for your <strong>${escapeHtml(env.appName)}</strong> membership purchase.`
-      }</p>
+      <p>${escapeHtml(intro)}</p>
       <p style="font-size:18px;font-weight:700">${escapeHtml(upgradeLine)}</p>
       <ul>
         <li><strong>Event:</strong> ${escapeHtml(input.eventName)}</li>
         <li><strong>Amount:</strong> ${escapeHtml(input.priceLabel)}</li>
         <li><strong>Date:</strong> ${escapeHtml(when)}</li>
+        ${
+          input.periodEnd
+            ? `<li><strong>Valid until:</strong> ${escapeHtml(input.periodEnd.toUTCString())}</li>`
+            : ''
+        }
         ${
           input.stripePaymentIntentId
             ? `<li><strong>Transaction:</strong> ${escapeHtml(input.stripePaymentIntentId)}</li>`
@@ -145,6 +159,37 @@ export class MailService {
         }
       </ul>
       <p>If you have any questions, reply to this email.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
+
+  async sendMembershipRenewalReminder(input: {
+    to: string;
+    name: string;
+    membershipName: string;
+    expiresAt: Date;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const expiresLabel = input.expiresAt.toUTCString();
+    const subject = `Renew your ${env.appName} membership`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `Your ${input.membershipName} membership expires on ${expiresLabel}.`,
+      '',
+      'Renew before then to keep your membership active and your event check-in QR enabled.',
+      '',
+      'Open the app → Profile → renew or upgrade your membership to complete payment.',
+      '',
+      'If you already renewed, you can ignore this email.',
+    ].join('\n');
+
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>Your <strong>${escapeHtml(input.membershipName)}</strong> membership expires on <strong>${escapeHtml(expiresLabel)}</strong>.</p>
+      <p>Renew before then to keep your membership active and your event check-in QR enabled.</p>
+      <p>Open the app → Profile → renew or upgrade your membership to complete payment.</p>
+      <p>If you already renewed, you can ignore this email.</p>
     `;
 
     return this.send({ to: input.to, subject, text, html });

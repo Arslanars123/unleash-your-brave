@@ -16,6 +16,9 @@ export interface MembershipFormValues {
   tierRank: string;
   sortOrder: string;
   validForFutureEvents: boolean;
+  validForFutureQr: boolean;
+  billingKind: 'one_time' | 'renewable';
+  durationDays: string;
   upgradeToMembershipId: string;
 }
 
@@ -32,6 +35,9 @@ const emptyForm: MembershipFormValues = {
   tierRank: '0',
   sortOrder: '0',
   validForFutureEvents: false,
+  validForFutureQr: false,
+  billingKind: 'one_time',
+  durationDays: '365',
   upgradeToMembershipId: '',
 };
 
@@ -47,6 +53,13 @@ function membershipToForm(membership: PublicMembership): MembershipFormValues {
     tierRank: String(membership.tierRank ?? 0),
     sortOrder: String(membership.sortOrder ?? 0),
     validForFutureEvents: Boolean(membership.validForFutureEvents),
+    validForFutureQr: Boolean(membership.validForFutureQr),
+    billingKind: membership.billingKind === 'renewable' ? 'renewable' : 'one_time',
+    durationDays: String(
+      membership.billingKind === 'renewable'
+        ? Math.max(1, membership.durationDays ?? 365)
+        : membership.durationDays ?? 0,
+    ),
     upgradeToMembershipId: membership.upgradeToMembershipId ?? '',
   };
 }
@@ -70,6 +83,15 @@ function validate(values: MembershipFormValues): FieldErrors {
   const sortOrder = Number(values.sortOrder);
   if (!Number.isFinite(sortOrder) || sortOrder < 0) errors.sortOrder = 'Sort order must be 0 or greater';
 
+  const durationDays = Number(values.durationDays);
+  if (values.billingKind === 'renewable') {
+    if (!Number.isFinite(durationDays) || durationDays < 1) {
+      errors.durationDays = 'Renewable memberships need at least 1 day';
+    }
+  } else if (!Number.isFinite(durationDays) || durationDays < 0) {
+    errors.durationDays = 'Duration must be 0 or greater';
+  }
+
   return errors;
 }
 
@@ -88,6 +110,12 @@ export function toMembershipPayload(values: MembershipFormValues): MembershipPay
     tierRank: Number(values.tierRank) || 0,
     sortOrder: Number(values.sortOrder) || 0,
     validForFutureEvents: values.validForFutureEvents,
+    validForFutureQr: values.validForFutureQr,
+    billingKind: values.billingKind,
+    durationDays:
+      values.billingKind === 'renewable'
+        ? Math.max(1, Number(values.durationDays) || 365)
+        : 0,
     upgradeToMembershipId: values.upgradeToMembershipId.trim()
       ? values.upgradeToMembershipId.trim()
       : null,
@@ -243,8 +271,44 @@ export function MembershipFormModal({
               checked={values.validForFutureEvents}
               onChange={(e) => update('validForFutureEvents', e.target.checked)}
             />
-            <span>Valid for future events (content + QR carry over)</span>
+            <span>Valid for future events (content carry-over)</span>
           </label>
+          <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={values.validForFutureQr}
+              onChange={(e) => update('validForFutureQr', e.target.checked)}
+            />
+            <span>QR for future events (check-in only for this membership)</span>
+          </label>
+          <label className="field">
+            <span>Membership type</span>
+            <select
+              value={values.billingKind}
+              onChange={(e) =>
+                update('billingKind', e.target.value === 'renewable' ? 'renewable' : 'one_time')
+              }
+            >
+              <option value="one_time">One-time (event pass)</option>
+              <option value="renewable">Recurring / renewable</option>
+            </select>
+            <p className="hint">
+              Renewable memberships expire after the duration below. Attendees get a renewal
+              reminder, and check-in QR stays active only while the period is paid.
+            </p>
+          </label>
+          {values.billingKind === 'renewable' ? (
+            <Input
+              label="Duration (days)"
+              name="durationDays"
+              type="number"
+              min={1}
+              value={values.durationDays}
+              error={errors.durationDays}
+              onChange={(e) => update('durationDays', e.target.value)}
+              placeholder="365"
+            />
+          ) : null}
           <label className="field">
             <span>Upgrade next level (optional)</span>
             <select

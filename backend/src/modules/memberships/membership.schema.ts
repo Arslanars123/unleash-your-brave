@@ -36,7 +36,18 @@ export const createMembershipSchema = z.object({
   tierRank: z.coerce.number().int().min(0).max(100).optional().default(0),
   sortOrder: z.coerce.number().int().min(0).max(10_000).optional().default(0),
   validForFutureEvents: z.boolean().optional().default(false),
+  validForFutureQr: z.boolean().optional().default(false),
+  billingKind: z.enum(['one_time', 'renewable']).optional().default('one_time'),
+  durationDays: z.coerce.number().int().min(0).max(3650).optional().default(0),
   upgradeToMembershipId: z.union([z.string().uuid(), z.null()]).optional().default(null),
+}).superRefine((value, ctx) => {
+  if (value.billingKind === 'renewable' && value.durationDays < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Renewable memberships need durationDays of at least 1',
+      path: ['durationDays'],
+    });
+  }
 });
 
 export const updateMembershipSchema = z
@@ -63,8 +74,20 @@ export const updateMembershipSchema = z
     tierRank: z.coerce.number().int().min(0).max(100).optional(),
     sortOrder: z.coerce.number().int().min(0).max(10_000).optional(),
     validForFutureEvents: z.boolean().optional(),
+    validForFutureQr: z.boolean().optional(),
+    billingKind: z.enum(['one_time', 'renewable']).optional(),
+    durationDays: z.coerce.number().int().min(0).max(3650).optional(),
     upgradeToMembershipId: z.union([z.string().uuid(), z.null()]).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to update',
+  })
+  .superRefine((value, ctx) => {
+    if (value.billingKind === 'renewable' && value.durationDays !== undefined && value.durationDays < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Renewable memberships need durationDays of at least 1',
+        path: ['durationDays'],
+      });
+    }
   });

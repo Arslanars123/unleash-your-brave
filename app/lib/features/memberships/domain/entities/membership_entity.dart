@@ -13,6 +13,8 @@ class MembershipEntity {
     this.sortOrder = 0,
     this.validForFutureEvents = false,
     this.upgradeToMembershipId,
+    this.billingKind = 'one_time',
+    this.durationDays = 0,
   });
 
   final String id;
@@ -28,6 +30,10 @@ class MembershipEntity {
   final int sortOrder;
   final bool validForFutureEvents;
   final String? upgradeToMembershipId;
+  final String billingKind;
+  final int durationDays;
+
+  bool get isRenewable => billingKind == 'renewable';
 
   /// Rank used for upgrade rules (tierRank when set, otherwise price).
   double get upgradeRank => tierRank > 0 ? tierRank.toDouble() : price;
@@ -44,6 +50,7 @@ class EffectiveEventAccess {
     required this.eventId,
     required this.allowPreviousAttendeesAccess,
     required this.entitled,
+    required this.qrEntitled,
     required this.carriedFromPrevious,
     required this.accessibleMembershipIds,
     required this.upgradeMembershipIds,
@@ -52,11 +59,13 @@ class EffectiveEventAccess {
     this.sourceMembershipId,
     this.sourceMembershipName,
     this.validForFutureEvents = false,
+    this.validForFutureQr = false,
   });
 
   final String eventId;
   final bool allowPreviousAttendeesAccess;
   final bool entitled;
+  final bool qrEntitled;
   final bool carriedFromPrevious;
   final List<String> accessibleMembershipIds;
   final String? effectiveMembershipId;
@@ -64,6 +73,7 @@ class EffectiveEventAccess {
   final String? sourceMembershipId;
   final String? sourceMembershipName;
   final bool validForFutureEvents;
+  final bool validForFutureQr;
   final List<String> upgradeMembershipIds;
 }
 

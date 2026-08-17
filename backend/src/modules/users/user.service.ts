@@ -356,6 +356,15 @@ export class UserService {
       ...(input.membershipId !== undefined || input.role !== undefined
         ? { membershipId: role === 'member' ? membershipId : null }
         : {}),
+      ...(input.membershipStatus !== undefined
+        ? { membershipStatus: input.membershipStatus }
+        : {}),
+      ...(input.membershipExpiresAt !== undefined
+        ? { membershipExpiresAt: input.membershipExpiresAt }
+        : {}),
+      ...(input.renewalReminderSentAt !== undefined
+        ? { renewalReminderSentAt: input.renewalReminderSentAt }
+        : {}),
       ...(input.photoUrl !== undefined ? { photoUrl: input.photoUrl } : {}),
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.business !== undefined ? { business: input.business } : {}),

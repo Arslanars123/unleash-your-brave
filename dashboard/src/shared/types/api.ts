@@ -26,6 +26,9 @@ export interface PublicUser {
   speakerId: string | null;
   sponsorId: string | null;
   membershipId: string | null;
+  membershipStatus?: 'active' | 'expired' | null;
+  membershipExpiresAt?: string | null;
+  renewalReminderSentAt?: string | null;
   photoUrl: string;
   title: string;
   business: string;
@@ -153,13 +156,19 @@ export interface PublicMembershipPurchase {
   membershipName: string;
   price: number;
   currency: string;
-  kind: 'purchase' | 'upgrade';
+  couponCode?: string | null;
+  couponId?: string | null;
+  originalPrice?: number | null;
+  discountAmount?: number | null;
+  kind: 'purchase' | 'upgrade' | 'renew';
   previousMembershipId: string | null;
   previousMembershipName: string | null;
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
   stripeCheckoutSessionId: string;
   stripePaymentIntentId: string | null;
   stripeCustomerId: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
   purchasedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -168,10 +177,14 @@ export interface PublicMembershipPurchase {
 export interface AttendeePurchaseSummary {
   currentMembershipId: string | null;
   currentMembershipName: string | null;
+  currentMembershipStatus: 'active' | 'expired' | null;
+  currentMembershipExpiresAt: string | null;
+  currentBillingKind: 'one_time' | 'renewable' | null;
   originalMembershipId: string | null;
   originalMembershipName: string | null;
   purchases: PublicMembershipPurchase[];
   upgrades: PublicMembershipPurchase[];
+  renewals: PublicMembershipPurchase[];
   latestPurchase: PublicMembershipPurchase | null;
 }
 
@@ -324,6 +337,9 @@ export interface PublicMembership {
   tierRank?: number;
   sortOrder?: number;
   validForFutureEvents?: boolean;
+  validForFutureQr?: boolean;
+  billingKind?: 'one_time' | 'renewable';
+  durationDays?: number;
   upgradeToMembershipId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -341,6 +357,9 @@ export interface MembershipPayload {
   tierRank?: number;
   sortOrder?: number;
   validForFutureEvents?: boolean;
+  validForFutureQr?: boolean;
+  billingKind?: 'one_time' | 'renewable';
+  durationDays?: number;
   upgradeToMembershipId?: string | null;
 }
 
@@ -348,6 +367,7 @@ export interface EffectiveEventAccess {
   eventId: string;
   allowPreviousAttendeesAccess: boolean;
   entitled: boolean;
+  qrEntitled: boolean;
   carriedFromPrevious: boolean;
   accessibleMembershipIds: string[];
   effectiveMembershipId: string | null;
@@ -355,6 +375,7 @@ export interface EffectiveEventAccess {
   sourceMembershipId: string | null;
   sourceMembershipName: string | null;
   validForFutureEvents: boolean;
+  validForFutureQr: boolean;
   upgradeMembershipIds: string[];
 }
 

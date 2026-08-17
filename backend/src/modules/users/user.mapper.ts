@@ -12,6 +12,13 @@ export function toPublicUser(user: User): PublicUser {
     speakerId: user.speakerId,
     sponsorId: user.sponsorId,
     membershipId: user.membershipId ?? null,
+    membershipStatus: user.membershipStatus ?? null,
+    membershipExpiresAt: user.membershipExpiresAt
+      ? user.membershipExpiresAt.toISOString()
+      : null,
+    renewalReminderSentAt: user.renewalReminderSentAt
+      ? user.renewalReminderSentAt.toISOString()
+      : null,
     photoUrl: user.photoUrl,
     title: user.title,
     business: user.business,

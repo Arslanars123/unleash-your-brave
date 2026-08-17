@@ -72,6 +72,38 @@ export class MongoUserRepository implements UserRepository {
     return docs.map((doc) => String(doc._id));
   }
 
+  async listDueForMembershipExpiry(now: Date): Promise<User[]> {
+    const docs = await this.collection
+      .find({
+        role: 'member',
+        membershipId: { $ne: null },
+        membershipExpiresAt: { $lte: now },
+        $or: [{ membershipStatus: 'active' }, { membershipStatus: null }, { membershipStatus: { $exists: false } }],
+      } as Filter<MongoDoc<User>>)
+      .limit(500)
+      .toArray();
+    return fromDocs<User>(docs);
+  }
+
+  async listDueForRenewalReminder(now: Date, withinDays: number): Promise<User[]> {
+    const horizon = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+    const docs = await this.collection
+      .find({
+        role: 'member',
+        membershipId: { $ne: null },
+        membershipExpiresAt: { $gt: now, $lte: horizon },
+        membershipStatus: { $ne: 'expired' },
+      } as Filter<MongoDoc<User>>)
+      .limit(500)
+      .toArray();
+    const windowMs = withinDays * 24 * 60 * 60 * 1000;
+    return fromDocs<User>(docs).filter((user) => {
+      if (!user.membershipExpiresAt) return false;
+      if (!user.renewalReminderSentAt) return true;
+      return user.renewalReminderSentAt.getTime() < user.membershipExpiresAt.getTime() - windowMs;
+    });
+  }
+
   async create(data: CreateUserRecord): Promise<User> {
     const now = new Date();
     const user: User = {
@@ -84,6 +116,9 @@ export class MongoUserRepository implements UserRepository {
       speakerId: data.speakerId ?? null,
       sponsorId: data.sponsorId ?? null,
       membershipId: data.membershipId ?? null,
+      membershipStatus: data.membershipStatus ?? null,
+      membershipExpiresAt: data.membershipExpiresAt ?? null,
+      renewalReminderSentAt: data.renewalReminderSentAt ?? null,
       photoUrl: data.photoUrl ?? EMPTY_ATTENDEE_PROFILE.photoUrl,
       title: data.title ?? EMPTY_ATTENDEE_PROFILE.title,
       business: data.business ?? EMPTY_ATTENDEE_PROFILE.business,

@@ -4,6 +4,10 @@ export type UserRole = (typeof USER_ROLES)[number];
 export const USER_STATUSES = ['active', 'suspended'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
+/** Lifecycle of the attendee’s current membership entitlement (payment period). */
+export const MEMBERSHIP_STATUSES = ['active', 'expired'] as const;
+export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
+
 export const DASHBOARD_ROLES = ['admin', 'speaker', 'sponsor'] as const;
 export type DashboardRole = (typeof DASHBOARD_ROLES)[number];
 
@@ -67,6 +71,15 @@ export interface User {
   sponsorId: string | null;
   /** Membership tier for `member` role. */
   membershipId: string | null;
+  /**
+   * Payment/lifecycle status for the current membership.
+   * `null` for legacy users without an expiry cycle (treated as active when they have a membership).
+   */
+  membershipStatus: MembershipStatus | null;
+  /** When the current renewable period ends. `null` = no expiry (one-time / legacy). */
+  membershipExpiresAt: Date | null;
+  /** Last time a renewal reminder was sent for the current period. */
+  renewalReminderSentAt: Date | null;
   photoUrl: string;
   title: string;
   business: string;
@@ -110,6 +123,9 @@ export interface PublicUser {
   speakerId: string | null;
   sponsorId: string | null;
   membershipId: string | null;
+  membershipStatus: MembershipStatus | null;
+  membershipExpiresAt: string | null;
+  renewalReminderSentAt: string | null;
   photoUrl: string;
   title: string;
   business: string;
@@ -168,6 +184,9 @@ export interface UpdateUserInput {
   speakerId?: string | null;
   sponsorId?: string | null;
   membershipId?: string | null;
+  membershipStatus?: MembershipStatus | null;
+  membershipExpiresAt?: Date | null;
+  renewalReminderSentAt?: Date | null;
   photoUrl?: string;
   title?: string;
   business?: string;

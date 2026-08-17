@@ -42,6 +42,7 @@ import { SponsorService } from '../modules/sponsors/sponsor.service.js';
 import { MembershipController } from '../modules/memberships/membership.controller.js';
 import { createMembershipRouter } from '../modules/memberships/membership.routes.js';
 import { MembershipService } from '../modules/memberships/membership.service.js';
+import { MembershipLifecycleService } from '../modules/memberships/membership-lifecycle.service.js';
 import { UploadController } from '../modules/uploads/upload.controller.js';
 import { MediaStorageService } from '../modules/uploads/media-storage.service.js';
 import { createUploadRouter } from '../modules/uploads/upload.routes.js';
@@ -135,6 +136,12 @@ export async function createContainer() {
   );
   const sponsorService = new SponsorService(sponsorRepository, eventService, userService, mailService);
   const pushNotificationService = new PushNotificationService(deviceTokenRepository);
+  const membershipLifecycleService = new MembershipLifecycleService(
+    userRepository,
+    membershipRepository,
+    mailService,
+    pushNotificationService,
+  );
   const announcementService = new AnnouncementService(
     announcementRepository,
     announcementReadRepository,
@@ -248,6 +255,7 @@ export async function createContainer() {
       sessionFeedbackService,
       sponsorService,
       membershipService,
+      membershipLifecycleService,
       checkoutService,
       announcementService,
       checkInService,

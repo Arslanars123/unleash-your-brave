@@ -40,6 +40,12 @@ export class MembershipService {
       tierRank: input.tierRank ?? 0,
       sortOrder: input.sortOrder ?? 0,
       validForFutureEvents: input.validForFutureEvents ?? false,
+      validForFutureQr: input.validForFutureQr ?? false,
+      billingKind: input.billingKind ?? 'one_time',
+      durationDays:
+        input.billingKind === 'renewable'
+          ? Math.max(1, input.durationDays ?? 365)
+          : Math.max(0, input.durationDays ?? 0),
       upgradeToMembershipId: input.upgradeToMembershipId ?? null,
     });
     return toPublicMembership(created);
@@ -63,6 +69,11 @@ export class MembershipService {
       ...(input.validForFutureEvents !== undefined
         ? { validForFutureEvents: input.validForFutureEvents }
         : {}),
+      ...(input.validForFutureQr !== undefined
+        ? { validForFutureQr: input.validForFutureQr }
+        : {}),
+      ...(input.billingKind !== undefined ? { billingKind: input.billingKind } : {}),
+      ...(input.durationDays !== undefined ? { durationDays: input.durationDays } : {}),
       ...(input.upgradeToMembershipId !== undefined
         ? { upgradeToMembershipId: input.upgradeToMembershipId }
         : {}),

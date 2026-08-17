@@ -1,3 +1,4 @@
+import { isMembershipPaymentActive } from '../memberships/membership-entitlement.js';
 import type { EventService } from '../events/event.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { Membership } from '../memberships/membership.types.js';
@@ -6,8 +7,10 @@ import type { UserRepository } from '../users/user.repository.js';
 export interface EffectiveEventAccess {
   eventId: string;
   allowPreviousAttendeesAccess: boolean;
-  /** User may view this edition’s app content / receive a check-in QR. */
+  /** User may view this edition’s app content (sessions/open areas). */
   entitled: boolean;
+  /** User may receive a check-in QR for this edition. */
+  qrEntitled: boolean;
   /** Access comes from a previous edition membership. */
   carriedFromPrevious: boolean;
   /** Membership UUID(s) that unlock restricted sessions on this event. */
@@ -18,6 +21,7 @@ export interface EffectiveEventAccess {
   sourceMembershipId: string | null;
   sourceMembershipName: string | null;
   validForFutureEvents: boolean;
+  validForFutureQr: boolean;
   /**
    * Upgrade options the app should show for this user on this event.
    * Empty = show purchase catalog as-is (no current pass).
@@ -75,9 +79,35 @@ function nextUpgradeIds(
   return higher[0] ? [higher[0].id] : [];
 }
 
+function emptyAccess(
+  eventId: string,
+  extras: Partial<EffectiveEventAccess> = {},
+): EffectiveEventAccess {
+  return {
+    eventId,
+    allowPreviousAttendeesAccess: false,
+    entitled: false,
+    qrEntitled: false,
+    carriedFromPrevious: false,
+    accessibleMembershipIds: [],
+    effectiveMembershipId: null,
+    effectiveMembershipName: null,
+    sourceMembershipId: null,
+    sourceMembershipName: null,
+    validForFutureEvents: false,
+    validForFutureQr: false,
+    upgradeMembershipIds: [],
+    ...extras,
+  };
+}
+
 /**
  * Resolves whether a member can access a given event edition’s content and QR,
  * including carry-forward from previous memberships.
+ *
+ * Content and QR are independent for previous-edition holders:
+ * - content: `validForFutureEvents` OR event `allowPreviousAttendeesAccess`
+ * - QR: `validForFutureQr` only (never granted by the event-wide content toggle alone)
  */
 export class EffectiveAccessService {
   constructor(
@@ -94,19 +124,7 @@ export class EffectiveAccessService {
       ? await this.events.requireEvent(eventId)
       : await this.events.getLatest();
     if (!event) {
-      return {
-        eventId: eventId ?? '',
-        allowPreviousAttendeesAccess: false,
-        entitled: false,
-        carriedFromPrevious: false,
-        accessibleMembershipIds: [],
-        effectiveMembershipId: null,
-        effectiveMembershipName: null,
-        sourceMembershipId: null,
-        sourceMembershipName: null,
-        validForFutureEvents: false,
-        upgradeMembershipIds: [],
-      };
+      return emptyAccess(eventId ?? '');
     }
 
     const allowPrevious = Boolean(event.allowPreviousAttendeesAccess);
@@ -118,88 +136,64 @@ export class EffectiveAccessService {
 
     const user = await this.users.findById(userId);
     if (!user || user.status !== 'active' || user.role !== 'member') {
-      return {
-        eventId: event.id,
+      return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
-        entitled: false,
-        carriedFromPrevious: false,
-        accessibleMembershipIds: [],
-        effectiveMembershipId: null,
-        effectiveMembershipName: null,
-        sourceMembershipId: null,
-        sourceMembershipName: null,
-        validForFutureEvents: false,
         upgradeMembershipIds: catalog.map((item) => item.id),
-      };
+      });
     }
 
     const sourceId = user.membershipId;
     if (!sourceId) {
-      return {
-        eventId: event.id,
+      return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
-        entitled: false,
-        carriedFromPrevious: false,
-        accessibleMembershipIds: [],
-        effectiveMembershipId: null,
-        effectiveMembershipName: null,
-        sourceMembershipId: null,
-        sourceMembershipName: null,
-        validForFutureEvents: false,
         upgradeMembershipIds: catalog.map((item) => item.id),
-      };
+      });
     }
 
     const source = await this.memberships.findById(sourceId);
     if (!source) {
-      return {
-        eventId: event.id,
+      return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
-        entitled: false,
-        carriedFromPrevious: false,
-        accessibleMembershipIds: [],
-        effectiveMembershipId: null,
-        effectiveMembershipName: null,
         sourceMembershipId: sourceId,
-        sourceMembershipName: null,
-        validForFutureEvents: false,
         upgradeMembershipIds: catalog.map((item) => item.id),
-      };
+      });
     }
 
-    // Same-edition membership — full access.
+    const validForFutureEvents = Boolean(source.validForFutureEvents);
+    const validForFutureQr = Boolean(source.validForFutureQr);
+    const paymentActive = isMembershipPaymentActive(user);
+
+    // Same-edition membership — content when they hold the tier; QR only while payment period is active.
     if (source.eventId === event.id) {
       return {
         eventId: event.id,
         allowPreviousAttendeesAccess: allowPrevious,
         entitled: true,
+        qrEntitled: paymentActive,
         carriedFromPrevious: false,
         accessibleMembershipIds: [source.id],
         effectiveMembershipId: source.id,
         effectiveMembershipName: source.name,
         sourceMembershipId: source.id,
         sourceMembershipName: source.name,
-        validForFutureEvents: Boolean(source.validForFutureEvents),
+        validForFutureEvents,
+        validForFutureQr,
         upgradeMembershipIds: nextUpgradeIds(source, catalog),
       };
     }
 
-    const canCarry =
-      Boolean(source.validForFutureEvents) || allowPrevious;
-    if (!canCarry) {
-      return {
-        eventId: event.id,
+    const contentCarry = validForFutureEvents || allowPrevious;
+    const qrCarry = validForFutureQr && paymentActive;
+
+    if (!contentCarry && !qrCarry) {
+      return emptyAccess(event.id, {
         allowPreviousAttendeesAccess: allowPrevious,
-        entitled: false,
-        carriedFromPrevious: false,
-        accessibleMembershipIds: [],
-        effectiveMembershipId: null,
-        effectiveMembershipName: null,
         sourceMembershipId: source.id,
         sourceMembershipName: source.name,
-        validForFutureEvents: Boolean(source.validForFutureEvents),
+        validForFutureEvents,
+        validForFutureQr,
         upgradeMembershipIds: catalog.map((item) => item.id),
-      };
+      });
     }
 
     const mapped = mapPastToCurrent(source, catalog);
@@ -207,31 +201,37 @@ export class EffectiveAccessService {
       return {
         eventId: event.id,
         allowPreviousAttendeesAccess: allowPrevious,
-        entitled: true,
+        entitled: contentCarry,
+        qrEntitled: qrCarry,
         carriedFromPrevious: true,
-        accessibleMembershipIds: [mapped.id],
-        effectiveMembershipId: mapped.id,
-        effectiveMembershipName: mapped.name,
+        accessibleMembershipIds: contentCarry ? [mapped.id] : [],
+        effectiveMembershipId: contentCarry ? mapped.id : null,
+        effectiveMembershipName: contentCarry ? mapped.name : null,
         sourceMembershipId: source.id,
         sourceMembershipName: source.name,
-        validForFutureEvents: Boolean(source.validForFutureEvents),
-        upgradeMembershipIds: nextUpgradeIds(mapped, catalog),
+        validForFutureEvents,
+        validForFutureQr,
+        upgradeMembershipIds: contentCarry
+          ? nextUpgradeIds(mapped, catalog)
+          : catalog.map((item) => item.id),
       };
     }
 
     // Carry-eligible but no matching tier on the new edition:
-    // still entitled for open sessions + QR when validForFutureEvents or allowPrevious.
+    // open sessions when content carry is on; QR only when membership QR flag + payment are active.
     return {
       eventId: event.id,
       allowPreviousAttendeesAccess: allowPrevious,
-      entitled: true,
+      entitled: contentCarry,
+      qrEntitled: qrCarry,
       carriedFromPrevious: true,
       accessibleMembershipIds: [],
       effectiveMembershipId: null,
       effectiveMembershipName: null,
       sourceMembershipId: source.id,
       sourceMembershipName: source.name,
-      validForFutureEvents: Boolean(source.validForFutureEvents),
+      validForFutureEvents,
+      validForFutureQr,
       upgradeMembershipIds: catalog.map((item) => item.id),
     };
   }

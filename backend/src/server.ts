@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 import { logger } from './core/logger.js';
 import { closeMongo } from './db/mongo.js';
 import { startAnnouncementScheduler } from './modules/announcements/announcement.scheduler.js';
+import { startMembershipLifecycleScheduler } from './modules/memberships/membership-lifecycle.scheduler.js';
 import { attachChatWebSocket } from './modules/chat/chat.ws.js';
 
 async function bootstrap(): Promise<void> {
@@ -12,6 +13,9 @@ async function bootstrap(): Promise<void> {
 
   const stopAnnouncementScheduler = startAnnouncementScheduler(
     container.services.announcementService,
+  );
+  const stopMembershipLifecycleScheduler = startMembershipLifecycleScheduler(
+    container.services.membershipLifecycleService,
   );
 
   const server = app.listen(env.port, () => {
@@ -26,6 +30,7 @@ async function bootstrap(): Promise<void> {
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'Shutting down');
     stopAnnouncementScheduler();
+    stopMembershipLifecycleScheduler();
     chatWss.close();
     server.close(() => {
       void closeMongo().finally(() => process.exit(0));

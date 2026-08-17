@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
   ListUsersQuery,
+  MembershipStatus,
   NetworkingPref,
   User,
   UserRole,
@@ -22,6 +23,9 @@ export interface CreateUserRecord {
   speakerId?: string | null;
   sponsorId?: string | null;
   membershipId?: string | null;
+  membershipStatus?: MembershipStatus | null;
+  membershipExpiresAt?: Date | null;
+  renewalReminderSentAt?: Date | null;
   photoUrl?: string;
   title?: string;
   business?: string;
@@ -59,6 +63,10 @@ export interface UserRepository {
   list(query: ListUsersQuery): Promise<PaginatedResult<User>>;
   /** Active users matching any of the given roles (for announcement audiences). */
   listActiveIdsByRoles(roles: UserRole[]): Promise<string[]>;
+  /** Members whose renewable period has ended but status is still active. */
+  listDueForMembershipExpiry(now: Date): Promise<User[]>;
+  /** Active renewable members expiring within the reminder window who need a reminder. */
+  listDueForRenewalReminder(now: Date, withinDays: number): Promise<User[]>;
   create(data: CreateUserRecord): Promise<User>;
   update(id: string, data: Partial<Omit<User, 'id' | 'createdAt'>>): Promise<User | null>;
   delete(id: string): Promise<boolean>;
@@ -129,6 +137,33 @@ export class InMemoryUserRepository implements UserRepository {
       .map((user) => user.id);
   }
 
+  async listDueForMembershipExpiry(now: Date): Promise<User[]> {
+    return [...this.users.values()].filter(
+      (user) =>
+        user.role === 'member' &&
+        user.membershipId &&
+        user.membershipExpiresAt &&
+        user.membershipExpiresAt.getTime() <= now.getTime() &&
+        (user.membershipStatus === 'active' || user.membershipStatus == null),
+    );
+  }
+
+  async listDueForRenewalReminder(now: Date, withinDays: number): Promise<User[]> {
+    const horizon = now.getTime() + withinDays * 24 * 60 * 60 * 1000;
+    return [...this.users.values()].filter((user) => {
+      if (user.role !== 'member' || !user.membershipId || !user.membershipExpiresAt) {
+        return false;
+      }
+      if (user.membershipStatus === 'expired') return false;
+      const expires = user.membershipExpiresAt.getTime();
+      if (expires <= now.getTime() || expires > horizon) return false;
+      if (user.renewalReminderSentAt && user.renewalReminderSentAt.getTime() >= expires - withinDays * 24 * 60 * 60 * 1000) {
+        return false;
+      }
+      return true;
+    });
+  }
+
   async create(data: CreateUserRecord): Promise<User> {
     const now = new Date();
     const user: User = {
@@ -141,6 +176,9 @@ export class InMemoryUserRepository implements UserRepository {
       speakerId: data.speakerId ?? null,
       sponsorId: data.sponsorId ?? null,
       membershipId: data.membershipId ?? null,
+      membershipStatus: data.membershipStatus ?? null,
+      membershipExpiresAt: data.membershipExpiresAt ?? null,
+      renewalReminderSentAt: data.renewalReminderSentAt ?? null,
       photoUrl: data.photoUrl ?? EMPTY_ATTENDEE_PROFILE.photoUrl,
       title: data.title ?? EMPTY_ATTENDEE_PROFILE.title,
       business: data.business ?? EMPTY_ATTENDEE_PROFILE.business,

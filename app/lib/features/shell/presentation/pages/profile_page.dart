@@ -469,13 +469,17 @@ class _MembershipSectionState extends State<_MembershipSection>
   }
 
   Future<void> _upgrade(MembershipEntity membership) async {
-    final isUpgrade = widget.user.membershipId != null &&
-        widget.user.membershipId!.isNotEmpty;
+    final currentId = widget.user.membershipId;
+    final isRenew =
+        currentId != null && currentId.isNotEmpty && currentId == membership.id;
+    final isUpgrade = currentId != null &&
+        currentId.isNotEmpty &&
+        currentId != membership.id;
     final result = await showDialog<_CheckoutCouponResult>(
       context: context,
       builder: (context) => _MembershipCheckoutDialog(
         membership: membership,
-        isUpgrade: isUpgrade,
+        mode: isRenew ? 'renew' : isUpgrade ? 'upgrade' : 'purchase',
       ),
     );
     if (result == null || !mounted) return;
@@ -593,6 +597,15 @@ class _MembershipSectionState extends State<_MembershipSection>
                         _MembershipTierheetCard(
                           membership: current,
                           isCurrent: true,
+                          onSelect: current.isRenewable && !_upgrading
+                              ? () {
+                                  Navigator.pop(context);
+                                  _upgrade(current);
+                                }
+                              : null,
+                          selectLabel: current.isRenewable
+                              ? 'Renew ${current.priceLabel}'
+                              : null,
                         ),
                         const SizedBox(height: 22),
                       ],
@@ -870,12 +883,14 @@ class _MembershipTierheetCard extends StatelessWidget {
     this.isCurrent = false,
     this.featured = false,
     this.onSelect,
+    this.selectLabel,
   });
 
   final MembershipEntity membership;
   final bool isCurrent;
   final bool featured;
   final VoidCallback? onSelect;
+  final String? selectLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -884,6 +899,7 @@ class _MembershipTierheetCard extends StatelessWidget {
         : featured
             ? AppColors.accentPink.withValues(alpha: 0.28)
             : AppColors.borderSubtle;
+    final showAction = onSelect != null;
 
     return Container(
       width: double.infinity,
@@ -922,6 +938,17 @@ class _MembershipTierheetCard extends StatelessWidget {
                         fontSize: 17,
                       ),
                     ),
+                    if (membership.isRenewable) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        membership.durationDays > 0
+                            ? 'Renewable · ${membership.durationDays} days'
+                            : 'Renewable',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -975,7 +1002,7 @@ class _MembershipTierheetCard extends StatelessWidget {
               ),
             ),
           ],
-          if (!isCurrent) ...[
+          if (showAction) ...[
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
@@ -983,12 +1010,12 @@ class _MembershipTierheetCard extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: onSelect,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: featured
+                  backgroundColor: featured || isCurrent
                       ? AppColors.accentPink
                       : AppColors.accentPink.withValues(alpha: 0.85),
                 ),
                 child: Text(
-                  'Pay ${membership.priceLabel}',
+                  selectLabel ?? 'Pay ${membership.priceLabel}',
                   style: AppTypography.button.copyWith(fontSize: 14),
                 ),
               ),
@@ -1399,11 +1426,11 @@ class _CheckoutCouponResult {
 class _MembershipCheckoutDialog extends StatefulWidget {
   const _MembershipCheckoutDialog({
     required this.membership,
-    required this.isUpgrade,
+    required this.mode,
   });
 
   final MembershipEntity membership;
-  final bool isUpgrade;
+  final String mode; // purchase | upgrade | renew
 
   @override
   State<_MembershipCheckoutDialog> createState() =>
@@ -1486,15 +1513,30 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
             '(${_preview!.percentOff.toStringAsFixed(0)}% off)'
         : membership.priceLabel;
 
+    final title = switch (widget.mode) {
+      'renew' => 'Renew ${membership.name}?',
+      'upgrade' => 'Upgrade to ${membership.name}?',
+      _ => 'Purchase ${membership.name}?',
+    };
+    final bodyLead = switch (widget.mode) {
+      'renew' =>
+        'You’ll complete a secure Stripe renewal payment for $priceLine. '
+            'Your membership stays active and your check-in QR remains enabled after payment.',
+      'upgrade' =>
+        'You’ll complete a secure Stripe payment for $priceLine. '
+            'Your membership updates automatically after payment.',
+      _ =>
+        'You’ll complete a secure Stripe payment for $priceLine. '
+            'Your pass unlocks after payment succeeds.',
+    };
+
     return AlertDialog(
       backgroundColor: AppColors.bgCard,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
       ),
       title: Text(
-        widget.isUpgrade
-            ? 'Upgrade to ${membership.name}?'
-            : 'Purchase ${membership.name}?',
+        title,
         style: AppTypography.body.copyWith(
           fontWeight: FontWeight.w700,
           fontSize: 18,
@@ -1506,11 +1548,7 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              widget.isUpgrade
-                  ? 'You’ll complete a secure Stripe payment for $priceLine. '
-                      'Your membership updates automatically after payment.'
-                  : 'You’ll complete a secure Stripe payment for $priceLine. '
-                      'Your pass unlocks after payment succeeds.',
+              bodyLead,
               style: AppTypography.caption.copyWith(height: 1.45),
             ),
             const SizedBox(height: 16),

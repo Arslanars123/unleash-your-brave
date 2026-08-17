@@ -32,7 +32,9 @@ function money(amount: number, currency: string): string {
 }
 
 function kindLabel(kind: PublicMembershipPurchase['kind']): string {
-  return kind === 'upgrade' ? 'Upgrade' : 'Initial purchase';
+  if (kind === 'upgrade') return 'Upgrade';
+  if (kind === 'renew') return 'Renewal';
+  return 'Initial purchase';
 }
 
 function statusClass(status: PublicMembershipPurchase['paymentStatus']): string {
@@ -48,6 +50,12 @@ function statusClass(status: PublicMembershipPurchase['paymentStatus']): string 
     default:
       return 'purchase-status';
   }
+}
+
+function membershipStatusLabel(status: AttendeePurchaseSummary['currentMembershipStatus']): string {
+  if (status === 'expired') return 'Expired';
+  if (status === 'active') return 'Active';
+  return '—';
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -124,6 +132,12 @@ function PurchaseCard({ item }: { item: PublicMembershipPurchase }) {
           <dt>Date</dt>
           <dd>{formatDate(item.purchasedAt)}</dd>
         </div>
+        {item.periodEnd ? (
+          <div>
+            <dt>Valid until</dt>
+            <dd>{formatDate(item.periodEnd)}</dd>
+          </div>
+        ) : null}
       </dl>
 
       {item.stripePaymentIntentId ? (
@@ -159,6 +173,13 @@ export function MembershipRecordPanel({
         <div className="membership-summary-card membership-summary-card-accent">
           <span className="membership-summary-label">Current plan</span>
           <strong>{display(summary.currentMembershipName)}</strong>
+          <span className="membership-summary-sub">
+            {membershipStatusLabel(summary.currentMembershipStatus)}
+            {summary.currentBillingKind === 'renewable' ? ' · renewable' : ''}
+            {summary.currentMembershipExpiresAt
+              ? ` · expires ${formatDate(summary.currentMembershipExpiresAt)}`
+              : ''}
+          </span>
         </div>
         <div className="membership-summary-card">
           <span className="membership-summary-label">Started with</span>
@@ -173,6 +194,7 @@ export function MembershipRecordPanel({
           </strong>
           {summary.latestPurchase ? (
             <span className="membership-summary-sub">
+              {kindLabel(summary.latestPurchase.kind)} ·{' '}
               {summary.latestPurchase.membershipName} ·{' '}
               {formatDate(summary.latestPurchase.purchasedAt)}
             </span>
@@ -181,6 +203,20 @@ export function MembershipRecordPanel({
       </div>
 
       <dl className="attendee-detail-grid membership-source-grid">
+        <div className="attendee-detail-row">
+          <dt>Membership status</dt>
+          <dd>{membershipStatusLabel(summary.currentMembershipStatus)}</dd>
+        </div>
+        <div className="attendee-detail-row">
+          <dt>Renewal / expiry</dt>
+          <dd>
+            {summary.currentMembershipExpiresAt
+              ? formatDate(summary.currentMembershipExpiresAt)
+              : summary.currentBillingKind === 'renewable'
+                ? 'Not set'
+                : 'No expiry (one-time)'}
+          </dd>
+        </div>
         <div className="attendee-detail-row">
           <dt>Signup source</dt>
           <dd>{sourceLabel}</dd>
@@ -200,6 +236,9 @@ export function MembershipRecordPanel({
           <h4>Payment history</h4>
           <span className="muted">
             {history.length} record{history.length === 1 ? '' : 's'}
+            {summary.renewals?.length
+              ? ` · ${summary.renewals.length} renewal${summary.renewals.length === 1 ? '' : 's'}`
+              : ''}
           </span>
         </div>
 

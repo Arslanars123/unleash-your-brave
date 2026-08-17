@@ -53,6 +53,7 @@ export function EventAccessPage() {
       id: string;
       patch: Partial<{
         validForFutureEvents: boolean;
+        validForFutureQr: boolean;
         upgradeToMembershipId: string | null;
       }>;
     }) => membershipsApi.update(id, patch),
@@ -84,6 +85,9 @@ export function EventAccessPage() {
 
   const currentMemberships = currentMembershipsQuery.data?.items ?? [];
   const pastMemberships = pastMembershipsQuery.data?.items ?? [];
+  const savingId = membershipMutation.isPending
+    ? (membershipMutation.variables?.id ?? null)
+    : null;
 
   return (
     <div className="page">
@@ -91,8 +95,8 @@ export function EventAccessPage() {
         <div>
           <h1>Event access</h1>
           <p className="muted">
-            Control whether previous attendees can use the new event, which memberships carry
-            forward, QR validity, and upgrade options.
+            Control previous-attendee content access separately from check-in QR. Enable QR only
+            for the membership types you choose.
           </p>
         </div>
       </header>
@@ -111,12 +115,13 @@ export function EventAccessPage() {
             style={{ marginTop: 4 }}
           />
           <span>
-            <strong>Allow previous attendees to access this event</strong>
+            <strong>Allow previous attendees to access this event’s content</strong>
             <br />
             <span className="hint">
-              When enabled, attendees who bought a pass for an older edition can see sessions
-              and content on this edition (matched by membership name/tier when possible). Their
-              check-in QR is issued for this edition.
+              When enabled, attendees who bought a pass for an older edition can see sessions and
+              content on this edition (matched by membership name/tier when possible). This does{' '}
+              <strong>not</strong> issue a check-in QR — use “QR for future events” on specific
+              memberships below.
             </span>
           </span>
         </label>
@@ -124,19 +129,21 @@ export function EventAccessPage() {
 
       <MembershipAccessTable
         title="Current edition memberships"
-        subtitle="Mark which tiers stay valid for future events, and set the single next upgrade level shown in the app."
+        subtitle="Mark which tiers carry content and/or QR to future events, and set the next upgrade level shown in the app."
         items={currentMemberships}
         siblings={currentMemberships}
         loading={currentMembershipsQuery.isLoading}
-        savingId={
-          membershipMutation.isPending
-            ? (membershipMutation.variables?.id ?? null)
-            : null
-        }
+        savingId={savingId}
         onToggleFuture={(membership, enabled) =>
           membershipMutation.mutate({
             id: membership.id,
             patch: { validForFutureEvents: enabled },
+          })
+        }
+        onToggleQr={(membership, enabled) =>
+          membershipMutation.mutate({
+            id: membership.id,
+            patch: { validForFutureQr: enabled },
           })
         }
         onChangeUpgrade={(membership, upgradeToMembershipId) =>
@@ -150,19 +157,21 @@ export function EventAccessPage() {
       {pastEventId ? (
         <MembershipAccessTable
           title={`Previous edition memberships (${pastEditions[0]?.startDate?.slice(0, 10) ?? 'past'})`}
-          subtitle="Turn on “valid for future events” on last edition’s tiers so those holders keep QR + content access when the next event starts."
+          subtitle="Turn on “QR for future events” only for the membership types that should get a check-in QR on the new edition. Content can still use the event-wide toggle above."
           items={pastMemberships}
           siblings={pastMemberships}
           loading={pastMembershipsQuery.isLoading}
-          savingId={
-            membershipMutation.isPending
-              ? (membershipMutation.variables?.id ?? null)
-              : null
-          }
+          savingId={savingId}
           onToggleFuture={(membership, enabled) =>
             membershipMutation.mutate({
               id: membership.id,
               patch: { validForFutureEvents: enabled },
+            })
+          }
+          onToggleQr={(membership, enabled) =>
+            membershipMutation.mutate({
+              id: membership.id,
+              patch: { validForFutureQr: enabled },
             })
           }
           onChangeUpgrade={(membership, upgradeToMembershipId) =>
@@ -173,7 +182,9 @@ export function EventAccessPage() {
           }
         />
       ) : (
-        <p className="muted">No previous edition yet — future-event flags will apply after you schedule the next one.</p>
+        <p className="muted">
+          No previous edition yet — future-event flags will apply after you schedule the next one.
+        </p>
       )}
 
       <p className="hint" style={{ marginTop: 16 }}>
@@ -193,6 +204,7 @@ function MembershipAccessTable({
   loading,
   savingId,
   onToggleFuture,
+  onToggleQr,
   onChangeUpgrade,
 }: {
   title: string;
@@ -202,6 +214,7 @@ function MembershipAccessTable({
   loading: boolean;
   savingId: string | null;
   onToggleFuture: (membership: PublicMembership, enabled: boolean) => void;
+  onToggleQr: (membership: PublicMembership, enabled: boolean) => void;
   onChangeUpgrade: (
     membership: PublicMembership,
     upgradeToMembershipId: string | null,
@@ -225,7 +238,8 @@ function MembershipAccessTable({
               <tr>
                 <th>Membership</th>
                 <th>Price</th>
-                <th>Valid for future events</th>
+                <th>Content for future events</th>
+                <th>QR for future events</th>
                 <th>Upgrade next level</th>
               </tr>
             </thead>
@@ -249,7 +263,18 @@ function MembershipAccessTable({
                           disabled={busy}
                           onChange={(e) => onToggleFuture(membership, e.target.checked)}
                         />
-                        Carry to next event
+                        Content
+                      </label>
+                    </td>
+                    <td>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(membership.validForFutureQr)}
+                          disabled={busy}
+                          onChange={(e) => onToggleQr(membership, e.target.checked)}
+                        />
+                        Check-in QR
                       </label>
                     </td>
                     <td>

@@ -37,9 +37,9 @@ export class CheckInService {
 
     if (this.access) {
       const resolved = await this.access.resolveForUser(userId, event.id);
-      if (!resolved.entitled) {
+      if (!resolved.qrEntitled) {
         throw new ForbiddenError(
-          'Your membership is not valid for this event. Purchase a pass or contact support.',
+          'Your membership does not include a check-in QR for this event. Purchase a pass or contact support.',
         );
       }
     }

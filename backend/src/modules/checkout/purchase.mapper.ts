@@ -28,6 +28,10 @@ export function toPublicMembershipPurchase(
     stripeCheckoutSessionId: purchase.stripeCheckoutSessionId,
     stripePaymentIntentId: purchase.stripePaymentIntentId,
     stripeCustomerId: purchase.stripeCustomerId,
+    periodStart: purchase.periodStart
+      ? purchase.periodStart.toISOString()
+      : null,
+    periodEnd: purchase.periodEnd ? purchase.periodEnd.toISOString() : null,
     purchasedAt: purchase.purchasedAt.toISOString(),
     createdAt: purchase.createdAt.toISOString(),
     updatedAt: purchase.updatedAt.toISOString(),

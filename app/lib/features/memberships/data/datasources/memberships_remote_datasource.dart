@@ -169,6 +169,7 @@ class MembershipsRemoteDataSource {
         allowPreviousAttendeesAccess:
             data['allowPreviousAttendeesAccess'] as bool? ?? false,
         entitled: data['entitled'] as bool? ?? false,
+        qrEntitled: data['qrEntitled'] as bool? ?? false,
         carriedFromPrevious: data['carriedFromPrevious'] as bool? ?? false,
         accessibleMembershipIds: accessibleIds is List
             ? accessibleIds.map((e) => e.toString()).toList()
@@ -178,6 +179,7 @@ class MembershipsRemoteDataSource {
         sourceMembershipId: data['sourceMembershipId'] as String?,
         sourceMembershipName: data['sourceMembershipName'] as String?,
         validForFutureEvents: data['validForFutureEvents'] as bool? ?? false,
+        validForFutureQr: data['validForFutureQr'] as bool? ?? false,
         upgradeMembershipIds: upgradeIds is List
             ? upgradeIds.map((e) => e.toString()).toList()
             : const [],
@@ -207,6 +209,8 @@ class MembershipsRemoteDataSource {
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       validForFutureEvents: json['validForFutureEvents'] as bool? ?? false,
       upgradeToMembershipId: json['upgradeToMembershipId'] as String?,
+      billingKind: json['billingKind'] as String? ?? 'one_time',
+      durationDays: (json['durationDays'] as num?)?.toInt() ?? 0,
     );
   }
 }

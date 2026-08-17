@@ -9,6 +9,7 @@ import { logger } from '../../core/logger.js';
 import type { CouponService } from '../coupons/coupon.service.js';
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
+import { computeMembershipPeriod } from '../memberships/membership-entitlement.js';
 import type { Membership } from '../memberships/membership.types.js';
 import { toPublicMembership } from '../memberships/membership.mapper.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
@@ -18,6 +19,7 @@ import type { UserService } from '../users/user.service.js';
 import { toPublicMembershipPurchase } from './purchase.mapper.js';
 import type { MembershipPurchaseRepository } from './purchase.repository.js';
 import type {
+  AttendeePurchaseSummary,
   CheckoutEligibility,
   CreateCheckoutSessionInput,
   CreateCheckoutSessionResult,
@@ -116,6 +118,20 @@ export class CheckoutService {
     }
 
     if (existing.membershipId === membership.id) {
+      if (membership.billingKind === 'renewable') {
+        return {
+          allowed: true,
+          reason: null,
+          kind: 'renew',
+          currentMembershipId: existing.membershipId,
+          currentMembershipName: membership.name,
+          currentMembershipPrice: membership.price,
+          targetMembershipId: membership.id,
+          targetMembershipName: membership.name,
+          targetMembershipPrice: membership.price,
+          eventId: membership.eventId,
+        };
+      }
       return {
         allowed: false,
         reason: 'You already have this membership for the current event',
@@ -151,6 +167,27 @@ export class CheckoutService {
     const currentName = current?.name ?? 'Current membership';
     const currentRank = (current?.tierRank ?? 0) > 0 ? current!.tierRank : currentPrice;
     const targetRank = (membership.tierRank ?? 0) > 0 ? membership.tierRank : membership.price;
+
+    // Expired renewable holders may re-buy the same or a higher tier.
+    const isExpired =
+      existing.membershipStatus === 'expired' ||
+      (existing.membershipExpiresAt != null &&
+        existing.membershipExpiresAt.getTime() <= Date.now());
+
+    if (isExpired && membership.billingKind === 'renewable' && targetRank === currentRank) {
+      return {
+        allowed: true,
+        reason: null,
+        kind: 'renew',
+        currentMembershipId: existing.membershipId,
+        currentMembershipName: currentName,
+        currentMembershipPrice: currentPrice,
+        targetMembershipId: membership.id,
+        targetMembershipName: membership.name,
+        targetMembershipPrice: membership.price,
+        eventId: membership.eventId,
+      };
+    }
 
     if (targetRank <= currentRank) {
       return {
@@ -354,7 +391,10 @@ export class CheckoutService {
     return items.map(toPublicMembershipPurchase);
   }
 
-  async getAttendeePurchaseSummary(userId: string, eventId?: string) {
+  async getAttendeePurchaseSummary(
+    userId: string,
+    eventId?: string,
+  ): Promise<AttendeePurchaseSummary> {
     const user = await this.users.findById(userId);
     if (!user) throw new NotFoundError('User');
 
@@ -365,20 +405,42 @@ export class CheckoutService {
     const original = paid[0] ?? null;
     const latest = paid.length > 0 ? paid[paid.length - 1]! : null;
     const upgrades = paid.filter((p) => p.kind === 'upgrade');
+    const renewals = paid.filter((p) => p.kind === 'renew');
 
     let currentMembershipName: string | null = null;
+    let currentBillingKind: 'one_time' | 'renewable' | null = null;
     if (user.membershipId) {
       const membership = await this.memberships.findById(user.membershipId);
       currentMembershipName = membership?.name ?? null;
+      currentBillingKind =
+        membership?.billingKind === 'renewable' ? 'renewable' : membership ? 'one_time' : null;
+    }
+
+    const now = Date.now();
+    let currentMembershipStatus = user.membershipStatus ?? null;
+    if (
+      user.membershipExpiresAt &&
+      user.membershipExpiresAt.getTime() <= now &&
+      currentMembershipStatus !== 'expired'
+    ) {
+      currentMembershipStatus = 'expired';
+    } else if (user.membershipId && !currentMembershipStatus) {
+      currentMembershipStatus = 'active';
     }
 
     return {
       currentMembershipId: user.membershipId,
       currentMembershipName,
+      currentMembershipStatus,
+      currentMembershipExpiresAt: user.membershipExpiresAt
+        ? user.membershipExpiresAt.toISOString()
+        : null,
+      currentBillingKind,
       originalMembershipId: original?.membershipId ?? user.membershipId,
       originalMembershipName: original?.membershipName ?? currentMembershipName,
       purchases: paid.map(toPublicMembershipPurchase),
       upgrades: upgrades.map(toPublicMembershipPurchase),
+      renewals: renewals.map(toPublicMembershipPurchase),
       latestPurchase: latest ? toPublicMembershipPurchase(latest) : null,
     };
   }
@@ -427,17 +489,18 @@ export class CheckoutService {
         { sessionId: session.id, email, reason: eligibility.reason },
         'Stripe payment received but purchase no longer eligible',
       );
-      // Still record a failed/conflict purchase? Prefer throwing so Stripe retries and we alert.
-      // But money was taken — better to fulfill if they paid for a valid upgrade path that became invalid
-      // only due to concurrent purchase. Check if they already have this or higher:
-      if (eligibility.currentMembershipId === membership.id) {
-        // Already has this tier (maybe duplicate webhook race with another fulfill) — no-op after logging.
+      // Already has this one-time tier (duplicate webhook) — no-op.
+      if (
+        eligibility.currentMembershipId === membership.id &&
+        membership.billingKind !== 'renewable'
+      ) {
         return;
       }
       // If they somehow paid for a downgrade after buying higher elsewhere, keep higher and log.
       if (
         eligibility.currentMembershipPrice != null &&
-        membership.price <= eligibility.currentMembershipPrice
+        membership.price <= eligibility.currentMembershipPrice &&
+        eligibility.kind !== 'renew'
       ) {
         logger.error(
           { sessionId: session.id, email, membershipId },
@@ -445,10 +508,12 @@ export class CheckoutService {
         );
         return;
       }
-      throw new ConflictError(eligibility.reason ?? 'Purchase is not allowed');
+      if (!eligibility.allowed) {
+        throw new ConflictError(eligibility.reason ?? 'Purchase is not allowed');
+      }
     }
 
-    const kind: PurchaseKind = eligibility.kind;
+    const kind: PurchaseKind = eligibility.kind ?? 'purchase';
     const previousMembershipId = eligibility.currentMembershipId;
     const previousMembershipName = eligibility.currentMembershipName;
 
@@ -459,9 +524,18 @@ export class CheckoutService {
       product: membership.name,
     });
 
-    await this.userService.update(upsert.user.id, {
+    const existingUser = await this.users.findById(upsert.user.id);
+    const period = computeMembershipPeriod({
+      membership,
+      currentExpiresAt: existingUser?.membershipExpiresAt ?? null,
+    });
+
+    await this.users.update(upsert.user.id, {
       membershipId: membership.id,
       title: membership.name,
+      membershipStatus: period.membershipStatus,
+      membershipExpiresAt: period.periodEnd,
+      renewalReminderSentAt: null,
     });
 
     const paymentIntentId =
@@ -514,6 +588,8 @@ export class CheckoutService {
         stripeCheckoutSessionId: session.id,
         stripePaymentIntentId: paymentIntentId,
         stripeCustomerId: customerId,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
         purchasedAt: new Date(),
       });
 
@@ -560,9 +636,10 @@ export class CheckoutService {
       membershipName: membership.name,
       previousMembershipName: kind === 'upgrade' ? previousMembershipName : null,
       kind,
-      priceLabel: moneyLabel(membership.price, purchase.currency),
+      priceLabel: moneyLabel(purchase.price, purchase.currency),
       purchasedAt: purchase.purchasedAt,
       stripePaymentIntentId: paymentIntentId,
+      periodEnd: period.periodEnd,
     });
 
     logger.info(
@@ -571,6 +648,7 @@ export class CheckoutService {
         userId: upsert.user.id,
         membershipId: membership.id,
         kind,
+        periodEnd: period.periodEnd?.toISOString() ?? null,
       },
       'Membership purchase fulfilled from Stripe',
     );
