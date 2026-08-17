@@ -80,6 +80,8 @@ export interface PublicSession {
   materials: PublicSessionMaterial[];
   feedbackEnabled: boolean;
   feedbackSummary: SessionFeedbackSummary;
+  /** True when the viewer’s membership does not include this item (agenda still lists it). */
+  accessRestricted: boolean;
   createdAt: string;
   updatedAt: string;
 }

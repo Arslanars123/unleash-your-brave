@@ -475,6 +475,7 @@ export interface PublicSession {
   materials: PublicSessionMaterial[];
   feedbackEnabled: boolean;
   feedbackSummary: SessionFeedbackSummary;
+  accessRestricted: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,6 +1,6 @@
 import type { EffectiveAccessService } from '../access/access.service.js';
 import { randomUUID } from 'node:crypto';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
 import type { EventService } from '../events/event.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
@@ -62,34 +62,29 @@ export class SessionService {
     query: ListSessionsQuery,
     viewer?: SessionViewerContext,
   ): Promise<PaginatedResult<PublicSession>> {
-    let listQuery = query;
+    const accessibleIds = viewer
+      ? await this.resolveAccessibleMembershipIds(viewer.userId, query.eventId)
+      : [];
 
-    if (viewer) {
-      const ids = await this.resolveAccessibleMembershipIds(viewer.userId, query.eventId);
-      // Members always; speakers/sponsors only when they also hold a membership.
-      if (viewer.role === 'member' || ids.length > 0) {
-        listQuery = { ...query, accessibleToMembershipIds: ids };
-      }
-    }
-
-    const { items, total } = await this.sessions.list(listQuery);
-    const mapped = await Promise.all(items.map((session) => this.toPublic(session)));
+    const { items, total } = await this.sessions.list(query);
+    const mapped = await Promise.all(
+      items.map((session) =>
+        this.toPublic(
+          session,
+          this.isAccessRestricted(session, accessibleIds, viewer),
+        ),
+      ),
+    );
     return { items: mapped, total };
   }
 
   async getById(id: string, viewer?: SessionViewerContext): Promise<PublicSession> {
     const session = await this.requireSession(id);
-
-    if (viewer) {
-      const ids = await this.resolveAccessibleMembershipIds(viewer.userId, session.eventId);
-      if (viewer.role === 'member' || ids.length > 0) {
-        if (!isSessionAccessible(session, ids)) {
-          throw new ForbiddenError('You do not have access to this session');
-        }
-      }
-    }
-
-    return this.toPublic(session);
+    const accessibleIds = viewer
+      ? await this.resolveAccessibleMembershipIds(viewer.userId, session.eventId)
+      : [];
+    const accessRestricted = this.isAccessRestricted(session, accessibleIds, viewer);
+    return this.toPublic(session, accessRestricted);
   }
 
   async create(input: CreateSessionInput): Promise<PublicSession> {
@@ -224,7 +219,7 @@ export class SessionService {
     return user?.membershipId ?? null;
   }
 
-  private async toPublic(session: Session): Promise<PublicSession> {
+  private async toPublic(session: Session, accessRestricted = false): Promise<PublicSession> {
     const speaker = session.speakerId
       ? await this.speakers.findById(session.speakerId)
       : null;
@@ -243,7 +238,20 @@ export class SessionService {
     return toPublicSession(session, summary, {
       averageRating: feedbackSummary.averageRating,
       ratingsCount: feedbackSummary.ratingsCount,
-    });
+    }, accessRestricted);
+  }
+
+  private isAccessRestricted(
+    session: Session,
+    accessibleIds: string[],
+    viewer?: SessionViewerContext,
+  ): boolean {
+    const allowed = session.membershipIds ?? [];
+    if (allowed.length === 0) return false;
+    if (!viewer) return false;
+    if (viewer.role === 'admin') return false;
+    if (viewer.role !== 'member' && accessibleIds.length === 0) return false;
+    return !isSessionAccessible(session, accessibleIds);
   }
 
   private async requireSession(id: string): Promise<Session> {

@@ -16,6 +16,7 @@ class SessionModel extends SessionEntity {
     super.materials,
     super.feedbackEnabled,
     super.feedbackSummary,
+    super.accessRestricted,
   });
 
   factory SessionModel.fromJson(Map<String, dynamic> json) {
@@ -47,6 +48,7 @@ class SessionModel extends SessionEntity {
       feedbackSummary: feedbackJson is Map<String, dynamic>
           ? SessionFeedbackSummaryModel.fromJson(feedbackJson)
           : null,
+      accessRestricted: json['accessRestricted'] as bool? ?? false,
     );
   }
 
@@ -87,6 +89,7 @@ class SessionModel extends SessionEntity {
               'averageRating': feedbackSummary!.averageRating,
               'ratingsCount': feedbackSummary!.ratingsCount,
             },
+      'accessRestricted': accessRestricted,
     };
   }
 }

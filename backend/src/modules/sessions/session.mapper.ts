@@ -20,6 +20,7 @@ export function toPublicSession(
   session: Session,
   speaker: SessionSpeakerSummary | null,
   feedbackSummary: SessionFeedbackSummary = { averageRating: 0, ratingsCount: 0 },
+  accessRestricted = false,
 ): PublicSession {
   return {
     id: session.id,
@@ -35,9 +36,10 @@ export function toPublicSession(
     endTime: session.endTime,
     location: session.location,
     membershipIds: [...(session.membershipIds ?? [])],
-    materials: session.materials.map(toPublicMaterial),
-    feedbackEnabled: session.feedbackEnabled !== false,
+    materials: accessRestricted ? [] : session.materials.map(toPublicMaterial),
+    feedbackEnabled: accessRestricted ? false : session.feedbackEnabled !== false,
     feedbackSummary,
+    accessRestricted,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
   };

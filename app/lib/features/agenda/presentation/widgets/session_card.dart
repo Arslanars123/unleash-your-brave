@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:unleash_your_brave/core/utils/datetime_format.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
@@ -21,7 +22,9 @@ class SessionCard extends StatelessWidget {
     final description = session.description.trim();
     final materialCount = session.materials.length;
     final address = session.address.trim();
+    final location = session.location.trim();
     final isExtraActivity = session.isExtraActivity;
+    final timeRange = formatSessionTimeRange(session.startTime, session.endTime);
 
     return Material(
       color: Colors.transparent,
@@ -40,11 +43,34 @@ class SessionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (isExtraActivity) ...[
+                Row(
+                  children: [
+                    Text(
+                      'EXTRA ACTIVITY',
+                      style: AppTypography.microLabel.copyWith(
+                        letterSpacing: 1.2,
+                        color: AppColors.accentPink,
+                      ),
+                    ),
+                    if (session.accessRestricted) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        'PASS REQUIRED',
+                        style: AppTypography.microLabel.copyWith(
+                          letterSpacing: 1.0,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ] else if (session.accessRestricted) ...[
                 Text(
-                  'EXTRA ACTIVITY',
+                  'PASS REQUIRED',
                   style: AppTypography.microLabel.copyWith(
-                    letterSpacing: 1.2,
-                    color: AppColors.accentPink,
+                    letterSpacing: 1.0,
+                    color: AppColors.textTertiary,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -57,6 +83,24 @@ class SessionCard extends StatelessWidget {
                   height: 1.3,
                 ),
               ),
+              if (timeRange.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  timeRange,
+                  style: AppTypography.caption.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.accentPink,
+                  ),
+                ),
+              ],
+              if (location.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  location,
+                  style: AppTypography.caption.copyWith(fontSize: 13),
+                ),
+              ],
               if (description.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(

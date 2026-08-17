@@ -81,16 +81,9 @@ class _AgendaPageState extends State<AgendaPage> {
 
   List<SessionEntity> get _visibleSessions {
     final all = _daySessions;
-    final query = _searchQuery.trim().toLowerCase();
+    final query = _searchQuery.trim();
     if (query.isEmpty) return all;
-    return all
-        .where((session) {
-          final speaker = session.speaker?.name.toLowerCase() ?? '';
-          return session.name.toLowerCase().contains(query) ||
-              session.description.toLowerCase().contains(query) ||
-              speaker.contains(query);
-        })
-        .toList(growable: false);
+    return all.where((session) => session.matchesAgendaSearch(query)).toList(growable: false);
   }
 
   List<SessionEntity> get _pagedSessions {
@@ -438,19 +431,15 @@ class _AgendaPageState extends State<AgendaPage> {
   }
 
   List<SearchSuggestionItem> _suggestionsFor(String draft) {
-    final q = draft.toLowerCase();
     return _daySessions
-        .where((session) {
-          final speaker = session.speaker?.name.toLowerCase() ?? '';
-          return session.name.toLowerCase().contains(q) ||
-              session.description.toLowerCase().contains(q) ||
-              speaker.contains(q);
-        })
+        .where((session) => session.matchesAgendaSearch(draft))
         .map(
           (session) => SearchSuggestionItem(
             id: session.id,
             title: session.name,
-            subtitle: session.speaker?.name,
+            subtitle: session.agendaListSubtitle.isEmpty
+                ? null
+                : session.agendaListSubtitle,
           ),
         )
         .toList(growable: false);
@@ -630,7 +619,7 @@ class _AgendaBody extends StatelessWidget {
                     Text(
                       event?.name.isNotEmpty == true
                           ? event!.name
-                          : 'Sessions for each gathering day',
+                          : 'Sessions and extra activities for each gathering day',
                       style: AppTypography.caption.copyWith(fontSize: 14),
                     ),
                     if (servingCachedData) ...[
@@ -674,7 +663,7 @@ class _AgendaBody extends StatelessWidget {
                         appliedQuery: searchQuery,
                         onAppliedChanged: onSearchApplied,
                         suggestionsFor: suggestionsFor,
-                        hintText: 'Search sessions or speakers',
+                        hintText: 'Search sessions, activities, or speakers',
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -711,8 +700,8 @@ class _AgendaBody extends StatelessWidget {
                   padding: EdgeInsets.symmetric(horizontal: sidePad),
                   child: Text(
                     searchQuery.isEmpty
-                        ? 'No sessions scheduled for this day yet.'
-                        : 'No sessions match your search.',
+                        ? 'No sessions or extra activities scheduled for this day yet.'
+                        : 'No sessions or activities match your search.',
                     textAlign: TextAlign.center,
                     style: AppTypography.caption,
                   ),
@@ -758,7 +747,7 @@ class _AgendaBody extends StatelessWidget {
                         page: page,
                         totalPages: totalPages,
                         total: totalFiltered,
-                        label: 'sessions',
+                        label: 'items',
                         onPageChanged: onPageChanged,
                       ),
                     ),

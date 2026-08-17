@@ -54,6 +54,7 @@ class SessionEntity {
     this.materials = const [],
     this.feedbackEnabled = true,
     this.feedbackSummary,
+    this.accessRestricted = false,
   });
 
   final String id;
@@ -76,6 +77,37 @@ class SessionEntity {
   final List<SessionMaterialEntity> materials;
   final bool feedbackEnabled;
   final SessionFeedbackSummaryEntity? feedbackSummary;
+  final bool accessRestricted;
 
   bool get isExtraActivity => kind == 'event';
+
+  /// Subtitle for agenda search suggestions and list context.
+  String get agendaListSubtitle {
+    if (isExtraActivity) {
+      final parts = <String>['Extra activity'];
+      final loc = location.trim();
+      if (loc.isNotEmpty) parts.add(loc);
+      return parts.join(' · ');
+    }
+    return speaker?.name.trim() ?? '';
+  }
+
+  bool matchesAgendaSearch(String rawQuery) {
+    final query = rawQuery.trim().toLowerCase();
+    if (query.isEmpty) return true;
+
+    final speakerName = speaker?.name.toLowerCase() ?? '';
+    if (name.toLowerCase().contains(query)) return true;
+    if (description.toLowerCase().contains(query)) return true;
+    if (speakerName.contains(query)) return true;
+    if (location.toLowerCase().contains(query)) return true;
+    if (address.toLowerCase().contains(query)) return true;
+    if (isExtraActivity &&
+        ('extra activity'.contains(query) ||
+            query.contains('extra') ||
+            query.contains('activity'))) {
+      return true;
+    }
+    return false;
+  }
 }

@@ -47,7 +47,14 @@ export class MongoSessionRepository implements SessionRepository {
     }
     if (query.search?.trim()) {
       const search = query.search.trim();
-      andClauses.push({ $or: [containsCi('name', search), containsCi('description', search)] });
+      andClauses.push({
+        $or: [
+          containsCi('name', search),
+          containsCi('description', search),
+          containsCi('location', search),
+          containsCi('address', search),
+        ],
+      });
     }
     if (andClauses.length === 1) {
       Object.assign(filter, andClauses[0]);
