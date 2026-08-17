@@ -51,11 +51,6 @@ class MembershipEntity {
         updatedAt ?? '',
       ].join('::');
 
-  bool get isRenewable => billingKind == 'renewable';
-
-  /// Rank used for upgrade rules (tierRank when set, otherwise price).
-  double get upgradeRank => tierRank > 0 ? tierRank.toDouble() : price;
-
   String get priceLabel {
     if (price <= 0) return 'Free';
     final whole = price == price.roundToDouble();
