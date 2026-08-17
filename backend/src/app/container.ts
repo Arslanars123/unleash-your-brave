@@ -150,6 +150,7 @@ export async function createContainer() {
     eventService,
     pushNotificationService,
   );
+  eventService.setAnnouncementService(announcementService);
   const couponRepository = new MongoCouponRepository();
   await couponRepository.ensureIndexes();
   const couponService = new CouponService(

@@ -243,7 +243,7 @@ export interface EventDayPayload {
   label?: string;
 }
 
-export type EventEditionStatus = 'upcoming' | 'live' | 'ended';
+export type EventEditionStatus = 'upcoming' | 'live' | 'ended' | 'paused';
 
 export interface PublicEvent {
   id: string;
@@ -255,6 +255,7 @@ export interface PublicEvent {
   days: PublicEventDay[];
   dayCount: number;
   status: EventEditionStatus;
+  paused?: boolean;
   venueName: string;
   venueAddress: string;
   venueCity: string;
@@ -285,6 +286,8 @@ export interface EventPayload {
   longitude?: number | null;
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
+  paused?: boolean;
+  notifyAttendees?: boolean;
 }
 
 export interface ScheduleEventPayload {
@@ -299,6 +302,7 @@ export interface ScheduleEventPayload {
   coverImage?: string;
   copyDetailsFromPrevious?: boolean;
   allowPreviousAttendeesAccess?: boolean;
+  notifyAttendees?: boolean;
 }
 
 export interface PublicSpeaker {

@@ -139,6 +139,41 @@ export class AnnouncementService {
     return toPublicAnnouncement(created);
   }
 
+  /**
+   * Creates a deduped system announcement (feed + optional push).
+   * Used for event pause / resume / date changes and countdown automation.
+   */
+  async publishSystemNotice(input: {
+    systemKey: string;
+    title: string;
+    description: string;
+    sendPush?: boolean;
+  }): Promise<PublicAnnouncement | null> {
+    const existing = await this.announcements.findBySystemKey(input.systemKey);
+    if (existing) return null;
+
+    const announcement = await this.announcements.create({
+      title: input.title,
+      description: input.description,
+      kind: 'system',
+      status: 'published',
+      audienceType: 'all',
+      audienceRoles: ['member'],
+      audienceUserIds: [],
+      scheduledAt: null,
+      publishedAt: new Date(),
+      sendPush: input.sendPush ?? true,
+      systemKey: input.systemKey,
+    });
+
+    if (announcement.sendPush) {
+      await this.dispatchPush(announcement);
+    }
+
+    logger.info({ systemKey: input.systemKey }, 'Published system announcement');
+    return toPublicAnnouncement(announcement);
+  }
+
   async update(id: string, input: UpdateAnnouncementInput): Promise<PublicAnnouncement> {
     const existing = await this.requireAnnouncement(id);
     if (existing.kind === 'system' && input.title === undefined && input.description === undefined) {
@@ -238,7 +273,9 @@ export class AnnouncementService {
     } catch {
       return 0;
     }
-    if (!latest || latest.status === 'ended') return 0;
+    if (!latest || latest.status === 'ended' || latest.status === 'paused' || latest.paused) {
+      return 0;
+    }
 
     const eventStart = new Date(latest.startDate);
     const today = new Date();

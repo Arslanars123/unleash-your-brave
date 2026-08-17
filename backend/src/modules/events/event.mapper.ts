@@ -10,7 +10,11 @@ export function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-export function editionStatus(event: Pick<Event, 'startDate' | 'endDate'>, now = new Date()): EventEditionStatus {
+export function editionStatus(
+  event: Pick<Event, 'startDate' | 'endDate' | 'paused'>,
+  now = new Date(),
+): EventEditionStatus {
+  if (Boolean(event.paused)) return 'paused';
   const today = startOfUtcDay(now).getTime();
   const start = startOfUtcDay(event.startDate).getTime();
   const end = startOfUtcDay(event.endDate).getTime();
@@ -46,6 +50,7 @@ export function toPublicEvent(event: Event): PublicEvent {
     days,
     dayCount: days.length,
     status: editionStatus(event),
+    paused: Boolean(event.paused),
     venueName: event.venueName,
     venueAddress: event.venueAddress,
     venueCity: event.venueCity,

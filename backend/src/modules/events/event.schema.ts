@@ -69,6 +69,7 @@ export const createEventSchema = z
     longitude: optionalCoord,
     coverImage: coverImageSchema,
     allowPreviousAttendeesAccess: z.boolean().optional().default(false),
+    paused: z.boolean().optional().default(false),
   })
   .superRefine((value, ctx) => {
     if (
@@ -149,8 +150,10 @@ export const updateEventSchema = z
         message: 'Cover image must be a URL or an uploaded file path',
       }),
     allowPreviousAttendeesAccess: z.boolean().optional(),
+    paused: z.boolean().optional(),
+    notifyAttendees: z.boolean().optional().default(true),
   })
-  .refine((value) => Object.keys(value).length > 0, {
+  .refine((value) => Object.keys(value).filter((k) => k !== 'notifyAttendees').length > 0, {
     message: 'Provide at least one field to update',
   })
   .superRefine((value, ctx) => {
@@ -195,6 +198,7 @@ export const scheduleEventSchema = z
     coverImage: coverImageSchema,
     copyDetailsFromPrevious: z.boolean().optional().default(true),
     allowPreviousAttendeesAccess: z.boolean().optional().default(false),
+    notifyAttendees: z.boolean().optional().default(true),
   })
   .superRefine((value, ctx) => {
     assertDaysUnique(value.days, ctx);

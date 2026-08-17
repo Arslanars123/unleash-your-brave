@@ -32,6 +32,7 @@ class EventEntity {
   bool get isUpcoming => status == 'upcoming';
   bool get isLive => status == 'live';
   bool get isEnded => status == 'ended';
+  bool get isPaused => status == 'paused';
 
   bool get hasMapPin => latitude != null && longitude != null;
 

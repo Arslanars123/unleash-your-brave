@@ -19,7 +19,7 @@ export interface EventDayInput {
   label?: string;
 }
 
-export type EventEditionStatus = 'upcoming' | 'live' | 'ended';
+export type EventEditionStatus = 'upcoming' | 'live' | 'ended' | 'paused';
 
 export interface Event {
   id: string;
@@ -44,6 +44,11 @@ export interface Event {
    * this edition’s content (sessions map by name/tier when possible).
    */
   allowPreviousAttendeesAccess: boolean;
+  /**
+   * Admin pause — event is temporarily on hold. Status surfaces as `paused`
+   * and attendees are notified when this toggles or when dates change.
+   */
+  paused: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +63,7 @@ export interface PublicEvent {
   days: PublicEventDay[];
   dayCount: number;
   status: EventEditionStatus;
+  paused: boolean;
   venueName: string;
   venueAddress: string;
   venueCity: string;
@@ -91,6 +97,7 @@ export interface CreateEventInput {
   longitude?: number | null;
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
+  paused?: boolean;
 }
 
 /** Dedicated “Schedule new event” payload — new edition with new dates. */
@@ -107,6 +114,8 @@ export interface ScheduleEventInput {
   /** When true, copies tagline/description/venue/cover from the previous edition. */
   copyDetailsFromPrevious?: boolean;
   allowPreviousAttendeesAccess?: boolean;
+  /** When false, skip the “new dates announced” push. Default true. */
+  notifyAttendees?: boolean;
 }
 
 export interface UpdateEventInput {
@@ -122,6 +131,9 @@ export interface UpdateEventInput {
   longitude?: number | null;
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
+  paused?: boolean;
+  /** When false, skip pause/date-change push. Default true. */
+  notifyAttendees?: boolean;
 }
 
 export interface ListEventsQuery {

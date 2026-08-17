@@ -34,6 +34,7 @@ function formatEventDate(iso: string): string {
 function statusLabel(status: EventEditionStatus): string {
   if (status === 'live') return 'Live';
   if (status === 'ended') return 'Ended';
+  if (status === 'paused') return 'Paused';
   return 'Upcoming';
 }
 
@@ -80,7 +81,11 @@ export function EventsPage() {
     if (!event) return;
     const ok = await confirm({
       title: 'Save event changes?',
-      message: `Update “${event.name}”?`,
+      message: `Update “${event.name}”?${
+        (payload as EventPayload).notifyAttendees !== false
+          ? ' Attendees will be notified if you paused/resumed the event or changed dates.'
+          : ''
+      }`,
       confirmLabel: 'Save changes',
       tone: 'primary',
     });
@@ -91,7 +96,8 @@ export function EventsPage() {
   async function handleScheduleSubmit(payload: EventPayload | ScheduleEventPayload) {
     const ok = await confirm({
       title: 'Schedule new edition?',
-      message: 'Create a new event edition with the details you entered?',
+      message:
+        'Create a new event edition with the details you entered? Attendees will get a push about the new dates unless you turned notifications off.',
       confirmLabel: 'Schedule',
       tone: 'primary',
     });
@@ -255,7 +261,15 @@ function EventSummaryCard({
             {event.dayCount ?? days.length}{' '}
             {(event.dayCount ?? days.length) === 1 ? 'day' : 'days'}
           </span>
-          <span className={`badge ${event.status === 'live' ? 'role-admin' : 'role-member'}`}>
+          <span
+            className={`badge ${
+              event.status === 'live'
+                ? 'role-admin'
+                : event.status === 'paused'
+                  ? 'role-sponsor'
+                  : 'role-member'
+            }`}
+          >
             {statusLabel(event.status)}
           </span>
           {(event.venueName || event.venueCity) && (

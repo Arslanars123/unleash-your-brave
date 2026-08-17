@@ -31,7 +31,7 @@ export interface PublicCheckIn {
 export interface MyCheckInQr {
   eventId: string;
   eventName: string;
-  eventStatus: 'upcoming' | 'live' | 'ended';
+  eventStatus: 'upcoming' | 'live' | 'ended' | 'paused';
   userId: string;
   /** Opaque signed token to encode in the QR. Valid only for this eventId. */
   token: string;

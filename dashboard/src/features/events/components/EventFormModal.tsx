@@ -36,6 +36,8 @@ export interface EventFormValues {
   longitude: number | null;
   coverImage: string;
   copyDetailsFromPrevious: boolean;
+  paused: boolean;
+  notifyAttendees: boolean;
 }
 
 type FieldErrors = Partial<Record<string, string>>;
@@ -92,6 +94,8 @@ const emptyForm: EventFormValues = {
   longitude: null,
   coverImage: '',
   copyDetailsFromPrevious: true,
+  paused: false,
+  notifyAttendees: true,
 };
 
 function eventToForm(event: PublicEvent): EventFormValues {
@@ -124,6 +128,8 @@ function eventToForm(event: PublicEvent): EventFormValues {
     longitude: event.longitude ?? null,
     coverImage: event.coverImage,
     copyDetailsFromPrevious: true,
+    paused: Boolean(event.paused) || event.status === 'paused',
+    notifyAttendees: true,
   };
 }
 
@@ -206,6 +212,8 @@ export function toEventPayload(values: EventFormValues): EventPayload {
     latitude: values.latitude,
     longitude: values.longitude,
     coverImage: values.coverImage.trim(),
+    paused: values.paused,
+    notifyAttendees: values.notifyAttendees,
   };
 }
 
@@ -222,6 +230,7 @@ export function toSchedulePayload(values: EventFormValues): ScheduleEventPayload
     latitude: values.latitude,
     longitude: values.longitude,
     coverImage: values.coverImage.trim(),
+    notifyAttendees: values.notifyAttendees,
   };
 }
 
@@ -407,6 +416,32 @@ export function EventFormModal({
               ? 'Creates a new edition with fresh dates. Speakers, sessions, and sponsors start empty for this edition.'
               : 'Updates this edition only. To run the next gathering, use Schedule new event after these dates pass.'}
           </p>
+
+          {!isSchedule ? (
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={values.paused}
+                onChange={(e) => update('paused', e.target.checked)}
+              />
+              <span>
+                <strong>Pause this event</strong> — attendees get a push notification; countdown
+                notices pause too
+              </span>
+            </label>
+          ) : null}
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={values.notifyAttendees}
+              onChange={(e) => update('notifyAttendees', e.target.checked)}
+            />
+            <span>
+              Notify attendees by push when dates change
+              {!isSchedule ? ' or pause/resume' : ' (new edition announced)'}
+            </span>
+          </label>
 
           {isSchedule && initialEvent ? (
             <label className="checkbox-row">

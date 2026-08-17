@@ -1,4 +1,6 @@
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
+import { logger } from '../../core/logger.js';
+import type { AnnouncementService } from '../announcements/announcement.service.js';
 import type { EventRepository, PaginatedResult } from './event.repository.js';
 import { CANONICAL_EVENT_NAME } from './event.constants.js';
 import { hasEditionEnded, startOfUtcDay, toPublicEvent } from './event.mapper.js';
@@ -23,6 +25,30 @@ function eachUtcDayInclusive(start: Date, end: Date): Date[] {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return days;
+}
+
+function scheduleFingerprint(days: EventDay[]): string {
+  return [...days]
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map((day) => day.date.toISOString().slice(0, 10))
+    .join('|');
+}
+
+function formatEventRange(days: EventDay[]): string {
+  if (days.length === 0) return '';
+  const sorted = [...days].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const fmt = (date: Date) =>
+    date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  if (first.date.getTime() === last.date.getTime()) return fmt(first.date);
+  return `${fmt(first.date)} – ${fmt(last.date)}`;
 }
 
 /**
@@ -90,7 +116,14 @@ export function resolveEventDays(input: {
 }
 
 export class EventService {
+  private announcements: AnnouncementService | null = null;
+
   constructor(private readonly events: EventRepository) {}
+
+  /** Wired after AnnouncementService is constructed (avoids circular DI). */
+  setAnnouncementService(service: AnnouncementService): void {
+    this.announcements = service;
+  }
 
   async list(query: ListEventsQuery): Promise<PaginatedResult<PublicEvent>> {
     const { items, total } = await this.events.list(query);
@@ -168,7 +201,7 @@ export class EventService {
       return copy ? previous : '';
     };
 
-    return this.createEdition({
+    const created = await this.createEdition({
       days: input.days,
       tagline: pick(input.tagline, latest?.tagline ?? ''),
       description: pick(input.description, latest?.description ?? ''),
@@ -191,7 +224,18 @@ export class EventService {
       allowPreviousAttendeesAccess:
         input.allowPreviousAttendeesAccess ??
         (copy ? Boolean(latest?.allowPreviousAttendeesAccess) : false),
+      paused: false,
     });
+
+    if (input.notifyAttendees !== false) {
+      await this.notifyDatesAnnounced(created.id, created.name, created.days.map((d) => ({
+        dayNumber: d.dayNumber,
+        date: new Date(d.date),
+        label: d.label,
+      })));
+    }
+
+    return created;
   }
 
   async update(id: string, input: UpdateEventInput): Promise<PublicEvent> {
@@ -217,6 +261,13 @@ export class EventService {
         })
       : existing.days;
 
+    const nextPaused =
+      input.paused !== undefined ? Boolean(input.paused) : Boolean(existing.paused);
+    const datesChanged =
+      shouldRebuildDays && scheduleFingerprint(days) !== scheduleFingerprint(existing.days);
+    const pausedChanged =
+      input.paused !== undefined && Boolean(input.paused) !== Boolean(existing.paused);
+
     const updated = await this.events.update(id, {
       name: CANONICAL_EVENT_NAME,
       ...(input.tagline !== undefined ? { tagline: input.tagline } : {}),
@@ -237,9 +288,23 @@ export class EventService {
       ...(input.allowPreviousAttendeesAccess !== undefined
         ? { allowPreviousAttendeesAccess: input.allowPreviousAttendeesAccess }
         : {}),
+      ...(input.paused !== undefined ? { paused: nextPaused } : {}),
     });
 
     if (!updated) throw new NotFoundError('Event');
+
+    const shouldNotify = input.notifyAttendees !== false;
+    if (shouldNotify) {
+      if (pausedChanged && nextPaused) {
+        await this.notifyPaused(updated);
+      } else if (pausedChanged && !nextPaused) {
+        await this.notifyResumed(updated);
+      }
+      if (datesChanged) {
+        await this.notifyDatesAnnounced(updated.id, updated.name, updated.days);
+      }
+    }
+
     return toPublicEvent(updated);
   }
 
@@ -274,8 +339,65 @@ export class EventService {
       longitude: input.longitude ?? null,
       coverImage: input.coverImage ?? '',
       allowPreviousAttendeesAccess: Boolean(input.allowPreviousAttendeesAccess),
+      paused: Boolean(input.paused),
     });
 
     return toPublicEvent(created);
+  }
+
+  private async notifyPaused(event: Event): Promise<void> {
+    const dayKey = new Date().toISOString().slice(0, 10);
+    await this.publishNotice({
+      systemKey: `event:paused:${event.id}:${dayKey}`,
+      title: `${event.name} paused`,
+      description: `${event.name} has been temporarily paused. We’ll share updates when the event is back on.`,
+    });
+  }
+
+  private async notifyResumed(event: Event): Promise<void> {
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const range = formatEventRange(event.days);
+    await this.publishNotice({
+      systemKey: `event:resumed:${event.id}:${dayKey}`,
+      title: `${event.name} is back on`,
+      description: range
+        ? `${event.name} has resumed. Upcoming dates: ${range}.`
+        : `${event.name} has resumed. Open the app for the latest schedule.`,
+    });
+  }
+
+  private async notifyDatesAnnounced(
+    eventId: string,
+    eventName: string,
+    days: EventDay[],
+  ): Promise<void> {
+    const fingerprint = scheduleFingerprint(days);
+    const range = formatEventRange(days);
+    await this.publishNotice({
+      systemKey: `event:dates:${eventId}:${fingerprint}`,
+      title: `New dates for ${eventName}`,
+      description: range
+        ? `${eventName} dates have been updated: ${range}. Open the app for the full schedule.`
+        : `${eventName} dates have been updated. Open the app for the full schedule.`,
+    });
+  }
+
+  private async publishNotice(input: {
+    systemKey: string;
+    title: string;
+    description: string;
+  }): Promise<void> {
+    if (!this.announcements) {
+      logger.warn({ systemKey: input.systemKey }, 'Announcement service not wired — skip event notice');
+      return;
+    }
+    try {
+      await this.announcements.publishSystemNotice({
+        ...input,
+        sendPush: true,
+      });
+    } catch (error) {
+      logger.error({ err: error, systemKey: input.systemKey }, 'Failed to publish event notice');
+    }
   }
 }

@@ -48,7 +48,9 @@ class _EventCountdownState extends State<EventCountdown> {
   }
 
   Duration _compute() {
-    if (widget.status == 'live' || widget.status == 'ended') {
+    if (widget.status == 'live' ||
+        widget.status == 'ended' ||
+        widget.status == 'paused') {
       return Duration.zero;
     }
     final diff = _target.difference(DateTime.now());
@@ -69,9 +71,11 @@ class _EventCountdownState extends State<EventCountdown> {
             ? 'EVENT IS LIVE'
             : status == 'ended'
                 ? 'EVENT HAS ENDED'
-                : EventConstants.countdownTitle);
+                : status == 'paused'
+                    ? 'EVENT PAUSED'
+                    : EventConstants.countdownTitle);
 
-    if (status == 'live' || status == 'ended') {
+    if (status == 'live' || status == 'ended' || status == 'paused') {
       return Container(
         width: double.infinity,
         padding: EdgeInsets.symmetric(
