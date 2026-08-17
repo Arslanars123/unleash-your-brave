@@ -7,7 +7,6 @@ import { TextArea } from '@/shared/ui/TextArea';
 
 export interface MembershipFormValues {
   name: string;
-  valueLink: string;
   price: string;
   description: string;
   features: string;
@@ -26,7 +25,6 @@ type FieldErrors = Partial<Record<keyof MembershipFormValues, string>>;
 
 const emptyForm: MembershipFormValues = {
   name: '',
-  valueLink: '',
   price: '0',
   description: '',
   features: '',
@@ -44,7 +42,6 @@ const emptyForm: MembershipFormValues = {
 function membershipToForm(membership: PublicMembership): MembershipFormValues {
   return {
     name: membership.name,
-    valueLink: membership.valueLink,
     price: String(membership.price),
     description: membership.description,
     features: (membership.features ?? []).join('\n'),
@@ -73,10 +70,6 @@ function validate(values: MembershipFormValues): FieldErrors {
   const price = Number(values.price);
   if (!Number.isFinite(price) || price < 0) errors.price = 'Price must be zero or greater';
 
-  if (values.valueLink.trim() && !/^https?:\/\//i.test(values.valueLink.trim())) {
-    errors.valueLink = 'Enter a valid URL';
-  }
-
   const tierRank = Number(values.tierRank);
   if (!Number.isFinite(tierRank) || tierRank < 0) errors.tierRank = 'Tier rank must be 0 or greater';
 
@@ -98,7 +91,8 @@ function validate(values: MembershipFormValues): FieldErrors {
 export function toMembershipPayload(values: MembershipFormValues): MembershipPayload {
   return {
     name: values.name.trim(),
-    valueLink: values.valueLink.trim(),
+    // Checkout is in-app; external value links are no longer used.
+    valueLink: '',
     price: Number(values.price) || 0,
     description: values.description.trim(),
     features: values.features
@@ -328,14 +322,6 @@ export function MembershipFormModal({
               App upgrade list shows only this next level (never lower tiers).
             </p>
           </label>
-          <Input
-            label="Value link (optional)"
-            name="valueLink"
-            value={values.valueLink}
-            error={errors.valueLink}
-            onChange={(e) => update('valueLink', e.target.value)}
-            placeholder="https://example.com/memberships/standard"
-          />
 
           <footer className="modal-footer">
             <Button type="button" variant="secondary" onClick={onClose}>

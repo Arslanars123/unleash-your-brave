@@ -220,7 +220,6 @@ export function MembershipsPage() {
                 <tr>
                   <th>Name</th>
                   <th>Price</th>
-                  <th>Value link</th>
                   <th>Description</th>
                   {canEdit ? <th /> : null}
                 </tr>
@@ -232,15 +231,6 @@ export function MembershipsPage() {
                       <strong>{membership.name}</strong>
                     </td>
                     <td>{formatPrice(membership.price)}</td>
-                    <td>
-                      {membership.valueLink ? (
-                        <a href={membership.valueLink} target="_blank" rel="noreferrer">
-                          {membership.valueLink.replace(/^https?:\/\//, '').slice(0, 40)}
-                        </a>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
                     <td>
                       <span className="cell-clamp">{membership.description || '—'}</span>
                     </td>
