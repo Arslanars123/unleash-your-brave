@@ -89,10 +89,11 @@ export function CheckInsPage() {
 
   const handleTokenScan = useCallback(
     (raw: string) => {
-      if (scanMutation.isPending) return;
-      void scanMutation.mutateAsync({ token: raw.trim() });
+      const token = raw.trim();
+      if (!token || scanMutation.isPending) return;
+      scanMutation.mutate({ token });
     },
-    [scanMutation],
+    [scanMutation.isPending, scanMutation.mutate],
   );
 
   const stats = listQuery.data?.stats;

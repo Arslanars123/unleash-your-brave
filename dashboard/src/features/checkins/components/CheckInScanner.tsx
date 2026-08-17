@@ -18,22 +18,32 @@ interface CheckInScannerProps {
   disabled?: boolean;
 }
 
+function extractToken(raw: string): string {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/uyb1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+  return match?.[0] ?? trimmed;
+}
+
 /**
- * Live camera QR scanner. Uses BarcodeDetector when present, otherwise jsQR on
- * each video frame so Safari/Firefox work too. Camera APIs require HTTPS.
+ * Live camera QR scanner. Always samples frames onto a canvas and decodes with
+ * jsQR (BarcodeDetector is used as a first pass when present).
  */
 export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const onScanRef = useRef(onScan);
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const lastValue = useRef('');
+
+  onScanRef.current = onScan;
 
   useEffect(() => {
     if (!active) return;
 
     let stream: MediaStream | null = null;
-    let raf = 0;
+    let timer = 0;
     let cancelled = false;
 
     async function start() {
@@ -47,45 +57,57 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
           audio: false,
         });
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
         await video.play();
+        setHint('Point the camera at the attendee QR…');
 
         const Detector = window.BarcodeDetector;
         const detector = Detector ? new Detector({ formats: ['qr_code'] }) : null;
 
         const readFrame = async (): Promise<string | null> => {
           const el = videoRef.current;
-          if (!el || el.readyState < 2) return null;
-
-          if (detector) {
-            try {
-              const codes = await detector.detect(el);
-              return codes[0]?.rawValue?.trim() || null;
-            } catch {
-              // Fall through to jsQR for this frame.
-            }
-          }
-
           const canvas = canvasRef.current;
-          if (!canvas) return null;
-          const width = el.videoWidth;
-          const height = el.videoHeight;
-          if (!width || !height) return null;
+          if (!el || !canvas || el.readyState < 2) return null;
+
+          const sourceW = el.videoWidth;
+          const sourceH = el.videoHeight;
+          if (!sourceW || !sourceH) return null;
+
+          const maxSide = 640;
+          const scale = Math.min(1, maxSide / Math.max(sourceW, sourceH));
+          const width = Math.max(1, Math.round(sourceW * scale));
+          const height = Math.max(1, Math.round(sourceH * scale));
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
           if (!ctx) return null;
           ctx.drawImage(el, 0, 0, width, height);
+
+          if (detector) {
+            try {
+              const codes = await detector.detect(canvas);
+              const detected = codes[0]?.rawValue?.trim();
+              if (detected) return extractToken(detected);
+            } catch {
+              // jsQR below
+            }
+          }
+
           const image = ctx.getImageData(0, 0, width, height);
           const result = jsQR(image.data, image.width, image.height, {
             inversionAttempts: 'attemptBoth',
           });
-          return result?.data?.trim() || null;
+          return result?.data ? extractToken(result.data) : null;
         };
 
         const tick = async () => {
@@ -94,14 +116,17 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
             const value = await readFrame();
             if (value && value !== lastValue.current) {
               lastValue.current = value;
-              onScan(value);
+              setHint('QR found — checking in…');
+              onScanRef.current(value);
             }
           } catch {
             // ignore frame errors
           }
-          raf = requestAnimationFrame(() => {
-            void tick();
-          });
+          if (!cancelled) {
+            timer = window.setTimeout(() => {
+              void tick();
+            }, 120);
+          }
         };
         void tick();
       } catch {
@@ -114,11 +139,11 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
       stream?.getTracks().forEach((track) => track.stop());
       if (videoRef.current) videoRef.current.srcObject = null;
     };
-  }, [active, onScan]);
+  }, [active]);
 
   return (
     <div className="checkin-scanner">
@@ -129,6 +154,7 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
           disabled={disabled}
           onClick={() => {
             setError(null);
+            setHint(null);
             lastValue.current = '';
             setActive((value) => !value);
           }}
@@ -138,6 +164,7 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
         </Button>
       </div>
       {error ? <p className="form-error">{error}</p> : null}
+      {hint && !error ? <p className="hint">{hint}</p> : null}
       {active ? (
         <>
           <video
