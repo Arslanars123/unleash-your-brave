@@ -17,6 +17,10 @@ export interface MembershipPurchase {
   /** Amount charged in major currency units (e.g. dollars). */
   price: number;
   currency: string;
+  couponCode: string | null;
+  couponId: string | null;
+  originalPrice: number | null;
+  discountAmount: number | null;
   kind: PurchaseKind;
   previousMembershipId: string | null;
   previousMembershipName: string | null;
@@ -40,6 +44,10 @@ export interface PublicMembershipPurchase {
   membershipName: string;
   price: number;
   currency: string;
+  couponCode: string | null;
+  couponId: string | null;
+  originalPrice: number | null;
+  discountAmount: number | null;
   kind: PurchaseKind;
   previousMembershipId: string | null;
   previousMembershipName: string | null;
@@ -62,6 +70,10 @@ export interface CreateMembershipPurchaseInput {
   membershipName: string;
   price: number;
   currency: string;
+  couponCode: string | null;
+  couponId: string | null;
+  originalPrice: number | null;
+  discountAmount: number | null;
   kind: PurchaseKind;
   previousMembershipId: string | null;
   previousMembershipName: string | null;
@@ -92,6 +104,7 @@ export interface CreateCheckoutSessionInput {
   lastName: string;
   successUrl?: string;
   cancelUrl?: string;
+  couponCode?: string;
 }
 
 export interface CreateCheckoutSessionResult {
@@ -101,6 +114,9 @@ export interface CreateCheckoutSessionResult {
   membershipId: string;
   membershipName: string;
   price: number;
+  originalPrice: number;
+  discountAmount: number;
+  couponCode: string | null;
   currency: string;
   eventId: string;
 }

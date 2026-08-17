@@ -80,6 +80,8 @@ export function createApp(container: Container): Express {
   app.use('/api/v1/sessions', container.routers.sessions);
   app.use('/api/v1/sponsors', container.routers.sponsors);
   app.use('/api/v1/memberships', container.routers.memberships);
+  app.use('/api/v1/coupons', container.routers.coupons);
+  app.use('/api/v1/access', container.routers.access);
   app.use('/api/v1/checkout', container.routers.checkout);
   app.use('/api/v1/announcements', container.routers.announcements);
   app.use('/api/v1/checkins', container.routers.checkins);

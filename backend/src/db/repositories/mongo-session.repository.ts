@@ -8,13 +8,14 @@ import type {
 } from '../../modules/sessions/session.repository.js';
 import type { ListSessionsQuery, Session } from '../../modules/sessions/session.types.js';
 
-function membershipAccessFilter(membershipId: string | null): Record<string, unknown> {
-  if (membershipId) {
+function membershipAccessFilter(membershipIds: Array<string | null | undefined>): Record<string, unknown> {
+  const ids = [...new Set(membershipIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length > 0) {
     return {
       $or: [
         { membershipIds: { $size: 0 } },
         { membershipIds: { $exists: false } },
-        { membershipIds: membershipId },
+        { membershipIds: { $in: ids } },
       ],
     };
   }
@@ -39,8 +40,10 @@ export class MongoSessionRepository implements SessionRepository {
     if (query.eventDayNumber) filter.eventDayNumber = query.eventDayNumber;
 
     const andClauses: Record<string, unknown>[] = [];
-    if (query.accessibleToMembershipId !== undefined) {
-      andClauses.push(membershipAccessFilter(query.accessibleToMembershipId));
+    if (query.accessibleToMembershipIds !== undefined) {
+      andClauses.push(membershipAccessFilter(query.accessibleToMembershipIds));
+    } else if (query.accessibleToMembershipId !== undefined) {
+      andClauses.push(membershipAccessFilter([query.accessibleToMembershipId]));
     }
     if (query.search?.trim()) {
       const search = query.search.trim();

@@ -66,30 +66,46 @@ export class AuthService {
     const passwordOk = await bcrypt.compare(input.password, user.passwordHash);
     let inviteOk = false;
 
-    if (!passwordOk && user.inviteCodeHash) {
-      const notExpired =
-        !user.inviteCodeExpiresAt || user.inviteCodeExpiresAt.getTime() > Date.now();
-      if (notExpired) {
-        const candidate = input.password.trim();
-        inviteOk =
-          (await bcrypt.compare(candidate, user.inviteCodeHash)) ||
-          (await bcrypt.compare(candidate.toUpperCase(), user.inviteCodeHash));
+    if (user.inviteCodeHash) {
+      const candidate = input.password.trim();
+      inviteOk =
+        (await bcrypt.compare(candidate, user.inviteCodeHash)) ||
+        (await bcrypt.compare(candidate.toUpperCase(), user.inviteCodeHash));
+
+      if (inviteOk) {
+        const notExpired =
+          !user.inviteCodeExpiresAt || user.inviteCodeExpiresAt.getTime() > Date.now();
+
+        // Password already set — invite cannot be reused.
+        if (!user.mustChangePassword) {
+          throw new UnauthorizedError(
+            'You already used your invite code and set up a password. Please enter your password, or reset it if you forgot.',
+            'INVITE_ALREADY_USED',
+          );
+        }
+
+        if (!notExpired) {
+          throw new UnauthorizedError(
+            'This invite code has expired. Contact support or request a new invite.',
+            'INVITE_EXPIRED',
+          );
+        }
       }
     }
 
     if (!passwordOk && !inviteOk) {
       if (user.mustChangePassword && user.inviteCodeHash) {
         throw new UnauthorizedError(
-          'Enter the verification code from your email to continue',
+          'Enter the invite code from your email to continue',
         );
       }
       throw new UnauthorizedError('Invalid email or password');
     }
 
-    // First-time portal users must verify with the emailed code, not a password guess.
+    // First-time users must verify with the emailed invite code, not a password guess.
     if (passwordOk && user.mustChangePassword && user.inviteCodeHash) {
       throw new UnauthorizedError(
-        'Enter the verification code from your email to continue',
+        'Enter the invite code from your email to continue',
       );
     }
 

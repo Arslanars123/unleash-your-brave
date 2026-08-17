@@ -39,6 +39,8 @@ export class MembershipService {
       featured: input.featured ?? false,
       tierRank: input.tierRank ?? 0,
       sortOrder: input.sortOrder ?? 0,
+      validForFutureEvents: input.validForFutureEvents ?? false,
+      upgradeToMembershipId: input.upgradeToMembershipId ?? null,
     });
     return toPublicMembership(created);
   }
@@ -58,6 +60,12 @@ export class MembershipService {
       ...(input.featured !== undefined ? { featured: input.featured } : {}),
       ...(input.tierRank !== undefined ? { tierRank: input.tierRank } : {}),
       ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+      ...(input.validForFutureEvents !== undefined
+        ? { validForFutureEvents: input.validForFutureEvents }
+        : {}),
+      ...(input.upgradeToMembershipId !== undefined
+        ? { upgradeToMembershipId: input.upgradeToMembershipId }
+        : {}),
     });
 
     if (!updated) throw new NotFoundError('Membership');

@@ -35,6 +35,8 @@ export const createMembershipSchema = z.object({
   featured: z.boolean().optional().default(false),
   tierRank: z.coerce.number().int().min(0).max(100).optional().default(0),
   sortOrder: z.coerce.number().int().min(0).max(10_000).optional().default(0),
+  validForFutureEvents: z.boolean().optional().default(false),
+  upgradeToMembershipId: z.union([z.string().uuid(), z.null()]).optional().default(null),
 });
 
 export const updateMembershipSchema = z
@@ -60,6 +62,8 @@ export const updateMembershipSchema = z
     featured: z.boolean().optional(),
     tierRank: z.coerce.number().int().min(0).max(100).optional(),
     sortOrder: z.coerce.number().int().min(0).max(10_000).optional(),
+    validForFutureEvents: z.boolean().optional(),
+    upgradeToMembershipId: z.union([z.string().uuid(), z.null()]).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to update',

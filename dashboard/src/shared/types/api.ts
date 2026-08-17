@@ -248,6 +248,7 @@ export interface PublicEvent {
   latitude: number | null;
   longitude: number | null;
   coverImage: string;
+  allowPreviousAttendeesAccess?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -270,6 +271,7 @@ export interface EventPayload {
   latitude?: number | null;
   longitude?: number | null;
   coverImage?: string;
+  allowPreviousAttendeesAccess?: boolean;
 }
 
 export interface ScheduleEventPayload {
@@ -283,6 +285,7 @@ export interface ScheduleEventPayload {
   longitude?: number | null;
   coverImage?: string;
   copyDetailsFromPrevious?: boolean;
+  allowPreviousAttendeesAccess?: boolean;
 }
 
 export interface PublicSpeaker {
@@ -320,6 +323,8 @@ export interface PublicMembership {
   featured?: boolean;
   tierRank?: number;
   sortOrder?: number;
+  validForFutureEvents?: boolean;
+  upgradeToMembershipId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -335,6 +340,51 @@ export interface MembershipPayload {
   featured?: boolean;
   tierRank?: number;
   sortOrder?: number;
+  validForFutureEvents?: boolean;
+  upgradeToMembershipId?: string | null;
+}
+
+export interface EffectiveEventAccess {
+  eventId: string;
+  allowPreviousAttendeesAccess: boolean;
+  entitled: boolean;
+  carriedFromPrevious: boolean;
+  accessibleMembershipIds: string[];
+  effectiveMembershipId: string | null;
+  effectiveMembershipName: string | null;
+  sourceMembershipId: string | null;
+  sourceMembershipName: string | null;
+  validForFutureEvents: boolean;
+  upgradeMembershipIds: string[];
+}
+
+export interface CouponMembershipDiscount {
+  membershipId: string;
+  percentOff: number;
+}
+
+export interface PublicCoupon {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  active: boolean;
+  expiresAt: string | null;
+  maxRedemptions: number;
+  redemptionCount: number;
+  membershipDiscounts: CouponMembershipDiscount[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CouponPayload {
+  code?: string;
+  name: string;
+  description?: string;
+  active?: boolean;
+  expiresAt?: string | null;
+  maxRedemptions?: number;
+  membershipDiscounts: CouponMembershipDiscount[];
 }
 
 export interface PublicSessionMaterial {

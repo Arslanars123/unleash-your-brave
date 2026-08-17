@@ -331,6 +331,7 @@ class _MembershipSectionState extends State<_MembershipSection>
   bool _awaitingCheckoutReturn = false;
   String? _error;
   List<MembershipEntity> _memberships = const [];
+  EffectiveEventAccess? _access;
 
   @override
   void initState() {
@@ -382,6 +383,12 @@ class _MembershipSectionState extends State<_MembershipSection>
       } catch (_) {
         items = await sl<MembershipsRemoteDataSource>().list(eventId: eventId);
       }
+      EffectiveEventAccess? access;
+      try {
+        access = await sl<MembershipsRemoteDataSource>().myAccess(eventId: eventId);
+      } catch (_) {
+        access = null;
+      }
       if (!mounted) return;
       setState(() {
         _memberships = [...items]
@@ -390,6 +397,7 @@ class _MembershipSectionState extends State<_MembershipSection>
             if (bySort != 0) return bySort;
             return a.price.compareTo(b.price);
           });
+        _access = access;
         _loading = false;
       });
     } on NetworkException catch (error) {
@@ -414,6 +422,12 @@ class _MembershipSectionState extends State<_MembershipSection>
   }
 
   MembershipEntity? get _current {
+    final effectiveId = _access?.effectiveMembershipId;
+    if (effectiveId != null && effectiveId.isNotEmpty) {
+      for (final item in _memberships) {
+        if (item.id == effectiveId) return item;
+      }
+    }
     final id = widget.user.membershipId;
     if (id == null || id.isEmpty) return null;
     for (final item in _memberships) {
@@ -423,68 +437,48 @@ class _MembershipSectionState extends State<_MembershipSection>
   }
 
   List<MembershipEntity> get _upgrades {
+    final accessIds = _access?.upgradeMembershipIds;
+    if (accessIds != null && accessIds.isNotEmpty) {
+      final byId = {for (final m in _memberships) m.id: m};
+      return [
+        for (final id in accessIds)
+          if (byId[id] != null) byId[id]!,
+      ];
+    }
+
     final id = widget.user.membershipId;
     if (id == null || id.isEmpty) {
       return _memberships;
     }
-    final currentRank = _current?.upgradeRank ?? 0;
-    return _memberships
+
+    final current = _current;
+    if (current?.upgradeToMembershipId != null &&
+        current!.upgradeToMembershipId!.isNotEmpty) {
+      return _memberships
+          .where((m) => m.id == current.upgradeToMembershipId)
+          .toList(growable: false);
+    }
+
+    final currentRank = current?.upgradeRank ?? 0;
+    final higher = _memberships
         .where((m) => m.id != id && m.upgradeRank > currentRank)
-        .toList(growable: false);
+        .toList()
+      ..sort((a, b) => a.upgradeRank.compareTo(b.upgradeRank));
+    if (higher.isEmpty) return const [];
+    return [higher.first];
   }
 
   Future<void> _upgrade(MembershipEntity membership) async {
     final isUpgrade = widget.user.membershipId != null &&
         widget.user.membershipId!.isNotEmpty;
-    final confirmed = await showDialog<bool>(
+    final result = await showDialog<_CheckoutCouponResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.bgCard,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-        ),
-        title: Text(
-          isUpgrade
-              ? 'Upgrade to ${membership.name}?'
-              : 'Purchase ${membership.name}?',
-          style: AppTypography.body.copyWith(
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
-        content: Text(
-          isUpgrade
-              ? 'You’ll complete a secure Stripe payment for ${membership.priceLabel}. '
-                  'Your membership updates automatically after payment.'
-              : 'You’ll complete a secure Stripe payment for ${membership.priceLabel}. '
-                  'Your pass unlocks after payment succeeds.',
-          style: AppTypography.caption.copyWith(height: 1.45),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancel',
-              style: AppTypography.button.copyWith(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              'Continue to payment',
-              style: AppTypography.button.copyWith(
-                color: AppColors.accentPink,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ],
+      builder: (context) => _MembershipCheckoutDialog(
+        membership: membership,
+        isUpgrade: isUpgrade,
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (result == null || !mounted) return;
 
     setState(() => _upgrading = true);
     try {
@@ -506,6 +500,7 @@ class _MembershipSectionState extends State<_MembershipSection>
         lastName: names.lastName,
         successUrl: ApiConstants.checkoutSuccessUrl,
         cancelUrl: ApiConstants.checkoutCancelUrl,
+        couponCode: result.couponCode,
       );
 
       final uri = Uri.tryParse(session.checkoutUrl);
@@ -774,7 +769,11 @@ class _MembershipSectionState extends State<_MembershipSection>
                                   ),
                                 ),
                                 child: Text(
-                                  current == null ? 'NO PASS' : 'CURRENT PASS',
+                                  current == null
+                                      ? 'NO PASS'
+                                      : (_access?.carriedFromPrevious == true
+                                          ? 'CARRIED PASS'
+                                          : 'CURRENT PASS'),
                                   style: AppTypography.microLabel.copyWith(
                                     color: AppColors.accentPink,
                                     letterSpacing: 1.3,
@@ -1387,6 +1386,243 @@ class _SettingsLinkTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CheckoutCouponResult {
+  const _CheckoutCouponResult({this.couponCode});
+
+  final String? couponCode;
+}
+
+class _MembershipCheckoutDialog extends StatefulWidget {
+  const _MembershipCheckoutDialog({
+    required this.membership,
+    required this.isUpgrade,
+  });
+
+  final MembershipEntity membership;
+  final bool isUpgrade;
+
+  @override
+  State<_MembershipCheckoutDialog> createState() =>
+      _MembershipCheckoutDialogState();
+}
+
+class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
+  final _couponController = TextEditingController();
+  CouponPreview? _preview;
+  String? _previewError;
+  bool _previewing = false;
+
+  @override
+  void dispose() {
+    _couponController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _applyCoupon() async {
+    final code = _couponController.text.trim();
+    if (code.isEmpty) {
+      setState(() {
+        _preview = null;
+        _previewError = 'Enter a coupon code';
+      });
+      return;
+    }
+
+    setState(() {
+      _previewing = true;
+      _previewError = null;
+    });
+    try {
+      final preview = await sl<MembershipsRemoteDataSource>().previewCoupon(
+        code: code,
+        membershipId: widget.membership.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _preview = preview.valid ? preview : null;
+        _previewError = preview.valid
+            ? null
+            : (preview.reason ?? 'This coupon is not valid for this membership');
+      });
+    } on NetworkException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _preview = null;
+        _previewError = error.message;
+      });
+    } on ServerException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _preview = null;
+        _previewError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _preview = null;
+        _previewError = 'Unable to check coupon';
+      });
+    } finally {
+      if (mounted) setState(() => _previewing = false);
+    }
+  }
+
+  String _money(double value) {
+    if (value == value.roundToDouble()) {
+      return '\$${value.toStringAsFixed(0)}';
+    }
+    return '\$${value.toStringAsFixed(2)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final membership = widget.membership;
+    final priceLine = _preview?.valid == true
+        ? '${_money(_preview!.originalPrice)} → ${_money(_preview!.finalPrice)} '
+            '(${_preview!.percentOff.toStringAsFixed(0)}% off)'
+        : membership.priceLabel;
+
+    return AlertDialog(
+      backgroundColor: AppColors.bgCard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      ),
+      title: Text(
+        widget.isUpgrade
+            ? 'Upgrade to ${membership.name}?'
+            : 'Purchase ${membership.name}?',
+        style: AppTypography.body.copyWith(
+          fontWeight: FontWeight.w700,
+          fontSize: 18,
+        ),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.isUpgrade
+                  ? 'You’ll complete a secure Stripe payment for $priceLine. '
+                      'Your membership updates automatically after payment.'
+                  : 'You’ll complete a secure Stripe payment for $priceLine. '
+                      'Your pass unlocks after payment succeeds.',
+              style: AppTypography.caption.copyWith(height: 1.45),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Coupon code (optional)',
+              style: AppTypography.caption.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _couponController,
+                    textCapitalization: TextCapitalization.characters,
+                    style: AppTypography.body.copyWith(fontSize: 15),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. BRAVE20',
+                      hintStyle: AppTypography.caption.copyWith(
+                        color: AppColors.textTertiary,
+                      ),
+                      filled: true,
+                      fillColor: AppColors.bgBase,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onChanged: (_) {
+                      if (_preview != null || _previewError != null) {
+                        setState(() {
+                          _preview = null;
+                          _previewError = null;
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _previewing ? null : _applyCoupon,
+                  child: Text(
+                    _previewing ? '…' : 'Apply',
+                    style: AppTypography.button.copyWith(
+                      color: AppColors.accentPink,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_previewError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _previewError!,
+                style: AppTypography.caption.copyWith(
+                  color: Colors.redAccent,
+                  height: 1.35,
+                ),
+              ),
+            ],
+            if (_preview?.valid == true) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Coupon ${_preview!.code} applied — save ${_money(_preview!.discountAmount)}',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.accentPink,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'Cancel',
+            style: AppTypography.button.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: () {
+            final code = _couponController.text.trim();
+            Navigator.pop(
+              context,
+              _CheckoutCouponResult(
+                couponCode: code.isEmpty ? null : code,
+              ),
+            );
+          },
+          child: Text(
+            'Continue to payment',
+            style: AppTypography.button.copyWith(
+              color: AppColors.accentPink,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,6 @@
-import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
 import type { CheckInRepository } from '../../db/repositories/mongo-checkin.repository.js';
+import type { EffectiveAccessService } from '../access/access.service.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
 import type { EventService } from '../events/event.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
@@ -22,6 +23,7 @@ export class CheckInService {
     private readonly events: EventService,
     private readonly memberships: MembershipRepository,
     private readonly checkout: CheckoutService,
+    private readonly access?: EffectiveAccessService,
   ) {}
 
   async getMyQr(userId: string, eventId?: string): Promise<MyCheckInQr> {
@@ -32,6 +34,15 @@ export class CheckInService {
 
     const user = await this.users.findById(userId);
     if (!user || user.status !== 'active') throw new NotFoundError('User');
+
+    if (this.access) {
+      const resolved = await this.access.resolveForUser(userId, event.id);
+      if (!resolved.entitled) {
+        throw new ForbiddenError(
+          'Your membership is not valid for this event. Purchase a pass or contact support.',
+        );
+      }
+    }
 
     const existing = await this.checkIns.findByEventAndUser(event.id, userId);
     return {

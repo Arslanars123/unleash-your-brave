@@ -109,6 +109,8 @@ export interface ListSessionsQuery {
   eventId?: string;
   speakerId?: string;
   eventDayNumber?: number;
-  /** When set, only sessions open to this membership (or unrestricted) are returned. */
+  /** When set, only sessions open to any of these memberships (or unrestricted). */
   accessibleToMembershipId?: string | null;
+  /** Prefer this when the viewer may map to multiple equivalent memberships. */
+  accessibleToMembershipIds?: string[];
 }

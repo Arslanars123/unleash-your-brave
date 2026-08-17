@@ -39,6 +39,11 @@ export interface Event {
   latitude: number | null;
   longitude: number | null;
   coverImage: string;
+  /**
+   * When true, attendees who held a membership on a previous edition can access
+   * this edition’s content (sessions map by name/tier when possible).
+   */
+  allowPreviousAttendeesAccess: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +64,7 @@ export interface PublicEvent {
   latitude: number | null;
   longitude: number | null;
   coverImage: string;
+  allowPreviousAttendeesAccess: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +90,7 @@ export interface CreateEventInput {
   latitude?: number | null;
   longitude?: number | null;
   coverImage?: string;
+  allowPreviousAttendeesAccess?: boolean;
 }
 
 /** Dedicated “Schedule new event” payload — new edition with new dates. */
@@ -99,6 +106,7 @@ export interface ScheduleEventInput {
   coverImage?: string;
   /** When true, copies tagline/description/venue/cover from the previous edition. */
   copyDetailsFromPrevious?: boolean;
+  allowPreviousAttendeesAccess?: boolean;
 }
 
 export interface UpdateEventInput {
@@ -113,6 +121,7 @@ export interface UpdateEventInput {
   latitude?: number | null;
   longitude?: number | null;
   coverImage?: string;
+  allowPreviousAttendeesAccess?: boolean;
 }
 
 export interface ListEventsQuery {

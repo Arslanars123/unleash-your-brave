@@ -59,10 +59,10 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDIOg5GKqG2BWPzFEwv9KzKpr0-sPjddgs',
-    appId: '1:685556814574:ios:01b35a45ae9e3117c4d9ff',
+    appId: '1:685556814574:ios:d6b36e87ff7b4145c4d9ff',
     messagingSenderId: '685556814574',
     projectId: 'unleashyourbrave-86780',
     storageBucket: 'unleashyourbrave-86780.firebasestorage.app',
-    iosBundleId: 'com.unleashyourbrave.unleashYourBrave',
+    iosBundleId: 'com.unleashyourbrave.unleashapp',
   );
 }

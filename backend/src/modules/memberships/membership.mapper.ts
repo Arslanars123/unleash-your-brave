@@ -13,6 +13,8 @@ export function toPublicMembership(membership: Membership): PublicMembership {
     featured: Boolean(membership.featured),
     tierRank: membership.tierRank ?? 0,
     sortOrder: membership.sortOrder ?? 0,
+    validForFutureEvents: Boolean(membership.validForFutureEvents),
+    upgradeToMembershipId: membership.upgradeToMembershipId ?? null,
     createdAt: membership.createdAt.toISOString(),
     updatedAt: membership.updatedAt.toISOString(),
   };

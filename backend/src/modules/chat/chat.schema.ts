@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ALLOWED_REACTIONS, CHAT_MESSAGE_TYPES, DEVICE_PLATFORMS } from './chat.types.js';
+import { ALLOWED_REACTIONS, DEVICE_PLATFORMS } from './chat.types.js';
 
 export const listMessagesQuerySchema = z.object({
   before: z.string().uuid().optional(),
@@ -15,16 +15,12 @@ export const createMessageSchema = z
   .object({
     // Idempotency key — UUID preferred, but any stable client token is fine.
     clientId: z.string().trim().min(8).max(128),
-    type: z.enum(CHAT_MESSAGE_TYPES),
+    type: z.enum(['text']),
     body: z.string().max(4000).optional(),
-    gifUrl: z.string().url().max(2000).optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.type === 'text' && !(value.body?.trim())) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'body is required for text', path: ['body'] });
-    }
-    if (value.type === 'gif' && !value.gifUrl) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'gifUrl is required for gif', path: ['gifUrl'] });
+    if (!(value.body?.trim())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'body is required', path: ['body'] });
     }
   });
 

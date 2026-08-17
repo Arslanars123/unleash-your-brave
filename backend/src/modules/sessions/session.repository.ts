@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { ListSessionsQuery, Session } from './session.types.js';
 
-function isSessionAccessible(session: Session, membershipId: string | null): boolean {
-  const membershipIds = session.membershipIds ?? [];
-  if (membershipIds.length === 0) return true;
-  if (!membershipId) return false;
-  return membershipIds.includes(membershipId);
+function isSessionAccessible(session: Session, membershipIds: string[]): boolean {
+  const allowed = session.membershipIds ?? [];
+  if (allowed.length === 0) return true;
+  if (membershipIds.length === 0) return false;
+  return membershipIds.some((id) => allowed.includes(id));
 }
 
 export interface PaginatedResult<T> {
@@ -36,8 +36,17 @@ export class InMemorySessionRepository implements SessionRepository {
         if (query.eventId && session.eventId !== query.eventId) return false;
         if (query.speakerId && session.speakerId !== query.speakerId) return false;
         if (query.eventDayNumber && session.eventDayNumber !== query.eventDayNumber) return false;
-        if (query.accessibleToMembershipId !== undefined) {
-          if (!isSessionAccessible(session, query.accessibleToMembershipId)) {
+        if (query.accessibleToMembershipIds !== undefined) {
+          if (!isSessionAccessible(session, query.accessibleToMembershipIds)) {
+            return false;
+          }
+        } else if (query.accessibleToMembershipId !== undefined) {
+          if (
+            !isSessionAccessible(
+              session,
+              query.accessibleToMembershipId ? [query.accessibleToMembershipId] : [],
+            )
+          ) {
             return false;
           }
         }

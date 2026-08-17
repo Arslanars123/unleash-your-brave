@@ -6,6 +6,7 @@ import {
   NotFoundError,
 } from '../../core/errors/app-error.js';
 import { logger } from '../../core/logger.js';
+import type { CouponService } from '../coupons/coupon.service.js';
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import type { Membership } from '../memberships/membership.types.js';
@@ -47,6 +48,7 @@ export class CheckoutService {
     private readonly events: EventService,
     private readonly mail: MailService,
     private readonly realtimeHub: RealtimeHub,
+    private readonly coupons?: CouponService,
   ) {}
 
   private requireStripe(): Stripe {
@@ -211,9 +213,35 @@ export class CheckoutService {
     );
 
     const currency = env.stripe.currency;
-    const unitAmount = Math.round(membership.price * 100);
+    let chargedPrice = membership.price;
+    let originalPrice = membership.price;
+    let discountAmount = 0;
+    let couponCode: string | null = null;
+    let couponId: string | null = null;
+
+    if (input.couponCode?.trim()) {
+      if (!this.coupons) {
+        throw new BadRequestError('Coupons are not available');
+      }
+      const applied = await this.coupons.applyCoupon(
+        input.couponCode,
+        membership.id,
+        membership.price,
+      );
+      chargedPrice = applied.finalPrice;
+      originalPrice = applied.originalPrice;
+      discountAmount = applied.discountAmount;
+      couponCode = applied.code;
+      couponId = applied.couponId;
+    }
+
+    const unitAmount = Math.round(chargedPrice * 100);
     if (unitAmount < 50) {
-      throw new BadRequestError('Membership price is below the Stripe minimum charge ($0.50)');
+      throw new BadRequestError(
+        chargedPrice < membership.price
+          ? 'Discounted price is below the Stripe minimum charge ($0.50). Use a smaller discount.'
+          : 'Membership price is below the Stripe minimum charge ($0.50)',
+      );
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -248,6 +276,11 @@ export class CheckoutService {
         kind: eligibility.kind,
         previousMembershipId: eligibility.currentMembershipId ?? '',
         previousMembershipName: eligibility.currentMembershipName ?? '',
+        couponCode: couponCode ?? '',
+        couponId: couponId ?? '',
+        originalPrice: String(originalPrice),
+        discountAmount: String(discountAmount),
+        chargedPrice: String(chargedPrice),
       },
     });
 
@@ -261,7 +294,10 @@ export class CheckoutService {
       kind: eligibility.kind,
       membershipId: membership.id,
       membershipName: membership.name,
-      price: membership.price,
+      price: chargedPrice,
+      originalPrice,
+      discountAmount,
+      couponCode,
       currency,
       eventId: event.id,
     };
@@ -437,6 +473,26 @@ export class CheckoutService {
 
     let purchase: MembershipPurchase;
     try {
+      const chargedFromMeta = Number(metadata.chargedPrice);
+      const originalFromMeta = Number(metadata.originalPrice);
+      const discountFromMeta = Number(metadata.discountAmount);
+      const chargedPrice =
+        Number.isFinite(chargedFromMeta) && chargedFromMeta > 0
+          ? chargedFromMeta
+          : session.amount_total != null
+            ? session.amount_total / 100
+            : membership.price;
+      const originalPrice =
+        Number.isFinite(originalFromMeta) && originalFromMeta > 0
+          ? originalFromMeta
+          : membership.price;
+      const discountAmount =
+        Number.isFinite(discountFromMeta) && discountFromMeta >= 0
+          ? discountFromMeta
+          : Math.max(0, originalPrice - chargedPrice);
+      const couponCode = metadata.couponCode?.trim() || null;
+      const couponId = metadata.couponId?.trim() || null;
+
       purchase = await this.purchases.create({
         eventId: event.id,
         userId: upsert.user.id,
@@ -445,8 +501,12 @@ export class CheckoutService {
         lastName,
         membershipId: membership.id,
         membershipName: membership.name,
-        price: membership.price,
+        price: chargedPrice,
         currency: (session.currency ?? env.stripe.currency).toLowerCase(),
+        couponCode,
+        couponId,
+        originalPrice,
+        discountAmount,
         kind,
         previousMembershipId,
         previousMembershipName,
@@ -456,6 +516,10 @@ export class CheckoutService {
         stripeCustomerId: customerId,
         purchasedAt: new Date(),
       });
+
+      if (couponId && this.coupons) {
+        await this.coupons.recordRedemption(couponId);
+      }
     } catch (error) {
       // Unique index race — another worker fulfilled first.
       const raced = await this.purchases.findByStripeCheckoutSessionId(session.id);

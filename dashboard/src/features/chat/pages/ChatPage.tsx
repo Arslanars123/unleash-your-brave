@@ -223,12 +223,8 @@ export function ChatPage() {
                           {roleLabel(message.senderRole)}
                         </span>
                       </div>
-                      {message.type === 'gif' && message.gifUrl ? (
-                        <img
-                          src={resolveMediaUrl(message.gifUrl)}
-                          alt="GIF"
-                          className="chat-admin-gif"
-                        />
+                      {message.type === 'gif' ? (
+                        <p className="chat-admin-gif-removed">GIF</p>
                       ) : (
                         <p>{message.body}</p>
                       )}

@@ -120,7 +120,7 @@ export class UserService {
   async setPassword(userId: string, newPassword: string): Promise<PublicUser> {
     const updated = await this.users.update(userId, {
       passwordHash: await bcrypt.hash(newPassword, PASSWORD_SALT_ROUNDS),
-      inviteCodeHash: null,
+      // Keep inviteCodeHash so re-using the invite after setup can return a clear error.
       inviteCodeExpiresAt: null,
       passwordResetOtpHash: null,
       passwordResetOtpExpiresAt: null,

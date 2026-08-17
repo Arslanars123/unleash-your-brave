@@ -18,6 +18,16 @@ export interface Membership {
   tierRank: number;
   /** Lower sorts first in catalog / website. */
   sortOrder: number;
+  /**
+   * When true, holders may access future event editions (content + QR)
+   * without purchasing again, subject to event access settings / tier mapping.
+   */
+  validForFutureEvents: boolean;
+  /**
+   * Optional next upgrade target on the same event.
+   * When set, the app only offers this membership as the upgrade option.
+   */
+  upgradeToMembershipId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +44,8 @@ export interface PublicMembership {
   featured: boolean;
   tierRank: number;
   sortOrder: number;
+  validForFutureEvents: boolean;
+  upgradeToMembershipId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +61,8 @@ export interface CreateMembershipInput {
   featured?: boolean;
   tierRank?: number;
   sortOrder?: number;
+  validForFutureEvents?: boolean;
+  upgradeToMembershipId?: string | null;
 }
 
 export interface UpdateMembershipInput {
@@ -61,6 +75,8 @@ export interface UpdateMembershipInput {
   featured?: boolean;
   tierRank?: number;
   sortOrder?: number;
+  validForFutureEvents?: boolean;
+  upgradeToMembershipId?: string | null;
 }
 
 export interface ListMembershipsQuery {

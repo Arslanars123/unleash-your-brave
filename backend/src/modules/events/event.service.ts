@@ -188,6 +188,9 @@ export class EventService {
             ? (latest?.longitude ?? null)
             : null,
       coverImage: pick(input.coverImage, latest?.coverImage ?? ''),
+      allowPreviousAttendeesAccess:
+        input.allowPreviousAttendeesAccess ??
+        (copy ? Boolean(latest?.allowPreviousAttendeesAccess) : false),
     });
   }
 
@@ -231,6 +234,9 @@ export class EventService {
       ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
       ...(input.longitude !== undefined ? { longitude: input.longitude } : {}),
       ...(input.coverImage !== undefined ? { coverImage: input.coverImage } : {}),
+      ...(input.allowPreviousAttendeesAccess !== undefined
+        ? { allowPreviousAttendeesAccess: input.allowPreviousAttendeesAccess }
+        : {}),
     });
 
     if (!updated) throw new NotFoundError('Event');
@@ -267,6 +273,7 @@ export class EventService {
       latitude: input.latitude ?? null,
       longitude: input.longitude ?? null,
       coverImage: input.coverImage ?? '',
+      allowPreviousAttendeesAccess: Boolean(input.allowPreviousAttendeesAccess),
     });
 
     return toPublicEvent(created);

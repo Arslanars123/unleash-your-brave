@@ -19,10 +19,12 @@ class ApiConstants {
   static const checkInMyQr = '/checkins/my-qr';
   static const posts = '/posts';
   static const memberships = '/memberships';
+  static const accessMe = '/access/me';
   static const upgradeMyMembership = '/users/me/membership';
   static const checkoutCatalog = '/checkout/catalog';
   static const checkoutEligibility = '/checkout/eligibility';
   static const checkoutSessions = '/checkout/sessions';
+  static const couponsPreview = '/coupons/preview';
 
   /// Stripe success / cancel pages on the marketing site.
   static const checkoutSuccessUrl =

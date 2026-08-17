@@ -1,3 +1,6 @@
+import { AccessController } from '../modules/access/access.controller.js';
+import { createAccessRouter } from '../modules/access/access.routes.js';
+import { EffectiveAccessService } from '../modules/access/access.service.js';
 import { AuthController } from '../modules/auth/auth.controller.js';
 import { createAuthRouter } from '../modules/auth/auth.routes.js';
 import { AuthService } from '../modules/auth/auth.service.js';
@@ -12,6 +15,9 @@ import { PushNotificationService } from '../modules/chat/push.service.js';
 import { CheckInController } from '../modules/checkins/checkin.controller.js';
 import { createCheckInRouter } from '../modules/checkins/checkin.routes.js';
 import { CheckInService } from '../modules/checkins/checkin.service.js';
+import { CouponController } from '../modules/coupons/coupon.controller.js';
+import { createCouponRouter } from '../modules/coupons/coupon.routes.js';
+import { CouponService } from '../modules/coupons/coupon.service.js';
 import { CheckoutController } from '../modules/checkout/checkout.controller.js';
 import { createCheckoutRouter } from '../modules/checkout/checkout.routes.js';
 import { CheckoutService } from '../modules/checkout/checkout.service.js';
@@ -57,6 +63,7 @@ import { MongoChatMemberStateRepository } from '../db/repositories/mongo-chat-me
 import { MongoChatMessageRepository } from '../db/repositories/mongo-chat-message.repository.js';
 import { MongoChatReactionRepository } from '../db/repositories/mongo-chat-reaction.repository.js';
 import { MongoDeviceTokenRepository } from '../db/repositories/mongo-device-token.repository.js';
+import { MongoCouponRepository } from '../db/repositories/mongo-coupon.repository.js';
 import { MongoCheckInRepository } from '../db/repositories/mongo-checkin.repository.js';
 import { MongoEventRepository } from '../db/repositories/mongo-event.repository.js';
 import { MongoPostRepository } from '../db/repositories/mongo-post.repository.js';
@@ -105,6 +112,12 @@ export async function createContainer() {
   );
   const authService = new AuthService(userRepository, userService, mailService);
   const eventService = new EventService(eventRepository);
+  const membershipService = new MembershipService(membershipRepository, eventService);
+  const effectiveAccessService = new EffectiveAccessService(
+    userRepository,
+    membershipRepository,
+    eventService,
+  );
   const speakerService = new SpeakerService(speakerRepository, eventService, userService, mailService);
   const sessionService = new SessionService(
     sessionRepository,
@@ -113,6 +126,7 @@ export async function createContainer() {
     sessionFeedbackRepository,
     userRepository,
     membershipRepository,
+    effectiveAccessService,
   );
   const sessionFeedbackService = new SessionFeedbackService(
     sessionFeedbackRepository,
@@ -120,7 +134,6 @@ export async function createContainer() {
     userRepository,
   );
   const sponsorService = new SponsorService(sponsorRepository, eventService, userService, mailService);
-  const membershipService = new MembershipService(membershipRepository, eventService);
   const pushNotificationService = new PushNotificationService(deviceTokenRepository);
   const announcementService = new AnnouncementService(
     announcementRepository,
@@ -129,6 +142,13 @@ export async function createContainer() {
     userRepository,
     eventService,
     pushNotificationService,
+  );
+  const couponRepository = new MongoCouponRepository();
+  await couponRepository.ensureIndexes();
+  const couponService = new CouponService(
+    couponRepository,
+    membershipRepository,
+    announcementService,
   );
   const realtimeHub = new RealtimeHub();
   const checkoutService = new CheckoutService(
@@ -139,6 +159,7 @@ export async function createContainer() {
     eventService,
     mailService,
     realtimeHub,
+    couponService,
   );
   const checkInService = new CheckInService(
     checkInRepository,
@@ -146,6 +167,7 @@ export async function createContainer() {
     eventService,
     membershipRepository,
     checkoutService,
+    effectiveAccessService,
   );
   const postService = new PostService(postRepository, userRepository);
   const chatHub = new ChatHub();
@@ -168,6 +190,8 @@ export async function createContainer() {
   const sessionFeedbackController = new SessionFeedbackController(sessionFeedbackService);
   const sponsorController = new SponsorController(sponsorService);
   const membershipController = new MembershipController(membershipService);
+  const couponController = new CouponController(couponService);
+  const accessController = new AccessController(effectiveAccessService);
   const checkoutController = new CheckoutController(checkoutService);
   const announcementController = new AnnouncementController(announcementService);
   const checkInController = new CheckInController(checkInService);
@@ -204,6 +228,8 @@ export async function createContainer() {
       sessions: createSessionRouter(sessionController, sessionFeedbackController),
       sponsors: createSponsorRouter(sponsorController),
       memberships: createMembershipRouter(membershipController),
+      coupons: createCouponRouter(couponController),
+      access: createAccessRouter(accessController),
       checkout: createCheckoutRouter(checkoutController),
       announcements: createAnnouncementRouter(announcementController),
       checkins: createCheckInRouter(checkInController),

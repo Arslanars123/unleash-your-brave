@@ -5,12 +5,14 @@ import {
   Handshake,
   BadgeCheck,
   Images,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Megaphone,
   MessageCircle,
   Mic2,
   QrCode,
+  TicketPercent,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -56,6 +58,14 @@ export function AppShell() {
               <NavLink to="/memberships">
                 <BadgeCheck size={18} />
                 Memberships
+              </NavLink>
+              <NavLink to="/access">
+                <KeyRound size={18} />
+                Event access
+              </NavLink>
+              <NavLink to="/coupons">
+                <TicketPercent size={18} />
+                Coupons
               </NavLink>
               <NavLink to="/sponsors">
                 <Handshake size={18} />

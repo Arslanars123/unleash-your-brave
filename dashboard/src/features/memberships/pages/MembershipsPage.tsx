@@ -281,6 +281,7 @@ export function MembershipsPage() {
           open={modalOpen}
           mode={editing ? 'edit' : 'create'}
           initialMembership={editing}
+          siblings={membershipsQuery.data?.items ?? []}
           loading={saving}
           onClose={closeModal}
           onSubmit={handleSubmit}

@@ -11,6 +11,8 @@ class MembershipEntity {
     this.featured = false,
     this.tierRank = 0,
     this.sortOrder = 0,
+    this.validForFutureEvents = false,
+    this.upgradeToMembershipId,
   });
 
   final String id;
@@ -24,6 +26,8 @@ class MembershipEntity {
   final bool featured;
   final int tierRank;
   final int sortOrder;
+  final bool validForFutureEvents;
+  final String? upgradeToMembershipId;
 
   /// Rank used for upgrade rules (tierRank when set, otherwise price).
   double get upgradeRank => tierRank > 0 ? tierRank.toDouble() : price;
@@ -33,6 +37,34 @@ class MembershipEntity {
     final whole = price == price.roundToDouble();
     return whole ? '\$${price.toStringAsFixed(0)}' : '\$${price.toStringAsFixed(2)}';
   }
+}
+
+class EffectiveEventAccess {
+  const EffectiveEventAccess({
+    required this.eventId,
+    required this.allowPreviousAttendeesAccess,
+    required this.entitled,
+    required this.carriedFromPrevious,
+    required this.accessibleMembershipIds,
+    required this.upgradeMembershipIds,
+    this.effectiveMembershipId,
+    this.effectiveMembershipName,
+    this.sourceMembershipId,
+    this.sourceMembershipName,
+    this.validForFutureEvents = false,
+  });
+
+  final String eventId;
+  final bool allowPreviousAttendeesAccess;
+  final bool entitled;
+  final bool carriedFromPrevious;
+  final List<String> accessibleMembershipIds;
+  final String? effectiveMembershipId;
+  final String? effectiveMembershipName;
+  final String? sourceMembershipId;
+  final String? sourceMembershipName;
+  final bool validForFutureEvents;
+  final List<String> upgradeMembershipIds;
 }
 
 class CheckoutEligibility {
@@ -81,4 +113,28 @@ class CheckoutSessionResult {
   final double price;
   final String currency;
   final String eventId;
+}
+
+class CouponPreview {
+  const CouponPreview({
+    required this.valid,
+    required this.code,
+    required this.membershipId,
+    required this.originalPrice,
+    required this.percentOff,
+    required this.discountAmount,
+    required this.finalPrice,
+    this.reason,
+    this.couponId,
+  });
+
+  final bool valid;
+  final String? reason;
+  final String code;
+  final String? couponId;
+  final String membershipId;
+  final double originalPrice;
+  final double percentOff;
+  final double discountAmount;
+  final double finalPrice;
 }

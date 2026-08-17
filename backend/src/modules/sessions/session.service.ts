@@ -1,3 +1,4 @@
+import type { EffectiveAccessService } from '../access/access.service.js';
 import { randomUUID } from 'node:crypto';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
 import type { EventService } from '../events/event.service.js';
@@ -34,11 +35,11 @@ export interface SessionViewerContext {
   role: UserRole;
 }
 
-function isSessionAccessible(session: Session, membershipId: string | null): boolean {
+function isSessionAccessible(session: Session, membershipIds: string[]): boolean {
   const allowed = session.membershipIds ?? [];
   if (allowed.length === 0) return true;
-  if (!membershipId) return false;
-  return allowed.includes(membershipId);
+  if (membershipIds.length === 0) return false;
+  return membershipIds.some((id) => allowed.includes(id));
 }
 
 export class SessionService {
@@ -49,6 +50,7 @@ export class SessionService {
     private readonly feedback: SessionFeedbackRepository,
     private readonly users?: UserRepository,
     private readonly memberships?: MembershipRepository,
+    private readonly access?: EffectiveAccessService,
   ) {}
 
   async list(
@@ -58,8 +60,8 @@ export class SessionService {
     let listQuery = query;
 
     if (viewer?.role === 'member') {
-      const membershipId = await this.resolveMembershipId(viewer.userId);
-      listQuery = { ...query, accessibleToMembershipId: membershipId };
+      const ids = await this.resolveAccessibleMembershipIds(viewer.userId, query.eventId);
+      listQuery = { ...query, accessibleToMembershipIds: ids };
     }
 
     const { items, total } = await this.sessions.list(listQuery);
@@ -71,8 +73,8 @@ export class SessionService {
     const session = await this.requireSession(id);
 
     if (viewer?.role === 'member') {
-      const membershipId = await this.resolveMembershipId(viewer.userId);
-      if (!isSessionAccessible(session, membershipId)) {
+      const ids = await this.resolveAccessibleMembershipIds(viewer.userId, session.eventId);
+      if (!isSessionAccessible(session, ids)) {
         throw new ForbiddenError('You do not have access to this session');
       }
     }
@@ -141,6 +143,19 @@ export class SessionService {
       throw new NotFoundError('Session');
     }
     await this.feedback.deleteBySession(id);
+  }
+
+  private async resolveAccessibleMembershipIds(
+    userId: string,
+    eventId?: string,
+  ): Promise<string[]> {
+    if (this.access) {
+      const resolved = await this.access.resolveForUser(userId, eventId);
+      return resolved.accessibleMembershipIds;
+    }
+    if (!this.users) return [];
+    const user = await this.users.findById(userId);
+    return user?.membershipId ? [user.membershipId] : [];
   }
 
   private async resolveMembershipId(userId: string): Promise<string | null> {

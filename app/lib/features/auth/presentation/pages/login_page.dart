@@ -51,6 +51,58 @@ class _LoginPageState extends State<LoginPage> {
         );
   }
 
+  Future<void> _showInviteAlreadyUsedDialog(String message) async {
+    final goReset = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppColors.bgCard,
+          title: Text(
+            'Invite code already used',
+            style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+          ),
+          content: Text(
+            message,
+            style: AppTypography.caption.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(
+                'Enter password',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                'Reset password',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.accentPink,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted) return;
+    if (goReset == true) {
+      context.go('/forgot-password');
+    } else {
+      _passwordController.clear();
+      setState(() => _obscurePassword = true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,7 +121,11 @@ class _LoginPageState extends State<LoginPage> {
                 context.go('/');
               }
             } else if (state is AuthFailureState) {
-              AppToast.error(state.message);
+              if (Validators.isInviteAlreadyUsedMessage(state.message)) {
+                _showInviteAlreadyUsedDialog(state.message);
+              } else {
+                AppToast.error(state.message);
+              }
             }
           },
           builder: (context, state) {
@@ -86,7 +142,7 @@ class _LoginPageState extends State<LoginPage> {
                         const AuthBrandHeader(
                           title: 'Login',
                           subtitle:
-                              'Sign in with the email and password you created after verifying your purchase code.',
+                              'Use your email with your password, or your invite code the first time you sign in.',
                         ),
                         SizedBox(height: context.sectionGap),
                         Container(
@@ -126,7 +182,7 @@ class _LoginPageState extends State<LoginPage> {
                               const SizedBox(height: 14),
                               AuthTextField(
                                 controller: _passwordController,
-                                label: 'Password',
+                                label: 'Password or invite code',
                                 prefixIcon: Icons.lock_outline_rounded,
                                 obscureText: _obscurePassword,
                                 enabled: !loading,
@@ -164,27 +220,6 @@ class _LoginPageState extends State<LoginPage> {
                               children: [
                                 TextSpan(
                                   text: 'Forgot password?',
-                                  style: AppTypography.caption.copyWith(
-                                    color: AppColors.accentPink,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: loading
-                              ? null
-                              : () => context.go('/verify-code'),
-                          child: Text.rich(
-                            textAlign: TextAlign.center,
-                            TextSpan(
-                              style: AppTypography.caption,
-                              children: [
-                                const TextSpan(text: 'First time? '),
-                                TextSpan(
-                                  text: 'Enter your email verification code',
                                   style: AppTypography.caption.copyWith(
                                     color: AppColors.accentPink,
                                     fontWeight: FontWeight.w600,

@@ -1,11 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
-import 'package:unleash_your_brave/core/utils/media_url.dart';
 import 'package:unleash_your_brave/core/widgets/app_circle_avatar.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/chat/domain/entities/chat_message_entity.dart';
@@ -172,22 +170,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     );
   }
 
-  void _showGifSheet() {
-    final cubit = context.read<ChatRoomCubit>();
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.bgCard,
-      isScrollControlled: true,
-      builder: (sheetContext) => _GifSheet(
-        onGifTap: (gifUrl) {
-          cubit.sendGif(gifUrl);
-          Navigator.pop(sheetContext);
-          _scrollToBottom(animated: true);
-        },
-      ),
-    );
-  }
-
   void _showMembersSheet() {
     final group = context.read<ChatUnreadCubit>().state.group;
     if (group == null) return;
@@ -336,7 +318,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                 focusNode: _focusNode,
                 onSend: _sendMessage,
                 onEmojiTap: _showEmojiSheet,
-                onGifTap: _showGifSheet,
                 sending: state.sending,
               ),
             ],
@@ -540,26 +521,15 @@ class _MessageBubble extends StatelessWidget {
                           fontSize: 15,
                         ),
                       )
-                    else if (message.type == ChatMessageType.gif &&
-                        isLoadableMediaUrl(message.gifUrl))
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: resolveMediaUrl(message.gifUrl),
-                          width: 200,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            width: 200,
-                            height: 150,
-                            color: AppColors.borderSubtle,
-                            child: const Icon(Icons.gif, size: 48),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            width: 200,
-                            height: 150,
-                            color: AppColors.borderSubtle,
-                            child: const Icon(Icons.error, size: 48),
-                          ),
+                    else if (message.type == ChatMessageType.gif)
+                      Text(
+                        'GIF',
+                        style: AppTypography.body.copyWith(
+                          color: isMine
+                              ? Colors.white70
+                              : AppColors.textSecondary,
+                          fontSize: 15,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     Row(
@@ -633,7 +603,6 @@ class _MessageComposer extends StatelessWidget {
     required this.focusNode,
     required this.onSend,
     required this.onEmojiTap,
-    required this.onGifTap,
     required this.sending,
   });
 
@@ -641,7 +610,6 @@ class _MessageComposer extends StatelessWidget {
   final FocusNode focusNode;
   final VoidCallback onSend;
   final VoidCallback onEmojiTap;
-  final VoidCallback onGifTap;
   final bool sending;
 
   @override
@@ -657,10 +625,6 @@ class _MessageComposer extends StatelessWidget {
           IconButton(
             onPressed: onEmojiTap,
             icon: const Icon(Icons.emoji_emotions_outlined, color: AppColors.textSecondary),
-          ),
-          IconButton(
-            onPressed: onGifTap,
-            icon: const Icon(Icons.gif, color: AppColors.textSecondary),
           ),
           Expanded(
             child: TextField(
@@ -802,56 +766,6 @@ class _EmojiSheet extends StatelessWidget {
             }).toList(),
           ),
           const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-}
-
-class _GifSheet extends StatelessWidget {
-  const _GifSheet({required this.onGifTap});
-
-  final Function(String) onGifTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Text(
-            'Choose GIF',
-            style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              children: kChatGifCatalog.map((gifUrl) {
-                return GestureDetector(
-                  onTap: () => onGifTap(gifUrl),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: gifUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: AppColors.borderSubtle,
-                        child: const Icon(Icons.gif, size: 48),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        color: AppColors.borderSubtle,
-                        child: const Icon(Icons.error, size: 48),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
         ],
       ),
     );

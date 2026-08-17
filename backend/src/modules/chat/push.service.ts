@@ -82,7 +82,7 @@ export class PushNotificationService {
     const title = params.groupName;
     const body =
       params.message.type === 'gif'
-        ? `${params.message.senderName} sent a GIF`
+        ? 'New message'
         : `${params.message.senderName}: ${params.message.body.slice(0, 140)}`;
 
     return this.sendToDevices({
@@ -166,12 +166,18 @@ export class PushNotificationService {
           },
         },
         apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-push-type': 'alert',
+          },
           payload: {
             aps: {
               alert: { title: params.title, body: params.body },
               sound: 'default',
               badge: 1,
-              threadId: params.threadId,
+              // Prefer thread-id for grouping; avoid content-available on alert
+              // pushes (that flag is for silent background updates).
+              'thread-id': params.threadId,
             },
           },
         },

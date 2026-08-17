@@ -12,11 +12,10 @@ import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/features/chat/domain/repositories/chat_repository.dart';
 import 'package:unleash_your_brave/firebase_options.dart';
 
-/// Handles FCM + local notifications for chat.
+/// Handles FCM + local notifications for chat and announcements.
 ///
-/// Android: full foreground / background / killed delivery via FCM.
-/// iOS: code is complete; APNs still requires an Apple Developer account
-/// (see docs/PUSH_NOTIFICATIONS.md).
+/// Android: FCM registration + notification channels.
+/// iOS: APNs → FCM (requires Push capability + APNs key in Firebase).
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -48,6 +47,7 @@ class PushNotificationService {
   StreamSubscription<String>? _tokenRefreshSub;
   StreamSubscription<RemoteMessage>? _onMessageSub;
   StreamSubscription<RemoteMessage>? _onOpenedSub;
+  Timer? _apnsRetryTimer;
   bool _initialized = false;
 
   /// User preference — defaults to on.
@@ -81,6 +81,11 @@ class PushNotificationService {
             AndroidFlutterLocalNotificationsPlugin>();
     await androidPlugin?.createNotificationChannel(_androidChannel);
     await androidPlugin?.createNotificationChannel(_announcementsChannel);
+
+    final iosPlugin = _local
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
+    await iosPlugin?.requestPermissions(alert: true, badge: true, sound: true);
 
     await _messaging.setForegroundNotificationPresentationOptions(
       alert: true,
@@ -140,6 +145,9 @@ class PushNotificationService {
       badge: true,
       sound: true,
       provisional: false,
+      announcement: false,
+      carPlay: false,
+      criticalAlert: false,
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.denied) {
@@ -156,13 +164,14 @@ class PushNotificationService {
 
     try {
       if (Platform.isIOS) {
-        // Without an Apple Developer APNs key, getToken() throws.
-        final apns = await _messaging.getAPNSToken();
+        final apns = await _waitForApnsToken();
         if (apns == null || apns.isEmpty) {
           debugPrint(
-            'Skipping FCM registration: APNs token not set yet '
-            '(expected until Apple Developer push is configured).',
+            'Skipping FCM registration: APNs token not available yet. '
+            'Confirm Push capability, matching Firebase iOS app bundle ID '
+            '(com.unleashyourbrave.unleashapp), and APNs .p8 in Firebase.',
           );
+          _scheduleApnsRetry();
           return;
         }
       }
@@ -170,23 +179,53 @@ class PushNotificationService {
       final token = await _messaging.getToken();
       if (token == null || token.isEmpty) {
         debugPrint('FCM token unavailable');
+        _scheduleApnsRetry();
         return;
       }
       await _chatRepository.registerDevice(
         token: token,
         platform: Platform.isIOS ? 'ios' : 'android',
       );
+      _apnsRetryTimer?.cancel();
+      _apnsRetryTimer = null;
+      debugPrint(
+        'Registered FCM token for ${Platform.isIOS ? 'iOS' : 'Android'} '
+        '(${token.substring(0, token.length.clamp(0, 12))}…)',
+      );
     } on FirebaseException catch (error) {
       if (error.code == 'apns-token-not-set') {
         debugPrint(
-          'Skipping FCM registration: APNs not configured yet.',
+          'Skipping FCM registration: APNs not ready '
+          '(${error.message ?? error.code}).',
         );
+        _scheduleApnsRetry();
         return;
       }
       debugPrint('Failed to register FCM token: ${error.message}');
     } catch (error) {
       debugPrint('Failed to register FCM token: $error');
     }
+  }
+
+  void _scheduleApnsRetry() {
+    if (!Platform.isIOS || !isEnabled) return;
+    _apnsRetryTimer?.cancel();
+    _apnsRetryTimer = Timer(const Duration(seconds: 8), () {
+      registerTokenWithBackend();
+    });
+  }
+
+  /// APNs token often arrives after permission + remote registration.
+  Future<String?> _waitForApnsToken({
+    int attempts = 20,
+    Duration delay = const Duration(milliseconds: 750),
+  }) async {
+    for (var i = 0; i < attempts; i++) {
+      final token = await _messaging.getAPNSToken();
+      if (token != null && token.isNotEmpty) return token;
+      await Future<void>.delayed(delay);
+    }
+    return _messaging.getAPNSToken();
   }
 
   Future<void> unregisterCurrentToken({bool deleteToken = true}) async {
@@ -229,7 +268,6 @@ class PushNotificationService {
           channelDescription: channel.description,
           importance: Importance.high,
           priority: Priority.high,
-          // Small status-bar icon must be white-on-transparent.
           icon: '@drawable/ic_stat_uyb',
           color: const Color(0xFFF04E93),
           largeIcon: const DrawableResourceAndroidBitmap(
@@ -239,10 +277,11 @@ class PushNotificationService {
               ? (message.data['announcementId'] as String? ?? 'announcement')
               : (message.data['groupId'] as String? ?? 'chat'),
         ),
-        iOS: const DarwinNotificationDetails(
+        iOS: DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
+          threadIdentifier: isAnnouncement ? 'announcements' : 'chat',
         ),
       ),
       payload: jsonEncodePayload(message.data),
@@ -291,6 +330,7 @@ class PushNotificationService {
   }
 
   Future<void> dispose() async {
+    _apnsRetryTimer?.cancel();
     await _tokenRefreshSub?.cancel();
     await _onMessageSub?.cancel();
     await _onOpenedSub?.cancel();

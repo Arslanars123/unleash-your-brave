@@ -82,6 +82,36 @@ class MembershipsRemoteDataSource {
     }
   }
 
+  Future<CouponPreview> previewCoupon({
+    required String code,
+    required String membershipId,
+  }) async {
+    try {
+      final response = await _dioClient.client.post(
+        ApiConstants.couponsPreview,
+        data: {
+          'code': code.trim(),
+          'membershipId': membershipId,
+        },
+      );
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return CouponPreview(
+        valid: data['valid'] as bool? ?? false,
+        reason: data['reason'] as String?,
+        code: data['code'] as String? ?? code.trim().toUpperCase(),
+        couponId: data['couponId'] as String?,
+        membershipId: data['membershipId'] as String? ?? membershipId,
+        originalPrice: (data['originalPrice'] as num?)?.toDouble() ?? 0,
+        percentOff: (data['percentOff'] as num?)?.toDouble() ?? 0,
+        discountAmount: (data['discountAmount'] as num?)?.toDouble() ?? 0,
+        finalPrice: (data['finalPrice'] as num?)?.toDouble() ?? 0,
+      );
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
   Future<CheckoutSessionResult> createCheckoutSession({
     required String membershipId,
     required String email,
@@ -89,6 +119,7 @@ class MembershipsRemoteDataSource {
     required String lastName,
     String? successUrl,
     String? cancelUrl,
+    String? couponCode,
   }) async {
     try {
       final response = await _dioClient.client.post(
@@ -100,6 +131,8 @@ class MembershipsRemoteDataSource {
           'lastName': lastName,
           if (successUrl != null) 'successUrl': successUrl,
           if (cancelUrl != null) 'cancelUrl': cancelUrl,
+          if (couponCode != null && couponCode.trim().isNotEmpty)
+            'couponCode': couponCode.trim(),
         },
       );
       final data =
@@ -113,6 +146,41 @@ class MembershipsRemoteDataSource {
         price: (data['price'] as num?)?.toDouble() ?? 0,
         currency: data['currency'] as String? ?? 'usd',
         eventId: data['eventId'] as String? ?? '',
+      );
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  Future<EffectiveEventAccess> myAccess({String? eventId}) async {
+    try {
+      final response = await _dioClient.client.get(
+        ApiConstants.accessMe,
+        queryParameters: {
+          if (eventId != null && eventId.isNotEmpty) 'eventId': eventId,
+        },
+      );
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      final upgradeIds = data['upgradeMembershipIds'];
+      final accessibleIds = data['accessibleMembershipIds'];
+      return EffectiveEventAccess(
+        eventId: data['eventId'] as String? ?? '',
+        allowPreviousAttendeesAccess:
+            data['allowPreviousAttendeesAccess'] as bool? ?? false,
+        entitled: data['entitled'] as bool? ?? false,
+        carriedFromPrevious: data['carriedFromPrevious'] as bool? ?? false,
+        accessibleMembershipIds: accessibleIds is List
+            ? accessibleIds.map((e) => e.toString()).toList()
+            : const [],
+        effectiveMembershipId: data['effectiveMembershipId'] as String?,
+        effectiveMembershipName: data['effectiveMembershipName'] as String?,
+        sourceMembershipId: data['sourceMembershipId'] as String?,
+        sourceMembershipName: data['sourceMembershipName'] as String?,
+        validForFutureEvents: data['validForFutureEvents'] as bool? ?? false,
+        upgradeMembershipIds: upgradeIds is List
+            ? upgradeIds.map((e) => e.toString()).toList()
+            : const [],
       );
     } on DioException catch (error) {
       throwMappedDioError(error);
@@ -137,6 +205,8 @@ class MembershipsRemoteDataSource {
       featured: json['featured'] as bool? ?? false,
       tierRank: (json['tierRank'] as num?)?.toInt() ?? 0,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      validForFutureEvents: json['validForFutureEvents'] as bool? ?? false,
+      upgradeToMembershipId: json['upgradeToMembershipId'] as String?,
     );
   }
 }

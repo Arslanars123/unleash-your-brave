@@ -52,6 +52,7 @@ export function toPublicEvent(event: Event): PublicEvent {
     latitude: event.latitude ?? null,
     longitude: event.longitude ?? null,
     coverImage: event.coverImage,
+    allowPreviousAttendeesAccess: Boolean(event.allowPreviousAttendeesAccess),
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
   };

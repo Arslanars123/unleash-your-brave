@@ -127,12 +127,6 @@ class ChatRoomCubit extends Cubit<ChatRoomState> {
     await _sendMessage(ChatMessageType.text, body: body.trim());
   }
 
-  Future<void> sendGif(String gifUrl) async {
-    if (gifUrl.isEmpty || state.sending) return;
-
-    await _sendMessage(ChatMessageType.gif, gifUrl: gifUrl);
-  }
-
   Future<void> _sendMessage(ChatMessageType type, {String? body, String? gifUrl}) async {
     emit(state.copyWith(sending: true, error: null));
 

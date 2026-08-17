@@ -19,6 +19,8 @@ import { SessionsPage } from '@/features/sessions/pages/SessionsPage';
 import { SpeakersPage } from '@/features/speakers/pages/SpeakersPage';
 import { SponsorsPage } from '@/features/sponsors/pages/SponsorsPage';
 import { MembershipsPage } from '@/features/memberships/pages/MembershipsPage';
+import { EventAccessPage } from '@/features/access/pages/EventAccessPage';
+import { CouponsPage } from '@/features/coupons/pages/CouponsPage';
 import { UsersPage } from '@/features/users/pages/UsersPage';
 import { Spinner } from '@/shared/ui/Spinner';
 
@@ -50,6 +52,8 @@ export function AppRouter() {
               <Route path="sessions" element={<SessionsPage />} />
               <Route path="speakers" element={<SpeakersPage />} />
               <Route path="memberships" element={<MembershipsPage />} />
+              <Route path="access" element={<EventAccessPage />} />
+              <Route path="coupons" element={<CouponsPage />} />
               <Route path="sponsors" element={<SponsorsPage />} />
               <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="announcements/countdown" element={<CountdownSettingsPage />} />

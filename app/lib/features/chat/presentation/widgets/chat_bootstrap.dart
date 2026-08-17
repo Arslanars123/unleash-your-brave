@@ -15,9 +15,31 @@ class ChatBootstrap extends StatefulWidget {
   State<ChatBootstrap> createState() => _ChatBootstrapState();
 }
 
-class _ChatBootstrapState extends State<ChatBootstrap> {
+class _ChatBootstrapState extends State<ChatBootstrap>
+    with WidgetsBindingObserver {
   bool _chatStarted = false;
   bool _pushInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // BlocListener only fires on *changes* — catch already-logged-in startup.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncFromAuth());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _pushInitialized) {
+      sl<PushNotificationService>().registerTokenWithBackend();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +55,14 @@ class _ChatBootstrapState extends State<ChatBootstrap> {
     );
   }
 
+  void _syncFromAuth() {
+    if (!mounted) return;
+    final state = context.read<AuthBloc>().state;
+    if (state is AuthAuthenticated) {
+      _startChatServices();
+    }
+  }
+
   void _startChatServices() {
     if (!_chatStarted) {
       _chatStarted = true;
@@ -42,6 +72,8 @@ class _ChatBootstrapState extends State<ChatBootstrap> {
     if (!_pushInitialized) {
       _pushInitialized = true;
       sl<PushNotificationService>().initialize();
+    } else {
+      sl<PushNotificationService>().registerTokenWithBackend();
     }
   }
 

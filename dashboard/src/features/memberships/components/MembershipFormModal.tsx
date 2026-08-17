@@ -15,6 +15,8 @@ export interface MembershipFormValues {
   featured: boolean;
   tierRank: string;
   sortOrder: string;
+  validForFutureEvents: boolean;
+  upgradeToMembershipId: string;
 }
 
 type FieldErrors = Partial<Record<keyof MembershipFormValues, string>>;
@@ -29,6 +31,8 @@ const emptyForm: MembershipFormValues = {
   featured: false,
   tierRank: '0',
   sortOrder: '0',
+  validForFutureEvents: false,
+  upgradeToMembershipId: '',
 };
 
 function membershipToForm(membership: PublicMembership): MembershipFormValues {
@@ -42,6 +46,8 @@ function membershipToForm(membership: PublicMembership): MembershipFormValues {
     featured: Boolean(membership.featured),
     tierRank: String(membership.tierRank ?? 0),
     sortOrder: String(membership.sortOrder ?? 0),
+    validForFutureEvents: Boolean(membership.validForFutureEvents),
+    upgradeToMembershipId: membership.upgradeToMembershipId ?? '',
   };
 }
 
@@ -81,6 +87,10 @@ export function toMembershipPayload(values: MembershipFormValues): MembershipPay
     featured: values.featured,
     tierRank: Number(values.tierRank) || 0,
     sortOrder: Number(values.sortOrder) || 0,
+    validForFutureEvents: values.validForFutureEvents,
+    upgradeToMembershipId: values.upgradeToMembershipId.trim()
+      ? values.upgradeToMembershipId.trim()
+      : null,
   };
 }
 
@@ -88,6 +98,8 @@ interface MembershipFormModalProps {
   open: boolean;
   mode: 'create' | 'edit';
   initialMembership?: PublicMembership | null;
+  /** Other memberships on the same event (for upgrade target picker). */
+  siblings?: PublicMembership[];
   loading?: boolean;
   onClose: () => void;
   onSubmit: (payload: MembershipPayload) => Promise<void> | void;
@@ -97,6 +109,7 @@ export function MembershipFormModal({
   open,
   mode,
   initialMembership,
+  siblings = [],
   loading = false,
   onClose,
   onSubmit,
@@ -223,6 +236,33 @@ export function MembershipFormModal({
               onChange={(e) => update('featured', e.target.checked)}
             />
             <span>Featured on website</span>
+          </label>
+          <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={values.validForFutureEvents}
+              onChange={(e) => update('validForFutureEvents', e.target.checked)}
+            />
+            <span>Valid for future events (content + QR carry over)</span>
+          </label>
+          <label className="field">
+            <span>Upgrade next level (optional)</span>
+            <select
+              value={values.upgradeToMembershipId}
+              onChange={(e) => update('upgradeToMembershipId', e.target.value)}
+            >
+              <option value="">Auto — next higher tier only</option>
+              {siblings
+                .filter((item) => item.id !== initialMembership?.id)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+            </select>
+            <p className="hint">
+              App upgrade list shows only this next level (never lower tiers).
+            </p>
           </label>
           <Input
             label="Value link (optional)"

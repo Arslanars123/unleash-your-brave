@@ -4,11 +4,15 @@ import { getHomePathForUser, useAuth } from '@/features/auth/context/AuthProvide
 import { getApiErrorMessage } from '@/shared/api/client';
 import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
+import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { Input } from '@/shared/ui/Input';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const INVITE_ALREADY_USED =
+  'already used your invite';
 
 interface FieldErrors {
   email?: string;
@@ -20,12 +24,17 @@ function validate(email: string, password: string): FieldErrors {
   const trimmed = email.trim();
   if (!trimmed) errors.email = 'Email is required';
   else if (!EMAIL_REGEX.test(trimmed)) errors.email = 'Enter a valid email address';
-  if (!password) errors.password = 'Password is required';
+  if (!password) errors.password = 'Password or invite code is required';
   return errors;
+}
+
+function isInviteAlreadyUsedMessage(message: string): boolean {
+  return message.toLowerCase().includes(INVITE_ALREADY_USED);
 }
 
 export function LoginPage() {
   const { login, isAuthenticated, isBootstrapping, user } = useAuth();
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -68,7 +77,22 @@ export function LoginPage() {
         { replace: true },
       );
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Unable to sign in'));
+      const message = getApiErrorMessage(err, 'Unable to sign in');
+      if (isInviteAlreadyUsedMessage(message)) {
+        const goReset = await confirm({
+          title: 'Invite code already used',
+          message,
+          cancelLabel: 'Enter password',
+          confirmLabel: 'Reset password',
+          tone: 'primary',
+        });
+        setPassword('');
+        if (goReset) {
+          navigate('/forgot-password');
+        }
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -79,7 +103,9 @@ export function LoginPage() {
       <form className="auth-card" onSubmit={onSubmit} noValidate>
         <BrandLogo height={156} />
         <h1>Portal sign in</h1>
-        <p className="muted">Admins, speakers, and sponsors can sign in here.</p>
+        <p className="muted">
+          Use your email with your password, or your invite code the first time you sign in.
+        </p>
 
         <Input
           label="Email"
@@ -116,10 +142,6 @@ export function LoginPage() {
 
         <p className="hint">
           Demo — Admin: admin@unleashyourbrave.com / Admin123!
-          <br />
-          Speaker: speaker@unleashyourbrave.com / Speaker123!
-          <br />
-          Sponsor: sponsor@unleashyourbrave.com / Sponsor123!
         </p>
       </form>
     </div>

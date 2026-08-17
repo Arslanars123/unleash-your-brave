@@ -145,11 +145,6 @@ export class ChatService {
       const body = (input.body ?? '').trim();
       if (!body) throw new BadRequestError('Message body is required');
       if (body.length > 4000) throw new BadRequestError('Message is too long');
-    } else if (input.type === 'gif') {
-      const gifUrl = (input.gifUrl ?? '').trim();
-      if (!gifUrl || !/^https?:\/\//i.test(gifUrl)) {
-        throw new BadRequestError('A valid GIF URL is required');
-      }
     }
 
     const message: ChatMessage = {
@@ -157,9 +152,9 @@ export class ChatService {
       groupId: GLOBAL_CHAT_GROUP_ID,
       senderId: userId,
       clientId: input.clientId,
-      type: input.type,
-      body: input.type === 'text' ? (input.body ?? '').trim() : '',
-      gifUrl: input.type === 'gif' ? (input.gifUrl ?? '').trim() : '',
+      type: 'text',
+      body: (input.body ?? '').trim(),
+      gifUrl: '',
       createdAt: new Date(),
     };
 

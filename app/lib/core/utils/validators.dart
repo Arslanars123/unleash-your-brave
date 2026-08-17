@@ -23,10 +23,19 @@ abstract final class Validators {
     return null;
   }
 
-  /// Login password — presence only (server owns the real check).
+  /// Login secret — password or invite code (server decides which).
   static String? loginPassword(String? value) {
-    if (value == null || value.isEmpty) return 'Password is required';
+    if (value == null || value.isEmpty) {
+      return 'Password or invite code is required';
+    }
     return null;
+  }
+
+  /// Server message when an invite code is entered after password setup.
+  static bool isInviteAlreadyUsedMessage(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('already used your invite') ||
+        lower.contains('invite_already_used');
   }
 
   /// Signup password — enforces the backend policy client-side.
