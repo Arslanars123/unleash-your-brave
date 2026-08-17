@@ -17,6 +17,15 @@ async function enableContentOnMemberships(items: PublicMembership[]): Promise<nu
   return targets.length;
 }
 
+async function disableContentOnMemberships(items: PublicMembership[]): Promise<number> {
+  const targets = items.filter((item) => Boolean(item.validForFutureEvents));
+  if (targets.length === 0) return 0;
+  await Promise.all(
+    targets.map((item) => membershipsApi.update(item.id, { validForFutureEvents: false })),
+  );
+  return targets.length;
+}
+
 export function EventAccessPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -69,13 +78,18 @@ export function EventAccessPage() {
     mutationFn: async (enabled: boolean) => {
       await eventsApi.update(current!.id, { allowPreviousAttendeesAccess: enabled });
 
-      // When content is enabled for all previous attendees, mark every membership’s
-      // Content flag on as well. QR stays independent — never auto-enabled.
+      const allMemberships = [
+        ...(currentMembershipsQuery.data?.items ?? []),
+        ...(pastMembershipsQuery.data?.items ?? []),
+      ];
+
+      // Master content toggle drives all membership Content flags together.
+      // QR stays independent — never auto-enabled or cleared here.
       if (enabled) {
-        await enableContentOnMemberships([
-          ...(currentMembershipsQuery.data?.items ?? []),
-          ...(pastMembershipsQuery.data?.items ?? []),
-        ]);
+        await enableContentOnMemberships(allMemberships);
+      } else {
+        await disableContentOnMemberships(allMemberships);
+        syncedEventRef.current = null;
       }
     },
     onSuccess: async (_, enabled) => {
@@ -86,7 +100,7 @@ export function EventAccessPage() {
       toast.success(
         enabled
           ? 'Content enabled for all attendees — membership Content flags updated (QR unchanged)'
-          : 'Event content access setting saved',
+          : 'Content disabled — all membership Content flags cleared (QR unchanged)',
       );
     },
     onError: (error) =>
@@ -183,9 +197,9 @@ export function EventAccessPage() {
             <strong>Allow previous attendees to access this event’s content</strong>
             <br />
             <span className="hint">
-              When enabled, Content is turned on for <strong>all</strong> memberships below
-              automatically. Check-in QR is <strong>not</strong> enabled — select QR only on the
-              membership types you want.
+              When enabled, Content is turned on for <strong>all</strong> memberships below.
+              When disabled, all membership Content flags are cleared. Check-in QR is never
+              changed by this toggle — select QR only on the membership types you want.
             </span>
           </span>
         </label>
