@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
-import { QrCode, UserCheck, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { UserCheck, X } from 'lucide-react';
 import { checkInsApi } from '@/features/checkins/api/checkins-api';
-import { CheckInScanner } from '@/features/checkins/components/CheckInScanner';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
 import {
   formatEditionRange,
@@ -13,7 +12,6 @@ import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type { CheckInScanResult } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
 import { ListPagination } from '@/shared/ui/ListPagination';
 import { SearchSuggest } from '@/shared/ui/SearchSuggest';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -26,8 +24,6 @@ export function CheckInsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<'all' | 'checked_in' | 'not_checked_in'>('all');
-  const [token, setToken] = useState('');
-  const [lastResult, setLastResult] = useState<string | null>(null);
   const [scanDetail, setScanDetail] = useState<CheckInScanResult | null>(null);
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -70,30 +66,15 @@ export function CheckInsPage() {
       setScanDetail(result);
       const name = result.user.name;
       if (result.alreadyCheckedIn) {
-        const message = `${name} was already checked in`;
-        setLastResult(message);
-        toast.success(message);
+        toast.success(`${name} was already checked in`);
       } else {
-        const message = `Checked in ${name}`;
-        setLastResult(message);
-        toast.success(message);
+        toast.success(`Checked in ${name}`);
       }
-      setToken('');
     },
     onError: (error) => {
-      const message = getApiErrorMessage(error, 'Check-in failed');
-      setLastResult(message);
-      toast.error(message);
+      toast.error(getApiErrorMessage(error, 'Check-in failed'));
     },
   });
-
-  const handleTokenScan = useCallback(
-    (raw: string) => {
-      if (scanMutation.isPending) return;
-      void scanMutation.mutateAsync({ token: raw.trim() });
-    },
-    [scanMutation],
-  );
 
   const stats = listQuery.data?.stats;
   const checkedIn = stats?.checkedInCount ?? 0;
@@ -162,91 +143,58 @@ export function CheckInsPage() {
             </p>
           </section>
 
-          {!isPastEdition ? (
+          {!isPastEdition && scanDetail && membership ? (
             <section className="panel" style={{ marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: '1.05rem' }}>
-                <QrCode size={16} style={{ marginRight: 8, verticalAlign: 'text-bottom' }} />
-                Scan QR
-              </h2>
-              <p className="muted" style={{ marginTop: 6 }}>
-                Attendees open their event QR in the app. Scan it here, or paste the token if the
-                camera is unavailable.
-              </p>
-              <CheckInScanner onScan={handleTokenScan} disabled={scanMutation.isPending} />
-              <form
-                className="toolbar"
-                style={{ marginTop: 12 }}
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!token.trim()) return;
-                  handleTokenScan(token);
-                }}
-              >
-                <Input
-                  label="Or paste QR token"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="uyb1...."
-                />
-                <Button type="submit" loading={scanMutation.isPending} disabled={!token.trim()}>
-                  <UserCheck size={16} />
-                  Check in
-                </Button>
-              </form>
-              {lastResult ? <p className="hint">{lastResult}</p> : null}
-
-              {scanDetail && membership ? (
-                <div className="attendee-detail-section" style={{ marginTop: 16 }}>
-                  <h3 style={{ marginTop: 0 }}>Last scan details</h3>
-                  <dl className="attendee-detail-grid" style={{ marginBottom: 12 }}>
+              <div className="attendee-detail-section">
+                <h3 style={{ marginTop: 0 }}>Last check-in details</h3>
+                <dl className="attendee-detail-grid" style={{ marginBottom: 12 }}>
+                  <div className="attendee-detail-row">
+                    <dt>Name</dt>
+                    <dd>{scanDetail.user.name}</dd>
+                  </div>
+                  <div className="attendee-detail-row">
+                    <dt>Email</dt>
+                    <dd>{scanDetail.user.email}</dd>
+                  </div>
+                  <div className="attendee-detail-row">
+                    <dt>Checked in</dt>
+                    <dd>
+                      {scanDetail.checkIn.checkedInAt
+                        ? new Date(scanDetail.checkIn.checkedInAt).toLocaleString()
+                        : '—'}
+                      {scanDetail.alreadyCheckedIn ? ' (already checked in)' : ''}
+                    </dd>
+                  </div>
+                  <div className="attendee-detail-row">
+                    <dt>Membership at check-in</dt>
+                    <dd>{membership.membershipNameAtCheckIn ?? '—'}</dd>
+                  </div>
+                  {membership.qrStatusLabel ? (
                     <div className="attendee-detail-row">
-                      <dt>Name</dt>
-                      <dd>{scanDetail.user.name}</dd>
-                    </div>
-                    <div className="attendee-detail-row">
-                      <dt>Email</dt>
-                      <dd>{scanDetail.user.email}</dd>
-                    </div>
-                    <div className="attendee-detail-row">
-                      <dt>Checked in</dt>
+                      <dt>QR eligibility</dt>
                       <dd>
-                        {scanDetail.checkIn.checkedInAt
-                          ? new Date(scanDetail.checkIn.checkedInAt).toLocaleString()
-                          : '—'}
-                        {scanDetail.alreadyCheckedIn ? ' (already checked in)' : ''}
+                        {membership.qrStatusLabel}
+                        {membership.qrDeniedReason === 'renewal_payment_required' ? (
+                          <span className="hint" style={{ display: 'block', marginTop: 4 }}>
+                            Recurring payment still pending — QR not valid for this / next event
+                            under the current access rule.
+                          </span>
+                        ) : null}
                       </dd>
                     </div>
-                    <div className="attendee-detail-row">
-                      <dt>Membership at check-in</dt>
-                      <dd>{membership.membershipNameAtCheckIn ?? '—'}</dd>
-                    </div>
-                    {membership.qrStatusLabel ? (
-                      <div className="attendee-detail-row">
-                        <dt>QR eligibility</dt>
-                        <dd>
-                          {membership.qrStatusLabel}
-                          {membership.qrDeniedReason === 'renewal_payment_required' ? (
-                            <span className="hint" style={{ display: 'block', marginTop: 4 }}>
-                              Recurring payment still pending — QR not valid for this / next event
-                              under the current access rule.
-                            </span>
-                          ) : null}
-                        </dd>
-                      </div>
-                    ) : null}
-                  </dl>
-                  <MembershipRecordPanel
-                    summary={membership}
-                    sourceLabel={
-                      scanDetail.user.ghlContactId
-                        ? 'GoHighLevel webhook'
-                        : 'Manual / admin / Stripe'
-                    }
-                    ghlContactId={scanDetail.user.ghlContactId}
-                    productTitle={scanDetail.user.title}
-                  />
-                </div>
-              ) : null}
+                  ) : null}
+                </dl>
+                <MembershipRecordPanel
+                  summary={membership}
+                  sourceLabel={
+                    scanDetail.user.ghlContactId
+                      ? 'GoHighLevel webhook'
+                      : 'Manual / admin / Stripe'
+                  }
+                  ghlContactId={scanDetail.user.ghlContactId}
+                  productTitle={scanDetail.user.title}
+                />
+              </div>
             </section>
           ) : null}
 
