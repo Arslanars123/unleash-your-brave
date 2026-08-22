@@ -72,6 +72,13 @@ import { MongoSessionFeedbackRepository } from '../db/repositories/mongo-session
 import { MongoSessionRepository } from '../db/repositories/mongo-session.repository.js';
 import { MongoSpeakerRepository } from '../db/repositories/mongo-speaker.repository.js';
 import { MongoSponsorRepository } from '../db/repositories/mongo-sponsor.repository.js';
+import {
+  MongoStoreCategoryRepository,
+  MongoStoreProductRepository,
+} from '../db/repositories/mongo-store.repository.js';
+import { StoreController } from '../modules/store/store.controller.js';
+import { createStoreRouter } from '../modules/store/store.routes.js';
+import { StoreService } from '../modules/store/store.service.js';
 import { MongoMembershipRepository } from '../db/repositories/mongo-membership.repository.js';
 import { MongoMembershipPurchaseRepository } from '../db/repositories/mongo-membership-purchase.repository.js';
 import { MongoUserRepository } from '../db/repositories/mongo-user.repository.js';
@@ -89,6 +96,8 @@ export async function createContainer() {
   const sessionRepository = new MongoSessionRepository();
   const sessionFeedbackRepository = new MongoSessionFeedbackRepository();
   const sponsorRepository = new MongoSponsorRepository();
+  const storeCategoryRepository = new MongoStoreCategoryRepository();
+  const storeProductRepository = new MongoStoreProductRepository();
   const membershipRepository = new MongoMembershipRepository();
   const membershipPurchaseRepository = new MongoMembershipPurchaseRepository();
   await membershipPurchaseRepository.ensureIndexes();
@@ -135,6 +144,11 @@ export async function createContainer() {
     userRepository,
   );
   const sponsorService = new SponsorService(sponsorRepository, eventService, userService, mailService);
+  const storeService = new StoreService(
+    storeCategoryRepository,
+    storeProductRepository,
+    eventService,
+  );
   const pushNotificationService = new PushNotificationService(deviceTokenRepository);
   const membershipLifecycleService = new MembershipLifecycleService(
     userRepository,
@@ -199,6 +213,7 @@ export async function createContainer() {
   const sessionController = new SessionController(sessionService);
   const sessionFeedbackController = new SessionFeedbackController(sessionFeedbackService);
   const sponsorController = new SponsorController(sponsorService);
+  const storeController = new StoreController(storeService);
   const membershipController = new MembershipController(membershipService);
   const couponController = new CouponController(couponService);
   const accessController = new AccessController(effectiveAccessService);
@@ -237,6 +252,7 @@ export async function createContainer() {
       speakers: createSpeakerRouter(speakerController),
       sessions: createSessionRouter(sessionController, sessionFeedbackController),
       sponsors: createSponsorRouter(sponsorController),
+      store: createStoreRouter(storeController),
       memberships: createMembershipRouter(membershipController),
       coupons: createCouponRouter(couponController),
       access: createAccessRouter(accessController),

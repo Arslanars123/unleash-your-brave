@@ -79,6 +79,7 @@ export function createApp(container: Container): Express {
   app.use('/api/v1/speakers', container.routers.speakers);
   app.use('/api/v1/sessions', container.routers.sessions);
   app.use('/api/v1/sponsors', container.routers.sponsors);
+  app.use('/api/v1/store', container.routers.store);
   app.use('/api/v1/memberships', container.routers.memberships);
   app.use('/api/v1/coupons', container.routers.coupons);
   app.use('/api/v1/access', container.routers.access);

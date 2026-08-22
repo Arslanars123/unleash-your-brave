@@ -15,6 +15,7 @@ import {
   TicketPercent,
   UserRound,
   Users,
+  ShoppingBag,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthProvider';
 import { BrandLogo } from '@/shared/ui/BrandLogo';
@@ -78,6 +79,10 @@ export function AppShell() {
               <NavLink to="/sponsors">
                 <Handshake size={18} />
                 Sponsors
+              </NavLink>
+              <NavLink to="/store">
+                <ShoppingBag size={18} />
+                Store
               </NavLink>
               <NavLink to="/announcements">
                 <Megaphone size={18} />

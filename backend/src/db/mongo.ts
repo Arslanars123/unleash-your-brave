@@ -62,6 +62,16 @@ async function ensureIndexes(database: Db): Promise<void> {
       { key: { eventId: 1 }, name: 'sponsors_eventId' },
       { key: { name: 1 }, name: 'sponsors_name' },
     ]),
+    database.collection('store_categories').createIndexes([
+      { key: { eventId: 1, sortOrder: 1 }, name: 'store_categories_event_sort' },
+      { key: { eventId: 1, isActive: 1 }, name: 'store_categories_event_active' },
+    ]),
+    database.collection('store_products').createIndexes([
+      { key: { eventId: 1, sortOrder: 1 }, name: 'store_products_event_sort' },
+      { key: { eventId: 1, categoryId: 1 }, name: 'store_products_event_category' },
+      { key: { eventId: 1, isActive: 1 }, name: 'store_products_event_active' },
+      { key: { eventId: 1, featured: 1 }, name: 'store_products_event_featured' },
+    ]),
     database.collection('memberships').createIndexes([
       { key: { eventId: 1 }, name: 'memberships_eventId' },
       { key: { name: 1 }, name: 'memberships_name' },

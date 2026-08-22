@@ -677,3 +677,67 @@ export interface PublicPostComment {
 export interface PostCommentPayload {
   text: string;
 }
+
+export interface PublicStoreCategory {
+  id: string;
+  eventId: string;
+  name: string;
+  description: string;
+  image: string;
+  sortOrder: number;
+  isActive: boolean;
+  productCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoreCategoryPayload {
+  eventId?: string;
+  name: string;
+  description?: string;
+  image?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface PublicStoreProduct {
+  id: string;
+  eventId: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  name: string;
+  description: string;
+  sku: string;
+  price: number;
+  compareAtPrice: number | null;
+  currency: string;
+  images: string[];
+  trackInventory: boolean;
+  stockQty: number;
+  lowStockThreshold: number;
+  inStock: boolean;
+  isLowStock: boolean;
+  isActive: boolean;
+  featured: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoreProductPayload {
+  eventId?: string;
+  categoryId?: string | null;
+  name: string;
+  description?: string;
+  sku?: string;
+  price: number;
+  compareAtPrice?: number | null;
+  currency?: string;
+  images?: string[];
+  stockQty?: number;
+  lowStockThreshold?: number;
+  isActive?: boolean;
+  featured?: boolean;
+  sortOrder?: number;
+}
+
