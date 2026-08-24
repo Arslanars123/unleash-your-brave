@@ -34,6 +34,8 @@ export interface StoreProductRepository {
   ): Promise<StoreProduct | null>;
   delete(id: string): Promise<boolean>;
   clearCategory(categoryId: string): Promise<number>;
+  /** Atomically reduce stock when qty is available. Returns false if insufficient. */
+  decrementStock(id: string, quantity: number): Promise<boolean>;
 }
 
 export class InMemoryStoreCategoryRepository implements StoreCategoryRepository {
@@ -167,5 +169,16 @@ export class InMemoryStoreProductRepository implements StoreProductRepository {
       }
     }
     return count;
+  }
+
+  async decrementStock(id: string, quantity: number): Promise<boolean> {
+    const existing = this.items.get(id);
+    if (!existing || quantity <= 0 || existing.stockQty < quantity) return false;
+    this.items.set(id, {
+      ...existing,
+      stockQty: existing.stockQty - quantity,
+      updatedAt: new Date(),
+    });
+    return true;
   }
 }

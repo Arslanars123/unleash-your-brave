@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate.js';
 import type { CheckInController } from './checkin.controller.js';
 import {
   checkInStatsQuerySchema,
+  completeCheckInWithFormSchema,
   listCheckInsQuerySchema,
   myQrQuerySchema,
   scanCheckInSchema,
@@ -21,6 +22,13 @@ export function createCheckInRouter(controller: CheckInController): Router {
     asyncHandler(controller.myQr),
   );
 
+  // Attendee: all event bookings with QR entitlement flags
+  router.get(
+    '/my-bookings',
+    authenticate,
+    asyncHandler(controller.myBookings),
+  );
+
   // Admin: scan QR or manual check-in
   router.post(
     '/scan',
@@ -28,6 +36,15 @@ export function createCheckInRouter(controller: CheckInController): Router {
     authorize('admin'),
     validate({ body: scanCheckInSchema }),
     asyncHandler(controller.scan),
+  );
+
+  // Admin: submit check-in form then complete check-in
+  router.post(
+    '/complete-with-form',
+    authenticate,
+    authorize('admin'),
+    validate({ body: completeCheckInWithFormSchema }),
+    asyncHandler(controller.completeWithForm),
   );
 
   // Admin: event-wise list (current or past via eventId)

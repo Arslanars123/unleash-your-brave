@@ -37,6 +37,7 @@ export interface EventFormValues {
   coverImage: string;
   copyDetailsFromPrevious: boolean;
   paused: boolean;
+  published: boolean;
   notifyAttendees: boolean;
 }
 
@@ -95,6 +96,7 @@ const emptyForm: EventFormValues = {
   coverImage: '',
   copyDetailsFromPrevious: true,
   paused: false,
+  published: true,
   notifyAttendees: true,
 };
 
@@ -129,6 +131,7 @@ function eventToForm(event: PublicEvent): EventFormValues {
     coverImage: event.coverImage,
     copyDetailsFromPrevious: true,
     paused: Boolean(event.paused) || event.status === 'paused',
+    published: event.published !== false,
     notifyAttendees: true,
   };
 }
@@ -213,6 +216,7 @@ export function toEventPayload(values: EventFormValues): EventPayload {
     longitude: values.longitude,
     coverImage: values.coverImage.trim(),
     paused: values.paused,
+    published: values.published,
     notifyAttendees: values.notifyAttendees,
   };
 }
@@ -230,6 +234,7 @@ export function toSchedulePayload(values: EventFormValues): ScheduleEventPayload
     latitude: values.latitude,
     longitude: values.longitude,
     coverImage: values.coverImage.trim(),
+    published: values.published,
     notifyAttendees: values.notifyAttendees,
   };
 }
@@ -402,7 +407,7 @@ export function EventFormModal({
       >
         <header className="modal-header">
           <h2 id="event-form-title">
-            {isSchedule ? 'Schedule new event' : 'Edit current edition'}
+            {isSchedule ? 'Schedule new event' : 'Edit edition'}
           </h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             <X size={18} />
@@ -413,8 +418,8 @@ export function EventFormModal({
           <Input label="Name" name="name" value={CANONICAL_EVENT_NAME} readOnly disabled />
           <p className="hint" style={{ marginTop: '-0.35rem' }}>
             {isSchedule
-              ? 'Creates a new edition with fresh dates. Speakers, sessions, and sponsors start empty for this edition.'
-              : 'Updates this edition only. To run the next gathering, use Schedule new event after these dates pass.'}
+              ? 'Creates a new edition with fresh dates. You can schedule while another edition is live. Speakers, sessions, and sponsors start empty for this edition.'
+              : 'Updates this edition only. Use Schedule new event to create another gathering (allowed while one is live).'}
           </p>
 
           {!isSchedule ? (
@@ -430,6 +435,18 @@ export function EventFormModal({
               </span>
             </label>
           ) : null}
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={values.published}
+              onChange={(e) => update('published', e.target.checked)}
+            />
+            <span>
+              <strong>Published</strong> — visible in the app and public catalog. Uncheck for a
+              draft.
+            </span>
+          </label>
 
           <label className="checkbox-row">
             <input

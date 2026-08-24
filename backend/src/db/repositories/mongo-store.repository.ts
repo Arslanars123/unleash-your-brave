@@ -165,4 +165,14 @@ export class MongoStoreProductRepository implements StoreProductRepository {
     );
     return result.modifiedCount;
   }
+
+  async decrementStock(id: string, quantity: number): Promise<boolean> {
+    if (quantity <= 0) return false;
+    const result = await this.collection.findOneAndUpdate(
+      { _id: id, stockQty: { $gte: quantity } },
+      { $inc: { stockQty: -quantity }, $set: { updatedAt: new Date() } },
+      { returnDocument: 'after' },
+    );
+    return Boolean(result);
+  }
 }

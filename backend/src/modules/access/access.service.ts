@@ -1,4 +1,5 @@
 import { isMembershipPaymentActive } from '../memberships/membership-entitlement.js';
+import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
 import type { EventService } from '../events/event.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { Membership } from '../memberships/membership.types.js';
@@ -193,6 +194,7 @@ export class EffectiveAccessService {
     private readonly users: UserRepository,
     private readonly memberships: MembershipRepository,
     private readonly events: EventService,
+    private readonly purchases?: MembershipPurchaseRepository,
   ) {}
 
   async resolveForUser(
@@ -201,7 +203,7 @@ export class EffectiveAccessService {
   ): Promise<EffectiveEventAccess> {
     const event = eventId
       ? await this.events.requireEvent(eventId)
-      : await this.events.getLatest();
+      : (await this.events.getPreferred()) ?? (await this.events.getLatest());
     if (!event) {
       return emptyAccess(eventId ?? '');
     }
@@ -242,6 +244,23 @@ export class EffectiveAccessService {
       });
     }
 
+    // Prefer a paid purchase for THIS event (supports multi-event bookings).
+    const eventPurchaseMembership = await this.resolveMembershipFromPurchases(
+      user,
+      event.id,
+    );
+    if (eventPurchaseMembership) {
+      return this.buildSameEditionAccess({
+        eventId: event.id,
+        allowPrevious,
+        blockUnpaid,
+        source: eventPurchaseMembership,
+        catalog,
+        payment,
+        carriedFromPrevious: false,
+      });
+    }
+
     const sourceId = user.membershipId;
     if (!sourceId) {
       return emptyAccess(event.id, {
@@ -278,35 +297,15 @@ export class EffectiveAccessService {
 
     // Same-edition membership — content when they hold the tier; QR gated by payment rule.
     if (source.eventId === event.id) {
-      const qrEntitled = paymentOk;
-      return {
+      return this.buildSameEditionAccess({
         eventId: event.id,
-        allowPreviousAttendeesAccess: allowPrevious,
-        blockQrWhenRenewalUnpaid: blockUnpaid,
-        entitled: true,
-        qrEntitled,
+        allowPrevious,
+        blockUnpaid,
+        source,
+        catalog,
+        payment,
         carriedFromPrevious: false,
-        accessibleMembershipIds: [source.id],
-        effectiveMembershipId: source.id,
-        effectiveMembershipName: source.name,
-        sourceMembershipId: source.id,
-        sourceMembershipName: source.name,
-        validForFutureEvents,
-        validForFutureQr,
-        billingKind,
-        membershipStatus: payment.membershipStatus,
-        membershipExpiresAt: payment.membershipExpiresAt,
-        paymentPeriodActive: paymentActive,
-        qrDeniedReason: qrEntitled
-          ? null
-          : denyReasonForUnpaidRenewable({
-              billingKind,
-              paymentActive,
-              blockUnpaid,
-              qrWouldOtherwiseApply: true,
-            }),
-        upgradeMembershipIds: nextUpgradeIds(source, catalog),
-      };
+      });
     }
 
     const contentCarry = validForFutureEvents || allowPrevious;
@@ -398,6 +397,71 @@ export class EffectiveAccessService {
             qrWouldOtherwiseApply: qrCarryBase,
           }),
       upgradeMembershipIds: catalog.map((item) => item.id),
+    };
+  }
+
+  private async resolveMembershipFromPurchases(
+    user: User,
+    eventId: string,
+  ): Promise<Membership | null> {
+    if (!this.purchases) return null;
+    const purchases = await this.purchases.listByUserId(user.id);
+    const paidForEvent = purchases
+      .filter((item) => item.eventId === eventId && item.paymentStatus === 'paid')
+      .sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime());
+    const latest = paidForEvent[0];
+    if (!latest) return null;
+    return this.memberships.findById(latest.membershipId);
+  }
+
+  private buildSameEditionAccess(input: {
+    eventId: string;
+    allowPrevious: boolean;
+    blockUnpaid: boolean;
+    source: Membership;
+    catalog: Membership[];
+    payment: ReturnType<typeof userPaymentFields>;
+    carriedFromPrevious: boolean;
+  }): EffectiveEventAccess {
+    const { source, catalog, payment, allowPrevious, blockUnpaid } = input;
+    const validForFutureEvents = Boolean(source.validForFutureEvents);
+    const validForFutureQr = Boolean(source.validForFutureQr);
+    const paymentActive = payment.paymentPeriodActive;
+    const billingKind = source.billingKind ?? 'one_time';
+    const paymentOk = paymentAllowsQr({
+      billingKind,
+      paymentActive,
+      blockQrWhenRenewalUnpaid: blockUnpaid,
+      hasMembership: true,
+    });
+    const qrEntitled = paymentOk;
+    return {
+      eventId: input.eventId,
+      allowPreviousAttendeesAccess: allowPrevious,
+      blockQrWhenRenewalUnpaid: blockUnpaid,
+      entitled: true,
+      qrEntitled,
+      carriedFromPrevious: input.carriedFromPrevious,
+      accessibleMembershipIds: [source.id],
+      effectiveMembershipId: source.id,
+      effectiveMembershipName: source.name,
+      sourceMembershipId: source.id,
+      sourceMembershipName: source.name,
+      validForFutureEvents,
+      validForFutureQr,
+      billingKind,
+      membershipStatus: payment.membershipStatus,
+      membershipExpiresAt: payment.membershipExpiresAt,
+      paymentPeriodActive: paymentActive,
+      qrDeniedReason: qrEntitled
+        ? null
+        : denyReasonForUnpaidRenewable({
+            billingKind,
+            paymentActive,
+            blockUnpaid,
+            qrWouldOtherwiseApply: true,
+          }),
+      upgradeMembershipIds: nextUpgradeIds(source, catalog),
     };
   }
 }

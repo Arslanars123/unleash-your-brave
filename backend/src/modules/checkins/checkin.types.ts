@@ -1,3 +1,4 @@
+import type { PublicCheckInForm } from '../checkin-forms/checkin-form.types.js';
 import type { PublicMembershipPurchase } from '../checkout/purchase.types.js';
 import type { PublicUser } from '../users/user.types.js';
 
@@ -66,7 +67,11 @@ export interface CheckInScanMembershipSummary {
 }
 
 export interface CheckInScanResult {
-  checkIn: PublicCheckIn;
+  /** True when an active form must be completed before check-in is created. */
+  requiresForm: boolean;
+  form: PublicCheckInForm | null;
+  /** Null when requiresForm is true (check-in not created yet). */
+  checkIn: PublicCheckIn | null;
   alreadyCheckedIn: boolean;
   user: PublicUser;
   membership: CheckInScanMembershipSummary;

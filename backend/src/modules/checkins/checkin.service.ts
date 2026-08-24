@@ -1,5 +1,8 @@
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
 import type { CheckInRepository } from '../../db/repositories/mongo-checkin.repository.js';
+import type { CheckInFormService } from '../checkin-forms/checkin-form.service.js';
+import type { SubmitCheckInFormInput } from '../checkin-forms/checkin-form.types.js';
+import { toPublicCheckInForm } from '../checkin-forms/checkin-form.mapper.js';
 import type { EffectiveAccessService, QrDeniedReason } from '../access/access.service.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
 import type { EventService } from '../events/event.service.js';
@@ -10,6 +13,7 @@ import type { UserRepository } from '../users/user.repository.js';
 import { toPublicCheckIn } from './checkin.mapper.js';
 import { issueCheckInToken, verifyCheckInToken } from './checkin.token.js';
 import type {
+  CheckIn,
   CheckInScanResult,
   CheckInStats,
   ListCheckInsQuery,
@@ -38,6 +42,7 @@ export class CheckInService {
     private readonly events: EventService,
     private readonly memberships: MembershipRepository,
     private readonly checkout: CheckoutService,
+    private readonly checkInForms?: CheckInFormService,
     private readonly access?: EffectiveAccessService,
     private readonly membershipLifecycle?: MembershipLifecycleService,
   ) {}
@@ -89,6 +94,46 @@ export class CheckInService {
     };
   }
 
+  /** Events the attendee can open + whether QR is available for each. */
+  async listMyBookings(userId: string): Promise<
+    Array<{
+      event: Awaited<ReturnType<EventService['getById']>>;
+      entitled: boolean;
+      qrEntitled: boolean;
+      effectiveMembershipName: string | null;
+      checkedIn: boolean;
+      checkedInAt: string | null;
+      carriedFromPrevious: boolean;
+    }>
+  > {
+    const user = await this.users.findById(userId);
+    if (!user || user.status !== 'active') throw new NotFoundError('User');
+
+    const { items: allEvents } = await this.events.list({ page: 1, perPage: 100 });
+    const results = [];
+
+    for (const event of allEvents) {
+      if (!this.access) continue;
+      const access = await this.access.resolveForUser(userId, event.id);
+      if (!access.entitled && !access.qrEntitled) continue;
+      const checkIn = await this.checkIns.findByEventAndUser(event.id, userId);
+      results.push({
+        event: await this.events.getById(event.id),
+        entitled: access.entitled,
+        qrEntitled: access.qrEntitled,
+        effectiveMembershipName: access.effectiveMembershipName,
+        checkedIn: Boolean(checkIn),
+        checkedInAt: checkIn?.checkedInAt.toISOString() ?? null,
+        carriedFromPrevious: access.carriedFromPrevious,
+      });
+    }
+
+    return results.sort(
+      (a, b) =>
+        new Date(b.event.startDate).getTime() - new Date(a.event.startDate).getTime(),
+    );
+  }
+
   async scan(input: {
     token?: string;
     eventId?: string;
@@ -96,25 +141,7 @@ export class CheckInService {
     expectedEventId?: string;
     adminUserId: string;
   }): Promise<CheckInScanResult> {
-    let eventId: string;
-    let userId: string;
-
-    if (input.token) {
-      const decoded = verifyCheckInToken(input.token);
-      eventId = decoded.eventId;
-      userId = decoded.userId;
-    } else if (input.eventId && input.userId) {
-      eventId = input.eventId;
-      userId = input.userId;
-    } else {
-      throw new BadRequestError('Provide a QR token, or both eventId and userId');
-    }
-
-    if (input.expectedEventId && input.expectedEventId !== eventId) {
-      throw new BadRequestError(
-        'This QR belongs to a different event edition. Switch edition or ask for the current event QR.',
-      );
-    }
+    const { eventId, userId } = this.resolveAttendeeIds(input);
 
     const event = await this.events.getById(eventId);
     if (!event) throw new NotFoundError('Event');
@@ -133,26 +160,79 @@ export class CheckInService {
       return this.toScanResult(existing, user, true, eventId);
     }
 
-    let membershipNameAtCheckIn: string | null = null;
-    if (user.membershipId) {
-      const membership = await this.memberships.findById(user.membershipId);
-      membershipNameAtCheckIn = membership?.name ?? null;
+    if (this.checkInForms) {
+      const activeForm = await this.checkInForms.findActiveForm(eventId);
+      if (activeForm) {
+        const submission = await this.checkInForms.findSubmission(eventId, userId);
+        if (!submission) {
+          return this.toFormRequiredScanResult(user, eventId, activeForm);
+        }
+        // Submission exists but check-in was never linked (interrupted complete) — finish now.
+        if (!submission.checkInId) {
+          const created = await this.createCheckInAndResult(eventId, user, input.adminUserId);
+          if (created.checkIn) {
+            await this.checkInForms.linkSubmissionToCheckIn(submission.id, created.checkIn.id);
+          }
+          return created;
+        }
+      }
     }
 
-    try {
-      const created = await this.checkIns.create({
-        eventId,
-        userId,
-        checkedInAt: new Date(),
-        checkedInBy: input.adminUserId,
-        membershipIdAtCheckIn: user.membershipId ?? null,
-        membershipNameAtCheckIn,
-      });
+    return this.createCheckInAndResult(eventId, user, input.adminUserId);
+  }
 
+  async completeWithForm(input: {
+    token?: string;
+    eventId?: string;
+    userId?: string;
+    expectedEventId?: string;
+    adminUserId: string;
+    answers: SubmitCheckInFormInput['answers'];
+    signatureDataUrl?: string;
+    signedName: string;
+  }): Promise<CheckInScanResult> {
+    if (!this.checkInForms) {
+      throw new BadRequestError('Check-in forms are not available');
+    }
+
+    const { eventId, userId } = this.resolveAttendeeIds(input);
+
+    const event = await this.events.getById(eventId);
+    if (!event) throw new NotFoundError('Event');
+
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundError('Attendee');
+    if (user.role !== 'member' && !user.membershipId) {
+      throw new BadRequestError('Only attendees can be checked in');
+    }
+    if (user.status !== 'active') {
+      throw new BadRequestError('Attendee account is not active');
+    }
+
+    const existing = await this.checkIns.findByEventAndUser(eventId, userId);
+    if (existing) {
+      return this.toScanResult(existing, user, true, eventId);
+    }
+
+    const activeForm = await this.checkInForms.findActiveForm(eventId);
+    if (!activeForm) {
+      throw new BadRequestError('No active check-in form for this event');
+    }
+
+    const submission = await this.checkInForms.saveSubmission(activeForm, userId, {
+      answers: input.answers,
+      signatureDataUrl: input.signatureDataUrl,
+      signedName: input.signedName,
+    });
+
+    try {
+      const created = await this.createCheckInRecord(eventId, user, input.adminUserId);
+      await this.checkInForms.linkSubmissionToCheckIn(submission.id, created.id);
       return this.toScanResult(created, user, false, eventId);
     } catch {
       const raced = await this.checkIns.findByEventAndUser(eventId, userId);
       if (raced) {
+        await this.checkInForms.linkSubmissionToCheckIn(submission.id, raced.id);
         return this.toScanResult(raced, user, true, eventId);
       }
       throw new BadRequestError('Unable to complete check-in');
@@ -240,12 +320,110 @@ export class CheckInService {
     };
   }
 
+  private resolveAttendeeIds(input: {
+    token?: string;
+    eventId?: string;
+    userId?: string;
+    expectedEventId?: string;
+  }): { eventId: string; userId: string } {
+    let eventId: string;
+    let userId: string;
+
+    if (input.token) {
+      const decoded = verifyCheckInToken(input.token);
+      eventId = decoded.eventId;
+      userId = decoded.userId;
+    } else if (input.eventId && input.userId) {
+      eventId = input.eventId;
+      userId = input.userId;
+    } else {
+      throw new BadRequestError('Provide a QR token, or both eventId and userId');
+    }
+
+    if (input.expectedEventId && input.expectedEventId !== eventId) {
+      throw new BadRequestError(
+        'This QR belongs to a different event edition. Switch edition or ask for the current event QR.',
+      );
+    }
+
+    return { eventId, userId };
+  }
+
+  private async createCheckInAndResult(
+    eventId: string,
+    user: NonNullable<Awaited<ReturnType<UserRepository['findById']>>>,
+    adminUserId: string,
+  ): Promise<CheckInScanResult> {
+    try {
+      const created = await this.createCheckInRecord(eventId, user, adminUserId);
+      return this.toScanResult(created, user, false, eventId);
+    } catch {
+      const raced = await this.checkIns.findByEventAndUser(eventId, user.id);
+      if (raced) {
+        return this.toScanResult(raced, user, true, eventId);
+      }
+      throw new BadRequestError('Unable to complete check-in');
+    }
+  }
+
+  private async createCheckInRecord(
+    eventId: string,
+    user: NonNullable<Awaited<ReturnType<UserRepository['findById']>>>,
+    adminUserId: string,
+  ): Promise<CheckIn> {
+    let membershipNameAtCheckIn: string | null = null;
+    if (user.membershipId) {
+      const membership = await this.memberships.findById(user.membershipId);
+      membershipNameAtCheckIn = membership?.name ?? null;
+    }
+
+    return this.checkIns.create({
+      eventId,
+      userId: user.id,
+      checkedInAt: new Date(),
+      checkedInBy: adminUserId,
+      membershipIdAtCheckIn: user.membershipId ?? null,
+      membershipNameAtCheckIn,
+    });
+  }
+
+  private async toFormRequiredScanResult(
+    user: NonNullable<Awaited<ReturnType<UserRepository['findById']>>>,
+    eventId: string,
+    form: Parameters<typeof toPublicCheckInForm>[0],
+  ): Promise<CheckInScanResult> {
+    const membership = await this.buildMembershipSummary(user, eventId, null);
+    return {
+      requiresForm: true,
+      form: toPublicCheckInForm(form),
+      checkIn: null,
+      alreadyCheckedIn: false,
+      user: toPublicUser(user),
+      membership,
+    };
+  }
+
   private async toScanResult(
-    checkIn: Parameters<typeof toPublicCheckIn>[0],
+    checkIn: CheckIn,
     user: NonNullable<Awaited<ReturnType<UserRepository['findById']>>>,
     alreadyCheckedIn: boolean,
     eventId: string,
   ): Promise<CheckInScanResult> {
+    return {
+      requiresForm: false,
+      form: null,
+      checkIn: toPublicCheckIn(checkIn, toPublicUser(user)),
+      alreadyCheckedIn,
+      user: toPublicUser(user),
+      membership: await this.buildMembershipSummary(user, eventId, checkIn),
+    };
+  }
+
+  private async buildMembershipSummary(
+    user: NonNullable<Awaited<ReturnType<UserRepository['findById']>>>,
+    eventId: string,
+    checkIn: CheckIn | null,
+  ) {
     const summary = await this.checkout.getAttendeePurchaseSummary(user.id, eventId);
     const access = this.access
       ? await this.access.resolveForUser(user.id, eventId)
@@ -260,23 +438,18 @@ export class CheckInService {
         : 'Invalid / not entitled for this event';
 
     return {
-      checkIn: toPublicCheckIn(checkIn, toPublicUser(user)),
-      alreadyCheckedIn,
-      user: toPublicUser(user),
-      membership: {
-        ...summary,
-        membershipIdAtCheckIn: checkIn.membershipIdAtCheckIn ?? null,
-        membershipNameAtCheckIn: checkIn.membershipNameAtCheckIn ?? null,
-        isRecurring: summary.currentBillingKind === 'renewable',
-        paymentPeriodActive: access?.paymentPeriodActive ?? summary.currentMembershipStatus !== 'expired',
-        qrEntitled,
-        qrDeniedReason,
-        qrStatusLabel,
-        eligibleForEventContent: access?.entitled ?? Boolean(summary.currentMembershipId),
-        eligibleForEventQr: qrEntitled,
-        blockQrWhenRenewalUnpaid: access?.blockQrWhenRenewalUnpaid ?? true,
-        carriedFromPrevious: access?.carriedFromPrevious ?? false,
-      },
+      ...summary,
+      membershipIdAtCheckIn: checkIn?.membershipIdAtCheckIn ?? null,
+      membershipNameAtCheckIn: checkIn?.membershipNameAtCheckIn ?? null,
+      isRecurring: summary.currentBillingKind === 'renewable',
+      paymentPeriodActive: access?.paymentPeriodActive ?? summary.currentMembershipStatus !== 'expired',
+      qrEntitled,
+      qrDeniedReason,
+      qrStatusLabel,
+      eligibleForEventContent: access?.entitled ?? Boolean(summary.currentMembershipId),
+      eligibleForEventQr: qrEntitled,
+      blockQrWhenRenewalUnpaid: access?.blockQrWhenRenewalUnpaid ?? true,
+      carriedFromPrevious: access?.carriedFromPrevious ?? false,
     };
   }
 

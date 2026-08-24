@@ -1,22 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/core/constants/event_constants.dart';
-import 'package:unleash_your_brave/core/error/exceptions.dart';
 import 'package:unleash_your_brave/core/responsive/responsive.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/features/auth/domain/entities/user_entity.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
+import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/home/presentation/widgets/event_countdown.dart';
 import 'package:unleash_your_brave/features/home/presentation/widgets/quick_action_card.dart';
 import 'package:unleash_your_brave/features/home/presentation/widgets/welcome_card.dart';
-
-enum _HomeLoadStatus { loading, refreshing, success, offline, error }
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -26,99 +25,20 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  _HomeLoadStatus _status = _HomeLoadStatus.loading;
-  EventEntity? _event;
-  String? _errorMessage;
-
   @override
   void initState() {
     super.initState();
-    _load(isRefresh: false);
+    unawaited(sl<SelectedEventCubit>().ensureReady());
   }
 
-  Future<void> _load({required bool isRefresh}) async {
-    final hadEvent = _event != null;
-    setState(() {
-      _status = isRefresh && hadEvent
-          ? _HomeLoadStatus.refreshing
-          : _HomeLoadStatus.loading;
-      if (!isRefresh || !hadEvent) {
-        _errorMessage = null;
-      }
-    });
-
-    try {
-      final event = await sl<EventsRemoteDataSource>().getCurrent();
-      if (!mounted) return;
-      setState(() {
-        _event = event;
-        _errorMessage = null;
-        _status = _HomeLoadStatus.success;
-      });
-    } on NetworkException catch (error) {
-      if (!mounted) return;
-      _handleLoadFailure(
-        isOffline: true,
-        message: error.message,
-        keepContent: isRefresh && hadEvent,
-      );
-    } on ServerException catch (error) {
-      if (!mounted) return;
-      _handleLoadFailure(
-        isOffline: false,
-        message: error.message,
-        keepContent: isRefresh && hadEvent,
-      );
-    } catch (_) {
-      if (!mounted) return;
-      _handleLoadFailure(
-        isOffline: false,
-        message: 'Unexpected error',
-        keepContent: isRefresh && hadEvent,
-      );
-    }
-  }
-
-  void _handleLoadFailure({
-    required bool isOffline,
-    required String message,
-    required bool keepContent,
-  }) {
-    if (keepContent) {
-      setState(() {
-        _status = _HomeLoadStatus.success;
-        _errorMessage = message;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isOffline
-                ? 'No internet connection. Pull to refresh when you’re back online.'
-                : message,
-          ),
-          backgroundColor: AppColors.bgMaroon,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _event = null;
-      _errorMessage = message;
-      _status = isOffline ? _HomeLoadStatus.offline : _HomeLoadStatus.error;
-    });
-  }
-
-  Future<void> _retry() => _load(isRefresh: false);
-
-  Future<void> _refresh() => _load(isRefresh: true);
+  Future<void> _refresh() =>
+      sl<SelectedEventCubit>().ensureReady(force: true);
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
-      builder: (context, state) {
-        final user = state is AuthAuthenticated ? state.user : null;
+      builder: (context, authState) {
+        final user = authState is AuthAuthenticated ? authState.user : null;
         final sidePad = context.pagePadding.left;
         final heroHeight = context
             .responsive(
@@ -129,46 +49,44 @@ class _HomePageState extends State<HomePage> {
             .clamp(280.0, 460.0)
             .toDouble();
 
-        return Scaffold(
-          backgroundColor: AppColors.bgBase,
-          body: RefreshIndicator(
-            color: AppColors.accentPink,
-            onRefresh: _refresh,
-            child: switch (_status) {
-              _HomeLoadStatus.loading => _ScrollableFill(
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.accentPink,
-                    ),
-                  ),
-                ),
-              _HomeLoadStatus.offline => _ScrollableFill(
-                  child: LoadErrorView(
-                    kind: LoadErrorKind.offline,
-                    message: _errorMessage,
-                    onRetry: _retry,
-                    retrying: false,
-                  ),
-                ),
-              _HomeLoadStatus.error => _ScrollableFill(
-                  child: LoadErrorView(
-                    kind: LoadErrorKind.generic,
-                    message: _errorMessage,
-                    onRetry: _retry,
-                    retrying: false,
-                  ),
-                ),
-              _HomeLoadStatus.refreshing ||
-              _HomeLoadStatus.success =>
-                _HomeContent(
-                  user: user,
-                  event: _event,
-                  sidePad: sidePad,
-                  heroHeight: heroHeight,
-                  refreshing: _status == _HomeLoadStatus.refreshing,
-                ),
-            },
-          ),
+        return BlocBuilder<SelectedEventCubit, SelectedEventState>(
+          builder: (context, eventState) {
+            final loading = eventState.loading && eventState.event == null;
+            final hasError =
+                eventState.error != null && eventState.event == null;
+
+            return Scaffold(
+              backgroundColor: AppColors.bgBase,
+              body: RefreshIndicator(
+                color: AppColors.accentPink,
+                onRefresh: _refresh,
+                child: loading
+                    ? const _ScrollableFill(
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.accentPink,
+                          ),
+                        ),
+                      )
+                    : hasError
+                        ? _ScrollableFill(
+                            child: LoadErrorView(
+                              kind: LoadErrorKind.generic,
+                              message: eventState.error,
+                              onRetry: _refresh,
+                              retrying: false,
+                            ),
+                          )
+                        : _HomeContent(
+                            user: user,
+                            event: eventState.event,
+                            sidePad: sidePad,
+                            heroHeight: heroHeight,
+                            refreshing: eventState.loading,
+                          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -216,6 +134,9 @@ class _HomeContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final eventId = event?.id;
+    final statusLabel = event?.status.toUpperCase();
+
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(
         parent: BouncingScrollPhysics(),
@@ -227,6 +148,7 @@ class _HomeContent extends StatelessWidget {
             horizontalPadding: sidePad,
             dateLabel: event?.dateRangeLabel ?? EventConstants.dateLabel,
             eventName: event?.name,
+            statusLabel: statusLabel,
           ),
         ),
         SliverPadding(
@@ -258,14 +180,26 @@ class _HomeContent extends StatelessWidget {
                         onTap: () => context.go('/profile'),
                       ),
                     SizedBox(height: context.sectionGap * 0.75),
+                    QuickActionCard(
+                      icon: Icons.event_available_outlined,
+                      title: 'My events',
+                      subtitle: event?.name ?? 'Switch or book an event',
+                      onTap: () => context.push('/events'),
+                    ),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
                           child: QuickActionCard(
                             icon: Icons.qr_code_2,
                             title: 'Check-in',
-                            subtitle: 'Your event QR',
-                            onTap: () => context.push('/check-in'),
+                            subtitle: 'Selected event QR',
+                            onTap: () {
+                              final q = eventId != null && eventId.isNotEmpty
+                                  ? '/check-in?eventId=$eventId'
+                                  : '/check-in';
+                              context.push(q);
+                            },
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -278,6 +212,20 @@ class _HomeContent extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    QuickActionCard(
+                      icon: Icons.storefront_outlined,
+                      title: 'Sponsors',
+                      subtitle: 'Partner offers & resources',
+                      onTap: () => context.push('/sponsors'),
+                    ),
+                    const SizedBox(height: 12),
+                    QuickActionCard(
+                      icon: Icons.shopping_bag_outlined,
+                      title: 'Store',
+                      subtitle: 'Browse products & merch',
+                      onTap: () => context.push('/store'),
                     ),
                   ],
                 ),
@@ -296,12 +244,14 @@ class _HomeHero extends StatelessWidget {
     required this.horizontalPadding,
     required this.dateLabel,
     this.eventName,
+    this.statusLabel,
   });
 
   final double height;
   final double horizontalPadding;
   final String dateLabel;
   final String? eventName;
+  final String? statusLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -359,15 +309,45 @@ class _HomeHero extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text(
-                          eventName?.toUpperCase().isNotEmpty == true
-                              ? eventName!.toUpperCase()
-                              : EventConstants.brandLiveLabel,
-                          style: AppTypography.microLabel.copyWith(
-                            color: AppColors.textPrimary,
-                            letterSpacing: 2.0,
-                            fontSize: 11,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                eventName?.toUpperCase().isNotEmpty == true
+                                    ? eventName!.toUpperCase()
+                                    : EventConstants.brandLiveLabel,
+                                style: AppTypography.microLabel.copyWith(
+                                  color: AppColors.textPrimary,
+                                  letterSpacing: 2.0,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            if (statusLabel != null &&
+                                statusLabel!.isNotEmpty) ...[
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentPink
+                                      .withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  statusLabel!,
+                                  style: AppTypography.microLabel.copyWith(
+                                    color: AppColors.accentPink,
+                                    letterSpacing: 1.1,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         SizedBox(height: context.isShortViewport ? 10 : 14),
                         Text.rich(

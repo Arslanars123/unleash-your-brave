@@ -59,7 +59,23 @@ export function toPublicEvent(event: Event): PublicEvent {
     coverImage: event.coverImage,
     allowPreviousAttendeesAccess: Boolean(event.allowPreviousAttendeesAccess),
     blockQrWhenRenewalUnpaid: event.blockQrWhenRenewalUnpaid !== false,
+    published: event.published !== false,
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
   };
+}
+
+/** Prefer live edition, else soonest upcoming, else most recent by start date. */
+export function pickPreferredEvent<T extends Pick<Event, 'startDate' | 'endDate' | 'paused'>>(
+  events: T[],
+  now = new Date(),
+): T | null {
+  if (events.length === 0) return null;
+  const live = events.find((event) => editionStatus(event, now) === 'live');
+  if (live) return live;
+  const upcoming = events
+    .filter((event) => editionStatus(event, now) === 'upcoming')
+    .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  if (upcoming[0]) return upcoming[0];
+  return [...events].sort((a, b) => b.startDate.getTime() - a.startDate.getTime())[0] ?? null;
 }

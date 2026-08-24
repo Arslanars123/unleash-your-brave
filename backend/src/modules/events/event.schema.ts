@@ -71,6 +71,7 @@ export const createEventSchema = z
     allowPreviousAttendeesAccess: z.boolean().optional().default(false),
     blockQrWhenRenewalUnpaid: z.boolean().optional().default(true),
     paused: z.boolean().optional().default(false),
+    published: z.boolean().optional().default(true),
   })
   .superRefine((value, ctx) => {
     if (
@@ -153,6 +154,7 @@ export const updateEventSchema = z
     allowPreviousAttendeesAccess: z.boolean().optional(),
     blockQrWhenRenewalUnpaid: z.boolean().optional(),
     paused: z.boolean().optional(),
+    published: z.boolean().optional(),
     notifyAttendees: z.boolean().optional().default(true),
   })
   .refine((value) => Object.keys(value).filter((k) => k !== 'notifyAttendees').length > 0, {
@@ -201,6 +203,7 @@ export const scheduleEventSchema = z
     copyDetailsFromPrevious: z.boolean().optional().default(true),
     allowPreviousAttendeesAccess: z.boolean().optional().default(false),
     blockQrWhenRenewalUnpaid: z.boolean().optional().default(true),
+    published: z.boolean().optional().default(true),
     notifyAttendees: z.boolean().optional().default(true),
   })
   .superRefine((value, ctx) => {

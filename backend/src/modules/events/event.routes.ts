@@ -17,6 +17,7 @@ export function createEventRouter(controller: EventController): Router {
   router.get('/', validate({ query: listEventsQuerySchema }), asyncHandler(controller.list));
   router.get('/workspace', asyncHandler(controller.getWorkspace));
   router.get('/current', asyncHandler(controller.getCurrent));
+  router.get('/available', asyncHandler(controller.listAvailable));
   router.get('/:id', validate({ params: eventIdParamSchema }), asyncHandler(controller.getById));
 
   router.post(

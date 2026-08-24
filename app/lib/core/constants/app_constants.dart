@@ -12,11 +12,17 @@ class ApiConstants {
   static const updateMyProfile = '/users/me';
   static const uploadImage = '/uploads/images';
   static const currentEvent = '/events/current';
+  static const availableEvents = '/events/available';
+  static const events = '/events';
   static const sessions = '/sessions';
+  static const sponsors = '/sponsors';
+  static const storeCategories = '/store/categories';
+  static const storeProducts = '/store/products';
   static const announcements = '/announcements';
   static const announcementsFeed = '/announcements/feed';
   static const announcementsUnreadCount = '/announcements/unread-count';
   static const checkInMyQr = '/checkins/my-qr';
+  static const checkInMyBookings = '/checkins/my-bookings';
   static const posts = '/posts';
   static const memberships = '/memberships';
   static const accessMe = '/access/me';
@@ -60,4 +66,5 @@ class StorageKeys {
   static const fcmToken = 'fcm_token';
   static const pushNotificationsEnabled = 'push_notifications_enabled';
   static const onboardingCompleted = 'onboarding_completed';
+  static const selectedEventId = 'selected_event_id';
 }

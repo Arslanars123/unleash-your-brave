@@ -3,7 +3,12 @@ import { logger } from '../../core/logger.js';
 import type { AnnouncementService } from '../announcements/announcement.service.js';
 import type { EventRepository, PaginatedResult } from './event.repository.js';
 import { CANONICAL_EVENT_NAME } from './event.constants.js';
-import { hasEditionEnded, startOfUtcDay, toPublicEvent } from './event.mapper.js';
+import {
+  editionStatus,
+  pickPreferredEvent,
+  startOfUtcDay,
+  toPublicEvent,
+} from './event.mapper.js';
 import type {
   CreateEventInput,
   Event,
@@ -136,26 +141,54 @@ export class EventService {
     return items[0] ?? null;
   }
 
-  /** Latest edition as public DTO. */
+  /** Preferred public edition: live → soonest upcoming → latest. */
+  async getPreferred(): Promise<Event | null> {
+    const { items } = await this.events.list({ page: 1, perPage: 100 });
+    return pickPreferredEvent(items);
+  }
+
+  /** Preferred edition as public DTO (mobile “current” event). */
   async getCurrent(): Promise<PublicEvent> {
-    const latest = await this.getLatest();
-    if (!latest) throw new NotFoundError('Event');
-    return toPublicEvent(latest);
+    const preferred = await this.getPreferred();
+    if (!preferred) throw new NotFoundError('Event');
+    return toPublicEvent(preferred);
+  }
+
+  /**
+   * Published upcoming/live editions for checkout + app discovery
+   * (excludes drafts, paused, and ended).
+   */
+  async listAvailableForPurchase(): Promise<PublicEvent[]> {
+    const { items } = await this.events.list({ page: 1, perPage: 100 });
+    return items
+      .filter((event) => event.published !== false)
+      .filter((event) => {
+        const status = editionStatus(event);
+        return status === 'upcoming' || status === 'live';
+      })
+      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+      .map(toPublicEvent);
   }
 
   async getWorkspace(): Promise<EventWorkspace> {
     const { items } = await this.events.list({ page: 1, perPage: 100 });
-    const [latest, ...older] = items;
-    const current = latest ? toPublicEvent(latest) : null;
-    const canScheduleNew = !latest || hasEditionEnded(latest);
+    const editions = items.map(toPublicEvent);
+    const preferred = pickPreferredEvent(items);
+    const current = preferred ? toPublicEvent(preferred) : null;
+    const pastEditions = editions.filter((edition) => edition.status === 'ended');
+    const upcomingEditions = editions.filter(
+      (edition) =>
+        (edition.status === 'upcoming' || edition.status === 'live' || edition.status === 'paused') &&
+        edition.id !== current?.id,
+    );
 
     return {
       current,
-      canScheduleNew,
-      scheduleBlockedReason: canScheduleNew
-        ? null
-        : 'You can schedule a new event only after the current edition’s dates have passed.',
-      pastEditions: older.map(toPublicEvent),
+      canScheduleNew: true,
+      scheduleBlockedReason: null,
+      editions,
+      pastEditions,
+      upcomingEditions,
     };
   }
 
@@ -168,14 +201,9 @@ export class EventService {
    */
   async create(input: CreateEventInput): Promise<PublicEvent> {
     const existing = await this.getLatest();
-    if (existing && !hasEditionEnded(existing)) {
+    if (existing) {
       throw new ConflictError(
-        'An active edition already exists. Use Schedule new event after its dates have passed.',
-      );
-    }
-    if (existing && hasEditionEnded(existing)) {
-      throw new ConflictError(
-        'Use Schedule new event to create the next Unleash Your Brave edition.',
+        'Use Schedule new event to create another Unleash Your Brave edition.',
       );
     }
 
@@ -183,16 +211,11 @@ export class EventService {
   }
 
   /**
-   * Creates the next edition with new dates.
-   * Blocked until the latest edition’s end date is in the past.
+   * Creates another edition with new dates.
+   * Allowed while a live/upcoming edition already exists.
    */
   async scheduleNew(input: ScheduleEventInput): Promise<PublicEvent> {
     const latest = await this.getLatest();
-    if (latest && !hasEditionEnded(latest)) {
-      throw new ConflictError(
-        'You can schedule a new event only after the current edition’s dates have passed.',
-      );
-    }
 
     const copy = Boolean(input.copyDetailsFromPrevious && latest);
     const pick = (override: string | undefined, previous: string): string => {
@@ -227,10 +250,11 @@ export class EventService {
       blockQrWhenRenewalUnpaid:
         input.blockQrWhenRenewalUnpaid ??
         (copy ? latest?.blockQrWhenRenewalUnpaid !== false : true),
+      published: input.published !== false,
       paused: false,
     });
 
-    if (input.notifyAttendees !== false) {
+    if (input.notifyAttendees !== false && created.published) {
       await this.notifyDatesAnnounced(created.id, created.name, created.days.map((d) => ({
         dayNumber: d.dayNumber,
         date: new Date(d.date),
@@ -243,10 +267,6 @@ export class EventService {
 
   async update(id: string, input: UpdateEventInput): Promise<PublicEvent> {
     const existing = await this.requireEvent(id);
-    const latest = await this.getLatest();
-    if (!latest || latest.id !== existing.id) {
-      throw new ForbiddenError('Past editions are read-only. Schedule a new event for new dates.');
-    }
 
     const shouldRebuildDays =
       input.days !== undefined || input.startDate !== undefined || input.endDate !== undefined;
@@ -295,11 +315,12 @@ export class EventService {
         ? { blockQrWhenRenewalUnpaid: input.blockQrWhenRenewalUnpaid }
         : {}),
       ...(input.paused !== undefined ? { paused: nextPaused } : {}),
+      ...(input.published !== undefined ? { published: Boolean(input.published) } : {}),
     });
 
     if (!updated) throw new NotFoundError('Event');
 
-    const shouldNotify = input.notifyAttendees !== false;
+    const shouldNotify = input.notifyAttendees !== false && updated.published !== false;
     if (shouldNotify) {
       if (pausedChanged && nextPaused) {
         await this.notifyPaused(updated);
@@ -347,6 +368,7 @@ export class EventService {
       allowPreviousAttendeesAccess: Boolean(input.allowPreviousAttendeesAccess),
       blockQrWhenRenewalUnpaid: input.blockQrWhenRenewalUnpaid !== false,
       paused: Boolean(input.paused),
+      published: input.published !== false,
     });
 
     return toPublicEvent(created);

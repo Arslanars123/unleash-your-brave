@@ -202,8 +202,58 @@ export interface CheckInScanMembershipSummary extends AttendeePurchaseSummary {
   carriedFromPrevious?: boolean;
 }
 
+export type CheckInFormFieldType = 'text' | 'textarea' | 'checkbox' | 'yes_no';
+
+export interface CheckInFormField {
+  id: string;
+  label: string;
+  type: CheckInFormFieldType;
+  required: boolean;
+  sortOrder: number;
+}
+
+export interface PublicCheckInForm {
+  id: string;
+  eventId: string;
+  title: string;
+  description: string;
+  fields: CheckInFormField[];
+  requireSignature: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertCheckInFormPayload {
+  title: string;
+  description?: string;
+  fields: Array<{
+    id?: string;
+    label: string;
+    type: CheckInFormFieldType;
+    required?: boolean;
+    sortOrder?: number;
+  }>;
+  requireSignature?: boolean;
+  isActive?: boolean;
+}
+
+export interface CompleteCheckInWithFormPayload {
+  token?: string;
+  eventId?: string;
+  userId?: string;
+  expectedEventId?: string;
+  answers: Record<string, string | boolean>;
+  signatureDataUrl?: string;
+  signedName: string;
+}
+
 export interface CheckInScanResult {
-  checkIn: PublicCheckInRow;
+  /** True when an active form must be completed before check-in is created. */
+  requiresForm?: boolean;
+  form?: PublicCheckInForm | null;
+  /** Null when requiresForm is true (check-in not created yet). */
+  checkIn: PublicCheckInRow | null;
   alreadyCheckedIn: boolean;
   user: PublicUser;
   membership: CheckInScanMembershipSummary;
@@ -273,15 +323,23 @@ export interface PublicEvent {
   coverImage: string;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  /** When false, draft — hidden from public/app discovery. Defaults true. */
+  published?: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface EventWorkspace {
   current: PublicEvent | null;
+  /** Always true — upcoming editions can be created while another is live. */
   canScheduleNew: boolean;
   scheduleBlockedReason: string | null;
+  /** All editions newest-first (including current). */
+  editions: PublicEvent[];
+  /** Ended editions only (excludes current when it is still active). */
   pastEditions: PublicEvent[];
+  /** Upcoming/live editions that are not the preferred current row. */
+  upcomingEditions: PublicEvent[];
 }
 
 export interface EventPayload {
@@ -298,6 +356,7 @@ export interface EventPayload {
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
   paused?: boolean;
+  published?: boolean;
   notifyAttendees?: boolean;
 }
 
@@ -314,6 +373,8 @@ export interface ScheduleEventPayload {
   copyDetailsFromPrevious?: boolean;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  /** Draft until published (default true when omitted). */
+  published?: boolean;
   notifyAttendees?: boolean;
 }
 

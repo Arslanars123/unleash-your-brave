@@ -72,6 +72,15 @@ async function ensureIndexes(database: Db): Promise<void> {
       { key: { eventId: 1, isActive: 1 }, name: 'store_products_event_active' },
       { key: { eventId: 1, featured: 1 }, name: 'store_products_event_featured' },
     ]),
+    database.collection('store_orders').createIndexes([
+      {
+        key: { stripeCheckoutSessionId: 1 },
+        unique: true,
+        name: 'store_orders_stripe_session_unique',
+      },
+      { key: { eventId: 1, purchasedAt: -1 }, name: 'store_orders_event_purchased' },
+      { key: { userId: 1, purchasedAt: -1 }, name: 'store_orders_user_purchased' },
+    ]),
     database.collection('memberships').createIndexes([
       { key: { eventId: 1 }, name: 'memberships_eventId' },
       { key: { name: 1 }, name: 'memberships_name' },
@@ -133,6 +142,19 @@ async function ensureIndexes(database: Db): Promise<void> {
     database.collection('device_tokens').createIndexes([
       { key: { token: 1 }, unique: true, name: 'device_tokens_token_unique' },
       { key: { userId: 1 }, name: 'device_tokens_userId' },
+    ]),
+    database.collection('checkin_forms').createIndexes([
+      { key: { eventId: 1 }, unique: true, name: 'checkin_forms_eventId_unique' },
+      { key: { eventId: 1, isActive: 1 }, name: 'checkin_forms_event_active' },
+    ]),
+    database.collection('checkin_form_submissions').createIndexes([
+      {
+        key: { eventId: 1, userId: 1 },
+        unique: true,
+        name: 'checkin_form_submissions_event_user_unique',
+      },
+      { key: { formId: 1, submittedAt: -1 }, name: 'checkin_form_submissions_form_submitted' },
+      { key: { eventId: 1, submittedAt: -1 }, name: 'checkin_form_submissions_event_submitted' },
     ]),
   ]);
 }

@@ -14,6 +14,11 @@ export class CheckInController {
     sendSuccess(res, await this.service.getMyQr(req.auth.userId, eventId));
   };
 
+  myBookings = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth) throw new UnauthorizedError();
+    sendSuccess(res, await this.service.listMyBookings(req.auth.userId));
+  };
+
   scan = async (req: Request, res: Response): Promise<void> => {
     if (!req.auth) throw new UnauthorizedError();
     const body = req.body as {
@@ -30,6 +35,32 @@ export class CheckInController {
         userId: body.userId,
         expectedEventId: body.expectedEventId,
         adminUserId: req.auth.userId,
+      }),
+    );
+  };
+
+  completeWithForm = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth) throw new UnauthorizedError();
+    const body = req.body as {
+      token?: string;
+      eventId?: string;
+      userId?: string;
+      expectedEventId?: string;
+      answers: Record<string, string | boolean>;
+      signatureDataUrl?: string;
+      signedName: string;
+    };
+    sendSuccess(
+      res,
+      await this.service.completeWithForm({
+        token: body.token,
+        eventId: body.eventId,
+        userId: body.userId,
+        expectedEventId: body.expectedEventId,
+        adminUserId: req.auth.userId,
+        answers: body.answers,
+        signatureDataUrl: body.signatureDataUrl,
+        signedName: body.signedName,
       }),
     );
   };

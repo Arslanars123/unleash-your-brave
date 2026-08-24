@@ -22,8 +22,8 @@ function formatUtcDate(iso: string): string {
 }
 
 /**
- * Shared edition scope for Speakers / Sessions / Sponsors.
- * Use `?edition=<id>` to browse a past edition. Admins can still edit past editions.
+ * Shared edition scope for Speakers / Sessions / Sponsors / Check-ins / Store.
+ * Use `?edition=<id>` to browse a non-current edition. Admins can still edit any edition.
  */
 export function useEditionScope() {
   const [params, setParams] = useSearchParams();
@@ -34,19 +34,29 @@ export function useEditionScope() {
 
   const currentEdition = workspaceQuery.data?.current ?? null;
   const pastEditions = workspaceQuery.data?.pastEditions ?? [];
+  const upcomingEditions = workspaceQuery.data?.upcomingEditions ?? [];
+  const workspaceEditions = workspaceQuery.data?.editions;
 
   const editions = useMemo(() => {
-    if (!currentEdition) return pastEditions;
-    return [currentEdition, ...pastEditions];
-  }, [currentEdition, pastEditions]);
+    if (workspaceEditions && workspaceEditions.length > 0) {
+      return workspaceEditions;
+    }
+    const byId = new Map<string, PublicEvent>();
+    for (const edition of [currentEdition, ...upcomingEditions, ...pastEditions]) {
+      if (edition) byId.set(edition.id, edition);
+    }
+    return Array.from(byId.values());
+  }, [workspaceEditions, currentEdition, upcomingEditions, pastEditions]);
 
   const editionIdFromUrl = params.get('edition');
   const selectedEdition =
     editions.find((edition) => edition.id === editionIdFromUrl) ?? currentEdition;
 
-  const isPastEdition = Boolean(
+  const isNonCurrentEdition = Boolean(
     selectedEdition && currentEdition && selectedEdition.id !== currentEdition.id,
   );
+  /** Ended editions only — scanner and “current event” labels use this. */
+  const isPastEdition = Boolean(selectedEdition && selectedEdition.status === 'ended');
   /** Admins may manage content for any selected edition, including past ones. */
   const isReadOnly = false;
 
@@ -71,9 +81,11 @@ export function useEditionScope() {
     editions,
     currentEdition,
     pastEditions,
+    upcomingEditions,
     selectedEdition,
     eventId: selectedEdition?.id,
     isPastEdition,
+    isNonCurrentEdition,
     isReadOnly,
     selectEdition,
     clearEditionFilter,

@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
-import { QrCode, UserCheck, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ClipboardList, QrCode, UserCheck, X } from 'lucide-react';
+import { CheckInFormEditorModal } from '@/features/checkin-forms/components/CheckInFormEditorModal';
+import {
+  CheckInFormGateModal,
+  type CheckInFormGateValues,
+} from '@/features/checkin-forms/components/CheckInFormGateModal';
 import { checkInsApi } from '@/features/checkins/api/checkins-api';
 import { CheckInScanner } from '@/features/checkins/components/CheckInScanner';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
@@ -11,7 +16,7 @@ import {
 import { MembershipRecordPanel } from '@/features/users/components/MembershipRecordPanel';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
-import type { CheckInScanResult } from '@/shared/types/api';
+import type { CheckInScanResult, PublicCheckInForm } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { ListPagination } from '@/shared/ui/ListPagination';
@@ -21,14 +26,27 @@ import { useToast } from '@/shared/ui/toast';
 
 const PER_PAGE = 25;
 
+interface PendingFormScan {
+  form: PublicCheckInForm;
+  userName: string;
+  scanPayload: {
+    token?: string;
+    userId?: string;
+    eventId?: string;
+  };
+}
+
 export function CheckInsPage() {
-  const { eventId, selectedEdition, isPastEdition } = useEditionScope();
+  const { eventId, selectedEdition, isPastEdition, isNonCurrentEdition } = useEditionScope();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<'all' | 'checked_in' | 'not_checked_in'>('all');
   const [token, setToken] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [scanDetail, setScanDetail] = useState<CheckInScanResult | null>(null);
+  const [formEditorOpen, setFormEditorOpen] = useState(false);
+  const [pendingFormScan, setPendingFormScan] = useState<PendingFormScan | null>(null);
+  const pendingPayloadRef = useRef<PendingFormScan['scanPayload'] | null>(null);
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -55,6 +73,23 @@ export function CheckInsPage() {
     setSearch('');
   }, [eventId]);
 
+  function applyScanSuccess(result: CheckInScanResult) {
+    setScanDetail(result);
+    setPendingFormScan(null);
+    pendingPayloadRef.current = null;
+    const name = result.user.name;
+    if (result.alreadyCheckedIn) {
+      const message = `${name} was already checked in`;
+      setLastResult(message);
+      toast.success(message);
+    } else {
+      const message = `Checked in ${name}`;
+      setLastResult(message);
+      toast.success(message);
+    }
+    setToken('');
+  }
+
   const scanMutation = useMutation({
     mutationFn: (payload: {
       token?: string;
@@ -65,20 +100,20 @@ export function CheckInsPage() {
         ...payload,
         expectedEventId: eventId ?? undefined,
       }),
-    onSuccess: async (result) => {
+    onSuccess: async (result, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['checkins'] });
-      setScanDetail(result);
-      const name = result.user.name;
-      if (result.alreadyCheckedIn) {
-        const message = `${name} was already checked in`;
-        setLastResult(message);
-        toast.success(message);
-      } else {
-        const message = `Checked in ${name}`;
-        setLastResult(message);
-        toast.success(message);
+      if (result.requiresForm && result.form) {
+        const pending = {
+          form: result.form,
+          userName: result.user.name,
+          scanPayload: variables,
+        };
+        pendingPayloadRef.current = variables;
+        setPendingFormScan(pending);
+        setLastResult(`Form required for ${result.user.name}`);
+        return;
       }
-      setToken('');
+      applyScanSuccess(result);
     },
     onError: (error) => {
       const message = getApiErrorMessage(error, 'Check-in failed');
@@ -87,19 +122,46 @@ export function CheckInsPage() {
     },
   });
 
+  const completeFormMutation = useMutation({
+    mutationFn: (values: CheckInFormGateValues) => {
+      const scanPayload = pendingPayloadRef.current ?? pendingFormScan?.scanPayload ?? {};
+      return checkInsApi.completeWithForm({
+        ...scanPayload,
+        expectedEventId: eventId ?? undefined,
+        answers: values.answers,
+        signatureDataUrl: values.signatureDataUrl,
+        signedName: values.signedName,
+      });
+    },
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['checkins'] });
+      applyScanSuccess(result);
+    },
+    onError: (error) => {
+      const message = getApiErrorMessage(error, 'Unable to complete check-in form');
+      setLastResult(message);
+      toast.error(message);
+    },
+  });
+
   const handleTokenScan = useCallback(
     (raw: string) => {
       const token = raw.trim();
-      if (!token || scanMutation.isPending) return;
+      if (!token || scanMutation.isPending || completeFormMutation.isPending) return;
       scanMutation.mutate({ token });
     },
-    [scanMutation.isPending, scanMutation.mutate],
+    [scanMutation.isPending, scanMutation.mutate, completeFormMutation.isPending],
   );
 
   const stats = listQuery.data?.stats;
   const checkedIn = stats?.checkedInCount ?? 0;
   const attendees = stats?.attendeeCount ?? 0;
   const membership = scanDetail?.membership;
+  const editionLabel = isPastEdition
+    ? 'Past edition'
+    : isNonCurrentEdition
+      ? 'Other edition'
+      : 'Current edition';
 
   return (
     <div className="page">
@@ -108,10 +170,18 @@ export function CheckInsPage() {
           <span className="page-kicker">Door</span>
           <h1>Check-in</h1>
           <p className="muted">
-            See who checked in for the current event. Switch to a past event to review that
-            edition’s check-in list — each event keeps its own attendance record.
+            See who checked in for the selected event. Switch editions to review another
+            gathering’s attendance — each event keeps its own record.
           </p>
         </div>
+        {eventId ? (
+          <div className="page-header-actions">
+            <Button variant="secondary" onClick={() => setFormEditorOpen(true)}>
+              <ClipboardList size={16} />
+              Check-in form
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       <EditionSwitcher
@@ -119,10 +189,10 @@ export function CheckInsPage() {
         pastBannerTitle="Viewing past event check-ins"
         pastBannerBody={
           selectedEdition
-            ? `${formatEditionRange(selectedEdition)} — attendance below is only for this past event. Use Back to current to return to today’s check-in.`
+            ? `${formatEditionRange(selectedEdition)} — attendance below is only for this edition. Use Back to current to return to today’s check-in.`
             : undefined
         }
-        tipText="Use the Event dropdown to open a previous event and see its check-ins."
+        tipText="Use the Event dropdown to open another edition and see its check-ins."
       />
 
       {!eventId ? (
@@ -144,7 +214,7 @@ export function CheckInsPage() {
             </div>
             <div className="panel">
               <strong>{selectedEdition ? formatEditionRange(selectedEdition) : '—'}</strong>
-              <span className="muted">{isPastEdition ? 'Past edition' : 'Current edition'}</span>
+              <span className="muted">{editionLabel}</span>
             </div>
           </div>
 
@@ -154,8 +224,10 @@ export function CheckInsPage() {
                 Attendees for{' '}
                 {selectedEdition ? formatEditionRange(selectedEdition) : 'this event'}
               </h2>
-              <span className={`status-pill ${isPastEdition ? 'status-scheduled' : 'status-published'}`}>
-                {isPastEdition ? 'Past event' : 'Current event'}
+              <span
+                className={`status-pill ${isPastEdition ? 'status-scheduled' : 'status-published'}`}
+              >
+                {isPastEdition ? 'Past event' : isNonCurrentEdition ? 'Other edition' : 'Current event'}
               </span>
             </div>
             <p className="muted" style={{ marginTop: 0 }}>
@@ -171,9 +243,13 @@ export function CheckInsPage() {
               </h2>
               <p className="muted" style={{ marginTop: 6 }}>
                 Attendees open their event QR in the app. Scan it here, or paste the token if the
-                camera is unavailable.
+                camera is unavailable. If a check-in form is active, you’ll complete it before the
+                check-in is recorded.
               </p>
-              <CheckInScanner onScan={handleTokenScan} disabled={scanMutation.isPending} />
+              <CheckInScanner
+                onScan={handleTokenScan}
+                disabled={scanMutation.isPending || completeFormMutation.isPending}
+              />
               <form
                 className="toolbar"
                 style={{ marginTop: 12 }}
@@ -189,14 +265,18 @@ export function CheckInsPage() {
                   onChange={(e) => setToken(e.target.value)}
                   placeholder="uyb1...."
                 />
-                <Button type="submit" loading={scanMutation.isPending} disabled={!token.trim()}>
+                <Button
+                  type="submit"
+                  loading={scanMutation.isPending}
+                  disabled={!token.trim() || completeFormMutation.isPending}
+                >
                   <UserCheck size={16} />
                   Check in
                 </Button>
               </form>
               {lastResult ? <p className="hint">{lastResult}</p> : null}
 
-              {scanDetail && membership ? (
+              {scanDetail && membership && scanDetail.checkIn ? (
                 <div className="attendee-detail-section" style={{ marginTop: 16 }}>
                   <h3 style={{ marginTop: 0 }}>Last scan details</h3>
                   <dl className="attendee-detail-grid" style={{ marginBottom: 12 }}>
@@ -335,7 +415,11 @@ export function CheckInsPage() {
                               style={{ padding: 0, background: 'transparent' }}
                             >
                               <span className="avatar">
-                                {photo ? <img src={photo} alt="" /> : row.user?.name?.charAt(0) ?? '?'}
+                                {photo ? (
+                                  <img src={photo} alt="" />
+                                ) : (
+                                  row.user?.name?.charAt(0) ?? '?'
+                                )}
                               </span>
                               <div>
                                 <strong>{row.user?.name ?? 'Unknown'}</strong>
@@ -360,7 +444,9 @@ export function CheckInsPage() {
                           <td className="actions">
                             <Button
                               variant="secondary"
-                              disabled={scanMutation.isPending}
+                              disabled={
+                                scanMutation.isPending || completeFormMutation.isPending
+                              }
                               onClick={() =>
                                 void scanMutation.mutateAsync({
                                   eventId: eventId,
@@ -390,6 +476,30 @@ export function CheckInsPage() {
           ) : null}
         </>
       )}
+
+      {eventId ? (
+        <CheckInFormEditorModal
+          open={formEditorOpen}
+          eventId={eventId}
+          onClose={() => setFormEditorOpen(false)}
+        />
+      ) : null}
+
+      {pendingFormScan ? (
+        <CheckInFormGateModal
+          open
+          form={pendingFormScan.form}
+          attendeeName={pendingFormScan.userName}
+          loading={completeFormMutation.isPending}
+          onClose={() => {
+            setPendingFormScan(null);
+            pendingPayloadRef.current = null;
+          }}
+          onSubmit={async (values) => {
+            await completeFormMutation.mutateAsync(values);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

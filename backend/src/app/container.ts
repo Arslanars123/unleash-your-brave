@@ -15,6 +15,9 @@ import { PushNotificationService } from '../modules/chat/push.service.js';
 import { CheckInController } from '../modules/checkins/checkin.controller.js';
 import { createCheckInRouter } from '../modules/checkins/checkin.routes.js';
 import { CheckInService } from '../modules/checkins/checkin.service.js';
+import { CheckInFormController } from '../modules/checkin-forms/checkin-form.controller.js';
+import { createCheckInFormRouter } from '../modules/checkin-forms/checkin-form.routes.js';
+import { CheckInFormService } from '../modules/checkin-forms/checkin-form.service.js';
 import { CouponController } from '../modules/coupons/coupon.controller.js';
 import { createCouponRouter } from '../modules/coupons/coupon.routes.js';
 import { CouponService } from '../modules/coupons/coupon.service.js';
@@ -66,6 +69,7 @@ import { MongoChatReactionRepository } from '../db/repositories/mongo-chat-react
 import { MongoDeviceTokenRepository } from '../db/repositories/mongo-device-token.repository.js';
 import { MongoCouponRepository } from '../db/repositories/mongo-coupon.repository.js';
 import { MongoCheckInRepository } from '../db/repositories/mongo-checkin.repository.js';
+import { MongoCheckInFormRepository } from '../db/repositories/mongo-checkin-form.repository.js';
 import { MongoEventRepository } from '../db/repositories/mongo-event.repository.js';
 import { MongoPostRepository } from '../db/repositories/mongo-post.repository.js';
 import { MongoSessionFeedbackRepository } from '../db/repositories/mongo-session-feedback.repository.js';
@@ -76,6 +80,8 @@ import {
   MongoStoreCategoryRepository,
   MongoStoreProductRepository,
 } from '../db/repositories/mongo-store.repository.js';
+import { MongoStoreOrderRepository } from '../db/repositories/mongo-store-order.repository.js';
+import { StoreCheckoutService } from '../modules/store/store-checkout.service.js';
 import { StoreController } from '../modules/store/store.controller.js';
 import { createStoreRouter } from '../modules/store/store.routes.js';
 import { StoreService } from '../modules/store/store.service.js';
@@ -98,6 +104,8 @@ export async function createContainer() {
   const sponsorRepository = new MongoSponsorRepository();
   const storeCategoryRepository = new MongoStoreCategoryRepository();
   const storeProductRepository = new MongoStoreProductRepository();
+  const storeOrderRepository = new MongoStoreOrderRepository();
+  await storeOrderRepository.ensureIndexes();
   const membershipRepository = new MongoMembershipRepository();
   const membershipPurchaseRepository = new MongoMembershipPurchaseRepository();
   await membershipPurchaseRepository.ensureIndexes();
@@ -106,6 +114,8 @@ export async function createContainer() {
   const countdownSettingsRepository = new MongoCountdownSettingsRepository();
   const checkInRepository = new MongoCheckInRepository();
   await checkInRepository.ensureIndexes();
+  const checkInFormRepository = new MongoCheckInFormRepository();
+  await checkInFormRepository.ensureIndexes();
   const postRepository = new MongoPostRepository();
   const chatGroupRepository = new MongoChatGroupRepository();
   const chatMessageRepository = new MongoChatMessageRepository();
@@ -127,6 +137,7 @@ export async function createContainer() {
     userRepository,
     membershipRepository,
     eventService,
+    membershipPurchaseRepository,
   );
   const speakerService = new SpeakerService(speakerRepository, eventService, userService, mailService);
   const sessionService = new SessionService(
@@ -147,6 +158,12 @@ export async function createContainer() {
   const storeService = new StoreService(
     storeCategoryRepository,
     storeProductRepository,
+    eventService,
+  );
+  const storeCheckoutService = new StoreCheckoutService(
+    storeOrderRepository,
+    storeProductRepository,
+    userRepository,
     eventService,
   );
   const pushNotificationService = new PushNotificationService(deviceTokenRepository);
@@ -183,13 +200,16 @@ export async function createContainer() {
     mailService,
     realtimeHub,
     couponService,
+    storeCheckoutService,
   );
+  const checkInFormService = new CheckInFormService(checkInFormRepository, eventService);
   const checkInService = new CheckInService(
     checkInRepository,
     userRepository,
     eventService,
     membershipRepository,
     checkoutService,
+    checkInFormService,
     effectiveAccessService,
     membershipLifecycleService,
   );
@@ -213,12 +233,13 @@ export async function createContainer() {
   const sessionController = new SessionController(sessionService);
   const sessionFeedbackController = new SessionFeedbackController(sessionFeedbackService);
   const sponsorController = new SponsorController(sponsorService);
-  const storeController = new StoreController(storeService);
+  const storeController = new StoreController(storeService, storeCheckoutService);
   const membershipController = new MembershipController(membershipService);
   const couponController = new CouponController(couponService);
   const accessController = new AccessController(effectiveAccessService);
   const checkoutController = new CheckoutController(checkoutService);
   const announcementController = new AnnouncementController(announcementService);
+  const checkInFormController = new CheckInFormController(checkInFormService);
   const checkInController = new CheckInController(checkInService);
   const postController = new PostController(postService);
   const chatController = new ChatController(chatService, chatHub, pushNotificationService);
@@ -258,6 +279,7 @@ export async function createContainer() {
       access: createAccessRouter(accessController),
       checkout: createCheckoutRouter(checkoutController),
       announcements: createAnnouncementRouter(announcementController),
+      checkinForms: createCheckInFormRouter(checkInFormController),
       checkins: createCheckInRouter(checkInController),
       posts: createPostRouter(postController),
       uploads: createUploadRouter(uploadController),
@@ -277,6 +299,7 @@ export async function createContainer() {
       membershipLifecycleService,
       checkoutService,
       announcementService,
+      checkInFormService,
       checkInService,
       postService,
       chatService,

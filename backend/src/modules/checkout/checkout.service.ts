@@ -62,6 +62,7 @@ export class CheckoutService {
     private readonly mail: MailService,
     private readonly realtimeHub: RealtimeHub,
     private readonly coupons?: CouponService,
+    private readonly storeCheckout?: { fulfillCheckoutSession: (session: Stripe.Checkout.Session) => Promise<void> },
   ) {}
 
   private requireStripe(): Stripe {
@@ -77,31 +78,93 @@ export class CheckoutService {
   }
 
   async listCatalog(eventId?: string) {
-    const event = eventId
-      ? await this.events.getById(eventId)
-      : await this.events.getCurrent();
+    if (eventId) {
+      const event = await this.events.getById(eventId);
+      const { items } = await this.memberships.list({
+        page: 1,
+        perPage: 200,
+        eventId: event.id,
+      });
+      const sorted = [...items].sort(
+        (a, b) =>
+          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+          a.price - b.price ||
+          a.name.localeCompare(b.name),
+      );
+      return {
+        event: {
+          id: event.id,
+          name: event.name,
+          status: event.status,
+          startDate: event.startDate,
+          endDate: event.endDate,
+          tagline: event.tagline,
+          description: event.description,
+          venueName: event.venueName,
+          venueCity: event.venueCity,
+          coverImage: event.coverImage,
+          published: event.published,
+        },
+        memberships: sorted.map(toPublicMembership),
+        events: [
+          {
+            event: {
+              id: event.id,
+              name: event.name,
+              status: event.status,
+              startDate: event.startDate,
+              endDate: event.endDate,
+              tagline: event.tagline,
+              description: event.description,
+              venueName: event.venueName,
+              venueCity: event.venueCity,
+              coverImage: event.coverImage,
+              published: event.published,
+            },
+            memberships: sorted.map(toPublicMembership),
+          },
+        ],
+      };
+    }
 
-    const { items } = await this.memberships.list({
-      page: 1,
-      perPage: 200,
-      eventId: event.id,
-    });
+    const available = await this.events.listAvailableForPurchase();
+    const events = [];
+    for (const event of available) {
+      const { items } = await this.memberships.list({
+        page: 1,
+        perPage: 200,
+        eventId: event.id,
+      });
+      if (items.length === 0) continue;
+      const sorted = [...items].sort(
+        (a, b) =>
+          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+          a.price - b.price ||
+          a.name.localeCompare(b.name),
+      );
+      events.push({
+        event: {
+          id: event.id,
+          name: event.name,
+          status: event.status,
+          startDate: event.startDate,
+          endDate: event.endDate,
+          tagline: event.tagline,
+          description: event.description,
+          venueName: event.venueName,
+          venueCity: event.venueCity,
+          coverImage: event.coverImage,
+          published: event.published,
+        },
+        memberships: sorted.map(toPublicMembership),
+      });
+    }
 
-    const sorted = [...items].sort(
-      (a, b) =>
-        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
-        a.price - b.price ||
-        a.name.localeCompare(b.name),
-    );
+    const primary = events[0] ?? null;
     return {
-      event: {
-        id: event.id,
-        name: event.name,
-        status: event.status,
-        startDate: event.startDate,
-        endDate: event.endDate,
-      },
-      memberships: sorted.map(toPublicMembership),
+      event: primary?.event ?? null,
+      memberships: primary?.memberships ?? [],
+      events,
     };
   }
 
@@ -118,9 +181,103 @@ export class CheckoutService {
       base: Omit<CheckoutEligibility, 'existingAccount'>,
     ): CheckoutEligibility => this.attachExistingAccount(base, existing, nameInput);
 
-    // Any role with a membership is an attendee for upgrade/renew rules
-    // (speakers/sponsors may also purchase).
+    // Event-scoped: what they already paid for on THIS edition.
+    const paidForEvent = existing
+      ? (await this.purchases.listByEmailAndEvent(normalizedEmail, membership.eventId)).filter(
+          (item) => item.paymentStatus === 'paid',
+        )
+      : [];
+    const latestPaidForEvent = [...paidForEvent].sort(
+      (a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime(),
+    )[0];
+
+    if (latestPaidForEvent) {
+      if (latestPaidForEvent.membershipId === membership.id) {
+        if (membership.billingKind === 'renewable') {
+          return withAccount({
+            allowed: true,
+            reason: null,
+            kind: 'renew',
+            currentMembershipId: membership.id,
+            currentMembershipName: membership.name,
+            currentMembershipPrice: membership.price,
+            targetMembershipId: membership.id,
+            targetMembershipName: membership.name,
+            targetMembershipPrice: membership.price,
+            eventId: membership.eventId,
+          });
+        }
+        return withAccount({
+          allowed: false,
+          reason: 'You already have this membership for this event',
+          kind: null,
+          currentMembershipId: membership.id,
+          currentMembershipName: membership.name,
+          currentMembershipPrice: membership.price,
+          targetMembershipId: membership.id,
+          targetMembershipName: membership.name,
+          targetMembershipPrice: membership.price,
+          eventId: membership.eventId,
+        });
+      }
+
+      const currentOnEvent = await this.memberships.findById(latestPaidForEvent.membershipId);
+      const currentPrice = currentOnEvent?.price ?? latestPaidForEvent.price;
+      const currentName = currentOnEvent?.name ?? latestPaidForEvent.membershipName;
+      const currentRank =
+        currentOnEvent && (currentOnEvent.tierRank ?? 0) > 0
+          ? currentOnEvent.tierRank
+          : currentPrice;
+      const targetRank = (membership.tierRank ?? 0) > 0 ? membership.tierRank : membership.price;
+
+      if (targetRank <= currentRank) {
+        return withAccount({
+          allowed: false,
+          reason:
+            'You already have access to this event. You can only upgrade to a higher membership plan.',
+          kind: null,
+          currentMembershipId: latestPaidForEvent.membershipId,
+          currentMembershipName: currentName,
+          currentMembershipPrice: currentPrice,
+          targetMembershipId: membership.id,
+          targetMembershipName: membership.name,
+          targetMembershipPrice: membership.price,
+          eventId: membership.eventId,
+        });
+      }
+
+      return withAccount({
+        allowed: true,
+        reason: null,
+        kind: 'upgrade',
+        currentMembershipId: latestPaidForEvent.membershipId,
+        currentMembershipName: currentName,
+        currentMembershipPrice: currentPrice,
+        targetMembershipId: membership.id,
+        targetMembershipName: membership.name,
+        targetMembershipPrice: membership.price,
+        eventId: membership.eventId,
+      });
+    }
+
+    // No paid booking for this event yet — fresh purchase (even if they hold another edition).
     if (!existing || !existing.membershipId) {
+      return withAccount({
+        allowed: true,
+        reason: null,
+        kind: 'purchase',
+        currentMembershipId: null,
+        currentMembershipName: null,
+        currentMembershipPrice: null,
+        targetMembershipId: membership.id,
+        targetMembershipName: membership.name,
+        targetMembershipPrice: membership.price,
+        eventId: membership.eventId,
+      });
+    }
+
+    const current = await this.memberships.findById(existing.membershipId);
+    if (!current || current.eventId !== membership.eventId) {
       return withAccount({
         allowed: true,
         reason: null,
@@ -152,7 +309,7 @@ export class CheckoutService {
       }
       return withAccount({
         allowed: false,
-        reason: 'You already have this membership for the current event',
+        reason: 'You already have this membership for this event',
         kind: null,
         currentMembershipId: existing.membershipId,
         currentMembershipName: membership.name,
@@ -164,29 +321,11 @@ export class CheckoutService {
       });
     }
 
-    const current = await this.memberships.findById(existing.membershipId);
-    if (current && current.eventId !== membership.eventId) {
-      // Different event edition on record — treat as a fresh purchase for this membership's event.
-      return withAccount({
-        allowed: true,
-        reason: null,
-        kind: 'purchase',
-        currentMembershipId: null,
-        currentMembershipName: null,
-        currentMembershipPrice: null,
-        targetMembershipId: membership.id,
-        targetMembershipName: membership.name,
-        targetMembershipPrice: membership.price,
-        eventId: membership.eventId,
-      });
-    }
-
-    const currentPrice = current?.price ?? 0;
-    const currentName = current?.name ?? 'Current membership';
-    const currentRank = (current?.tierRank ?? 0) > 0 ? current!.tierRank : currentPrice;
+    const currentPrice = current.price ?? 0;
+    const currentName = current.name ?? 'Current membership';
+    const currentRank = (current.tierRank ?? 0) > 0 ? current.tierRank : currentPrice;
     const targetRank = (membership.tierRank ?? 0) > 0 ? membership.tierRank : membership.price;
 
-    // Expired renewable holders may re-buy the same or a higher tier.
     const isExpired =
       existing.membershipStatus === 'expired' ||
       (existing.membershipExpiresAt != null &&
@@ -409,12 +548,28 @@ export class CheckoutService {
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.purchaseType === 'store') {
+        if (!this.storeCheckout) {
+          logger.error({ sessionId: session.id }, 'Store checkout handler is not configured');
+          throw new BadRequestError('Store checkout is not configured');
+        }
+        await this.storeCheckout.fulfillCheckoutSession(session);
+        return;
+      }
       await this.fulfillCheckoutSession(session);
       return;
     }
 
     if (event.type === 'checkout.session.async_payment_succeeded') {
       const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.purchaseType === 'store') {
+        if (!this.storeCheckout) {
+          logger.error({ sessionId: session.id }, 'Store checkout handler is not configured');
+          throw new BadRequestError('Store checkout is not configured');
+        }
+        await this.storeCheckout.fulfillCheckoutSession(session);
+        return;
+      }
       await this.fulfillCheckoutSession(session);
       return;
     }

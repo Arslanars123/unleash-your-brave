@@ -9,16 +9,19 @@ import 'package:unleash_your_brave/features/agenda/presentation/pages/agenda_pag
 import 'package:unleash_your_brave/features/agenda/presentation/pages/session_detail_page.dart';
 import 'package:unleash_your_brave/features/announcements/presentation/pages/notifications_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:unleash_your_brave/features/checkin/domain/entities/event_booking_entity.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/pages/checkin_qr_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/forgot_password_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/login_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/set_password_page.dart';
-import 'package:unleash_your_brave/features/auth/presentation/pages/signup_page.dart';
 import 'package:unleash_your_brave/features/auth/presentation/pages/verify_code_page.dart';
 import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_room_cubit.dart';
 import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_cubit.dart';
 import 'package:unleash_your_brave/features/chat/presentation/pages/chat_list_page.dart';
 import 'package:unleash_your_brave/features/chat/presentation/pages/chat_room_page.dart';
+import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
+import 'package:unleash_your_brave/features/home/presentation/pages/event_detail_page.dart';
+import 'package:unleash_your_brave/features/home/presentation/pages/events_list_page.dart';
 import 'package:unleash_your_brave/features/home/presentation/pages/home_page.dart';
 import 'package:unleash_your_brave/features/legal/presentation/pages/legal_document_page.dart';
 import 'package:unleash_your_brave/features/map/presentation/pages/map_page.dart';
@@ -26,6 +29,12 @@ import 'package:unleash_your_brave/features/onboarding/presentation/pages/onboar
 import 'package:unleash_your_brave/features/shell/presentation/pages/edit_profile_page.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/main_shell.dart';
 import 'package:unleash_your_brave/features/shell/presentation/pages/profile_page.dart';
+import 'package:unleash_your_brave/features/sponsors/domain/entities/sponsor_entity.dart';
+import 'package:unleash_your_brave/features/sponsors/presentation/pages/sponsor_detail_page.dart';
+import 'package:unleash_your_brave/features/sponsors/presentation/pages/sponsors_list_page.dart';
+import 'package:unleash_your_brave/features/store/domain/entities/store_entity.dart';
+import 'package:unleash_your_brave/features/store/presentation/pages/store_page.dart';
+import 'package:unleash_your_brave/features/store/presentation/pages/store_product_detail_page.dart';
 import 'package:unleash_your_brave/features/splash/presentation/pages/splash_page.dart';
 
 class AppRouter {
@@ -81,7 +90,10 @@ class AppRouter {
         builder: (context, state) => const OnboardingPage(),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
-      GoRoute(path: '/signup', builder: (context, state) => const SignupPage()),
+      GoRoute(
+        path: '/signup',
+        redirect: (context, state) => '/login',
+      ),
       GoRoute(
         path: '/verify-code',
         builder: (context, state) => const VerifyCodePage(),
@@ -190,7 +202,30 @@ class AppRouter {
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,
         path: '/check-in',
-        builder: (context, state) => const CheckInQrPage(),
+        builder: (context, state) {
+          final eventId = state.uri.queryParameters['eventId'];
+          return CheckInQrPage(eventId: eventId);
+        },
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/events',
+        builder: (context, state) => const EventsListPage(),
+        routes: [
+          GoRoute(
+            path: ':eventId',
+            builder: (context, state) {
+              final eventId = state.pathParameters['eventId'] ?? '';
+              final extra = state.extra;
+              return EventDetailPage(
+                eventId: eventId,
+                initialBooking:
+                    extra is EventBookingEntity ? extra : null,
+                initialEvent: extra is EventEntity ? extra : null,
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,
@@ -199,6 +234,42 @@ class AppRouter {
           final highlightId = state.uri.queryParameters['id'];
           return NotificationsPage(highlightId: highlightId);
         },
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/sponsors',
+        builder: (context, state) => const SponsorsListPage(),
+        routes: [
+          GoRoute(
+            path: ':sponsorId',
+            builder: (context, state) {
+              final sponsorId = state.pathParameters['sponsorId'] ?? '';
+              final extra = state.extra;
+              return SponsorDetailPage(
+                sponsorId: sponsorId,
+                initialSponsor: extra is SponsorEntity ? extra : null,
+              );
+            },
+          ),
+        ],
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/store',
+        builder: (context, state) => const StorePage(),
+        routes: [
+          GoRoute(
+            path: 'products/:productId',
+            builder: (context, state) {
+              final productId = state.pathParameters['productId'] ?? '';
+              final extra = state.extra;
+              return StoreProductDetailPage(
+                productId: productId,
+                initialProduct: extra is StoreProductEntity ? extra : null,
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,

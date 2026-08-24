@@ -1,6 +1,11 @@
 import type { Request, Response } from 'express';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
+import type { StoreCheckoutService } from './store-checkout.service.js';
 import type { StoreService } from './store.service.js';
+import type {
+  CreateStoreCheckoutSessionInput,
+  ListStoreOrdersQuery,
+} from './store-order.types.js';
 import type {
   CreateStoreCategoryInput,
   CreateStoreProductInput,
@@ -11,7 +16,10 @@ import type {
 } from './store.types.js';
 
 export class StoreController {
-  constructor(private readonly service: StoreService) {}
+  constructor(
+    private readonly service: StoreService,
+    private readonly checkout: StoreCheckoutService,
+  ) {}
 
   listCategories = async (req: Request, res: Response): Promise<void> => {
     const query = req.query as unknown as ListStoreCategoriesQuery;
@@ -63,5 +71,30 @@ export class StoreController {
   removeProduct = async (req: Request, res: Response): Promise<void> => {
     await this.service.deleteProduct(req.params.id as string);
     res.status(204).send();
+  };
+
+  createCheckoutSession = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(
+      res,
+      await this.checkout.createCheckoutSession(
+        req.auth!.userId,
+        req.body as CreateStoreCheckoutSessionInput,
+      ),
+      201,
+    );
+  };
+
+  getCheckoutSession = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.checkout.getSessionStatus(req.params.id as string));
+  };
+
+  listOrders = async (req: Request, res: Response): Promise<void> => {
+    const query = req.query as unknown as ListStoreOrdersQuery;
+    const { items, total } = await this.checkout.listOrders(query);
+    sendPaginated(res, items, buildPaginationMeta(query.page, query.perPage, total));
+  };
+
+  listMyOrders = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.checkout.listMyOrders(req.auth!.userId));
   };
 }

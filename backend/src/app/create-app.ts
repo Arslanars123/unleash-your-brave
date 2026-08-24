@@ -49,7 +49,7 @@ export function createApp(container: Container): Express {
     asyncHandler(container.controllers.checkout.stripeWebhook),
   );
 
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
   app.use('/uploads', express.static(uploadsRoot));
   app.use(
@@ -85,6 +85,7 @@ export function createApp(container: Container): Express {
   app.use('/api/v1/access', container.routers.access);
   app.use('/api/v1/checkout', container.routers.checkout);
   app.use('/api/v1/announcements', container.routers.announcements);
+  app.use('/api/v1/checkin-forms', container.routers.checkinForms);
   app.use('/api/v1/checkins', container.routers.checkins);
   app.use('/api/v1/posts', container.routers.posts);
   app.use('/api/v1/uploads', container.routers.uploads);

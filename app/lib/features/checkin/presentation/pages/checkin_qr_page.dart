@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:unleash_your_brave/core/responsive/responsive.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
@@ -13,9 +14,12 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
 import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
+import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 
 class CheckInQrPage extends StatefulWidget {
-  const CheckInQrPage({super.key});
+  const CheckInQrPage({super.key, this.eventId});
+
+  final String? eventId;
 
   @override
   State<CheckInQrPage> createState() => _CheckInQrPageState();
@@ -26,10 +30,24 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
   String? _error;
   CheckInQrEntity? _qr;
 
+  String? get _resolvedEventId {
+    final fromWidget = widget.eventId?.trim();
+    if (fromWidget != null && fromWidget.isNotEmpty) return fromWidget;
+    return context.read<SelectedEventCubit>().selectedEventId;
+  }
+
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void didUpdateWidget(covariant CheckInQrPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.eventId != widget.eventId) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -38,7 +56,8 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
       _error = null;
     });
     try {
-      final qr = await sl<CheckInRemoteDataSource>().getMyQr();
+      final qr =
+          await sl<CheckInRemoteDataSource>().getMyQr(eventId: _resolvedEventId);
       if (!mounted) return;
       setState(() {
         _qr = qr;

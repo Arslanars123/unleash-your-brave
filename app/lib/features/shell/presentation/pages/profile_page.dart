@@ -17,6 +17,7 @@ import 'package:unleash_your_brave/core/widgets/app_circle_avatar.dart';
 import 'package:unleash_your_brave/features/auth/domain/entities/user_entity.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
+import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
 import 'package:unleash_your_brave/features/memberships/domain/entities/membership_entity.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -60,7 +61,7 @@ class ProfilePage extends StatelessWidget {
                                 .read<AuthBloc>()
                                 .add(const AuthRefreshRequested());
                           },
-                          onCheckIn: () => context.push('/check-in'),
+                          onCheckIn: () => context.push('/events'),
                           onNotifications: () => context.push('/notifications'),
                         ),
                         SizedBox(height: context.sectionGap),
@@ -243,8 +244,8 @@ class _QuickActions extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: _ActionChip(
-            icon: Icons.qr_code_2,
-            label: 'Check-in',
+            icon: Icons.event_available_outlined,
+            label: 'Events',
             onTap: onCheckIn,
           ),
         ),
@@ -382,8 +383,13 @@ class _MembershipSectionState extends State<_MembershipSection>
     try {
       String? eventId;
       try {
-        final event = await sl<EventsRemoteDataSource>().getCurrent();
-        eventId = event.id;
+        final cubit = sl<SelectedEventCubit>();
+        await cubit.ensureReady();
+        eventId = cubit.state.eventId;
+        if (eventId == null || eventId.isEmpty) {
+          final event = await sl<EventsRemoteDataSource>().getCurrent();
+          eventId = event.id;
+        }
       } catch (_) {
         // Fall back to all memberships if event lookup fails.
       }

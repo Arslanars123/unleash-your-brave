@@ -5,10 +5,13 @@ import { validate } from '../../middleware/validate.js';
 import type { StoreController } from './store.controller.js';
 import {
   createStoreCategorySchema,
+  createStoreCheckoutSessionSchema,
   createStoreProductSchema,
   listStoreCategoriesQuerySchema,
+  listStoreOrdersQuerySchema,
   listStoreProductsQuerySchema,
   storeCategoryIdParamSchema,
+  storeCheckoutSessionIdParamSchema,
   storeProductIdParamSchema,
   updateStoreCategorySchema,
   updateStoreProductSchema,
@@ -79,6 +82,31 @@ export function createStoreRouter(controller: StoreController): Router {
     authorize('admin'),
     validate({ params: storeProductIdParamSchema }),
     asyncHandler(controller.removeProduct),
+  );
+
+  router.post(
+    '/checkout/sessions',
+    authenticate,
+    validate({ body: createStoreCheckoutSessionSchema }),
+    asyncHandler(controller.createCheckoutSession),
+  );
+  router.get(
+    '/checkout/sessions/:id',
+    authenticate,
+    validate({ params: storeCheckoutSessionIdParamSchema }),
+    asyncHandler(controller.getCheckoutSession),
+  );
+  router.get(
+    '/orders/me',
+    authenticate,
+    asyncHandler(controller.listMyOrders),
+  );
+  router.get(
+    '/orders',
+    authenticate,
+    authorize('admin'),
+    validate({ query: listStoreOrdersQuerySchema }),
+    asyncHandler(controller.listOrders),
   );
 
   return router;

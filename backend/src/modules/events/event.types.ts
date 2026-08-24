@@ -55,6 +55,11 @@ export interface Event {
    * and attendees are notified when this toggles or when dates change.
    */
   paused: boolean;
+  /**
+   * When false, the edition is a draft: hidden from public catalog / app discovery
+   * (admins can still manage it). Defaults to true for legacy documents.
+   */
+  published: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,16 +83,24 @@ export interface PublicEvent {
   coverImage: string;
   allowPreviousAttendeesAccess: boolean;
   blockQrWhenRenewalUnpaid: boolean;
+  published: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-/** Admin Event page payload: latest edition + history + schedule gate. */
+/** Admin Event page payload: active edition + full edition list. */
 export interface EventWorkspace {
+  /** Preferred active edition (live → soonest upcoming → latest). */
   current: PublicEvent | null;
+  /** Always true — upcoming editions can be created while another is live. */
   canScheduleNew: boolean;
   scheduleBlockedReason: string | null;
+  /** All editions newest-first (including current). */
+  editions: PublicEvent[];
+  /** Ended editions only (excludes current when it is still active). */
   pastEditions: PublicEvent[];
+  /** Upcoming/live editions that are not the preferred current row. */
+  upcomingEditions: PublicEvent[];
 }
 
 export interface CreateEventInput {
@@ -106,6 +119,7 @@ export interface CreateEventInput {
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
   paused?: boolean;
+  published?: boolean;
 }
 
 /** Dedicated “Schedule new event” payload — new edition with new dates. */
@@ -123,6 +137,8 @@ export interface ScheduleEventInput {
   copyDetailsFromPrevious?: boolean;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  /** Draft until published (default true when omitted). */
+  published?: boolean;
   /** When false, skip the “new dates announced” push. Default true. */
   notifyAttendees?: boolean;
 }
@@ -142,6 +158,7 @@ export interface UpdateEventInput {
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
   paused?: boolean;
+  published?: boolean;
   /** When false, skip pause/date-change push. Default true. */
   notifyAttendees?: boolean;
 }

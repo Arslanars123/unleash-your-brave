@@ -57,4 +57,20 @@ export const checkInsApi = {
     );
     return data.data;
   },
+
+  async completeWithForm(payload: {
+    token?: string;
+    eventId?: string;
+    userId?: string;
+    expectedEventId?: string;
+    answers: Record<string, string | boolean>;
+    signatureDataUrl?: string;
+    signedName: string;
+  }): Promise<CheckInScanResult> {
+    const { data } = await apiClient.post<SuccessEnvelope<CheckInScanResult>>(
+      '/checkins/complete-with-form',
+      payload,
+    );
+    return data.data;
+  },
 };

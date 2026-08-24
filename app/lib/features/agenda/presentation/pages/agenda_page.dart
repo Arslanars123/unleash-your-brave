@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
@@ -20,6 +21,7 @@ import 'package:unleash_your_brave/features/home/data/datasources/events_remote_
 import 'package:unleash_your_brave/features/home/data/models/event_model.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_day_entity.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
+import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 
 enum _AgendaStatus { bootstrapping, loading, refreshing, success, offline, error }
 
@@ -48,6 +50,7 @@ class _AgendaPageState extends State<AgendaPage> {
   static const _pageSize = 8;
   bool _servingCachedData = false;
   int _sessionsRequestId = 0;
+  String? _boundEventId;
 
   AgendaLocalDataSource get _local => sl<AgendaLocalDataSource>();
 
@@ -165,10 +168,21 @@ class _AgendaPageState extends State<AgendaPage> {
     }
 
     try {
-      final event = await sl<EventsRemoteDataSource>().getCurrent();
+      final cubit = context.read<SelectedEventCubit>();
+      await cubit.ensureReady();
+      final selectedId = cubit.state.eventId;
+      EventModel event;
+      if (selectedId != null && selectedId.isNotEmpty) {
+        event = await sl<EventsRemoteDataSource>().getById(selectedId);
+      } else if (cubit.state.event != null) {
+        event = await sl<EventsRemoteDataSource>().getById(cubit.state.event!.id);
+      } else {
+        throw const ServerException('No event selected');
+      }
       await _local.cacheEvent(event);
       if (!mounted) return;
 
+      _boundEventId = event.id;
       final nextDay = event.days.isEmpty ? null : _resolveSelectedDay(event);
       setState(() {
         _event = event;
@@ -176,6 +190,9 @@ class _AgendaPageState extends State<AgendaPage> {
         _status = _AgendaStatus.success;
         _servingCachedData = false;
         _errorMessage = null;
+        _sessionsByDay.clear();
+        _dayStatus.clear();
+        _dayErrors.clear();
       });
 
       if (nextDay != null) {
@@ -449,7 +466,16 @@ class _AgendaPageState extends State<AgendaPage> {
   Widget build(BuildContext context) {
     final sidePad = context.pagePadding.left;
 
-    return Scaffold(
+    return BlocListener<SelectedEventCubit, SelectedEventState>(
+      listenWhen: (prev, next) =>
+          next.eventId != null &&
+          next.eventId!.isNotEmpty &&
+          prev.eventId != next.eventId,
+      listener: (context, state) {
+        if (state.eventId == _boundEventId) return;
+        unawaited(_load(isRefresh: false, silentIfCached: false));
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bgBase,
       body: SafeArea(
         child: RefreshIndicator(
@@ -507,6 +533,7 @@ class _AgendaPageState extends State<AgendaPage> {
           },
         ),
       ),
+    ),
     );
   }
 }

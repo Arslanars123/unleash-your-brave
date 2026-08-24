@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:unleash_your_brave/app/app.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/firebase_options.dart';
 
 Future<void> main() async {
@@ -18,8 +19,13 @@ Future<void> main() async {
   await configureDependencies();
 
   runApp(
-    BlocProvider(
-      create: (_) => sl<AuthBloc>()..add(const AuthStarted()),
+    MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) => sl<AuthBloc>()..add(const AuthStarted()),
+        ),
+        BlocProvider.value(value: sl<SelectedEventCubit>()),
+      ],
       child: const UnleashYourBraveApp(),
     ),
   );

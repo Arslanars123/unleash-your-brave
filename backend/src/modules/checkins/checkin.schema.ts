@@ -26,6 +26,26 @@ export const scanCheckInSchema = z
     }
   });
 
+export const completeCheckInWithFormSchema = z
+  .object({
+    token: z.string().trim().min(10).optional(),
+    eventId: z.string().uuid().optional(),
+    userId: z.string().uuid().optional(),
+    expectedEventId: z.string().uuid().optional(),
+    answers: z.record(z.string(), z.union([z.string(), z.boolean()])),
+    signatureDataUrl: z.string().max(2_000_000).optional().default(''),
+    signedName: z.string().trim().min(1).max(200),
+  })
+  .superRefine((value, ctx) => {
+    if (value.token) return;
+    if (!value.eventId || !value.userId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide a QR token, or both eventId and userId',
+      });
+    }
+  });
+
 export const myQrQuerySchema = z.object({
   eventId: z.string().uuid().optional(),
 });

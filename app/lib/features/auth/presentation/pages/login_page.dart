@@ -229,26 +229,6 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                         ),
-                        TextButton(
-                          onPressed:
-                              loading ? null : () => context.go('/signup'),
-                          child: Text.rich(
-                            textAlign: TextAlign.center,
-                            TextSpan(
-                              style: AppTypography.caption,
-                              children: [
-                                const TextSpan(text: "Don't have an account? "),
-                                TextSpan(
-                                  text: 'Sign up',
-                                  style: AppTypography.caption.copyWith(
-                                    color: AppColors.accentPink,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),

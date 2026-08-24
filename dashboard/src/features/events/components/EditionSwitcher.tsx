@@ -4,6 +4,7 @@ import {
   formatEditionRange,
   useEditionScope,
 } from '@/features/events/hooks/useEditionScope';
+import type { EventEditionStatus } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 
 interface EditionSwitcherProps {
@@ -11,6 +12,17 @@ interface EditionSwitcherProps {
   pastBannerTitle?: string;
   pastBannerBody?: string;
   tipText?: string;
+}
+
+function editionSuffix(
+  status: EventEditionStatus,
+  isCurrent: boolean,
+): string {
+  if (isCurrent) return ' (current)';
+  if (status === 'ended') return ' (past)';
+  if (status === 'live') return ' (live)';
+  if (status === 'paused') return ' (paused)';
+  return ' (upcoming)';
 }
 
 export function EditionSwitcher({
@@ -24,6 +36,7 @@ export function EditionSwitcher({
     selectedEdition,
     currentEdition,
     isPastEdition,
+    isNonCurrentEdition,
     selectEdition,
     clearEditionFilter,
     workspaceQuery,
@@ -36,6 +49,10 @@ export function EditionSwitcher({
     (selectedEdition
       ? `${formatEditionRange(selectedEdition)} — you can still update speakers, sessions, sponsors, and reviews for this edition.`
       : '');
+
+  const bannerTitle = isPastEdition
+    ? pastBannerTitle
+    : 'Viewing another edition';
 
   return (
     <div className="edition-switcher">
@@ -52,18 +69,18 @@ export function EditionSwitcher({
             return (
               <option key={edition.id} value={edition.id}>
                 {formatEditionRange(edition)}
-                {isCurrent ? ' (current)' : ' (past)'}
+                {editionSuffix(edition.status, isCurrent)}
               </option>
             );
           })}
         </select>
       </label>
 
-      {isPastEdition && selectedEdition ? (
+      {isNonCurrentEdition && selectedEdition ? (
         <div className="edition-readonly-banner" role="status">
           <History size={16} />
           <div>
-            <strong>{pastBannerTitle}</strong>
+            <strong>{bannerTitle}</strong>
             <p className="muted">{resolvedPastBody}</p>
           </div>
           <Button variant="secondary" onClick={clearEditionFilter}>
@@ -72,11 +89,11 @@ export function EditionSwitcher({
         </div>
       ) : null}
 
-      {editions.length > 1 && !isPastEdition ? (
+      {editions.length > 1 && !isNonCurrentEdition ? (
         <p className="hint edition-switcher-hint">
           {tipText ?? (
             <>
-              Tip: pick a past edition above, or open one from the{' '}
+              Tip: pick another edition above, or open one from the{' '}
               <Link to="/events">Event</Link> page.
             </>
           )}

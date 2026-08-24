@@ -18,4 +18,31 @@ class EventsRemoteDataSource {
       throwMappedDioError(error);
     }
   }
+
+  Future<List<EventModel>> listAvailable() async {
+    try {
+      final response = await _dioClient.client.get(ApiConstants.availableEvents);
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as List<dynamic>? ??
+              const [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(EventModel.fromJson)
+          .toList(growable: false);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  Future<EventModel> getById(String id) async {
+    try {
+      final response =
+          await _dioClient.client.get('${ApiConstants.events}/$id');
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return EventModel.fromJson(data);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
 }

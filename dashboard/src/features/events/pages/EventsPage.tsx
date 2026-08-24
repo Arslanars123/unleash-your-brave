@@ -38,8 +38,21 @@ function statusLabel(status: EventEditionStatus): string {
   return 'Upcoming';
 }
 
+function editionManageLinks(edition: PublicEvent) {
+  return (
+    <div className="past-edition-links">
+      <Link to={`/speakers?edition=${edition.id}`}>Speakers</Link>
+      <Link to={`/sessions?edition=${edition.id}`}>Sessions</Link>
+      <Link to={`/sponsors?edition=${edition.id}`}>Sponsors</Link>
+      <Link to={`/store?edition=${edition.id}`}>Store</Link>
+      <Link to={`/checkins?edition=${edition.id}`}>Check-ins</Link>
+    </div>
+  );
+}
+
 export function EventsPage() {
   const [editOpen, setEditOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<PublicEvent | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -57,6 +70,7 @@ export function EventsPage() {
       await queryClient.invalidateQueries({ queryKey: ['events'] });
       toast.success('Event updated');
       setEditOpen(false);
+      setEditingEvent(null);
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to update event')),
   });
@@ -76,12 +90,17 @@ export function EventsPage() {
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to schedule event')),
   });
 
+  function openEdit(event: PublicEvent) {
+    setEditingEvent(event);
+    setEditOpen(true);
+  }
+
   async function handleEditSubmit(payload: EventPayload | ScheduleEventPayload) {
-    const event = workspaceQuery.data?.current;
+    const event = editingEvent;
     if (!event) return;
     const ok = await confirm({
       title: 'Save event changes?',
-      message: `Update “${event.name}”?${
+      message: `Update “${event.name}” (${formatEditionRange(event)})?${
         (payload as EventPayload).notifyAttendees !== false
           ? ' Attendees will be notified if you paused/resumed the event or changed dates.'
           : ''
@@ -97,7 +116,7 @@ export function EventsPage() {
     const ok = await confirm({
       title: 'Schedule new edition?',
       message:
-        'Create a new event edition with the details you entered? Attendees will get a push about the new dates unless you turned notifications off.',
+        'Create a new event edition with the details you entered? You can schedule while another edition is live. Attendees will get a push about the new dates unless you turned notifications off.',
       confirmLabel: 'Schedule',
       tone: 'primary',
     });
@@ -107,8 +126,8 @@ export function EventsPage() {
 
   const workspace = workspaceQuery.data;
   const event = workspace?.current ?? null;
-  const canSchedule = workspace?.canScheduleNew ?? false;
-  const scheduleBlockedReason = workspace?.scheduleBlockedReason;
+  const upcomingEditions = workspace?.upcomingEditions ?? [];
+  const pastEditions = workspace?.pastEditions ?? [];
 
   return (
     <div className="page">
@@ -116,24 +135,18 @@ export function EventsPage() {
         <div>
           <h1>Event</h1>
           <p className="muted">
-            Manage the current {CANONICAL_EVENT_NAME} edition. Schedule the next one only after
-            dates have passed — speakers, sessions, and sponsors stay with each edition.
+            Manage {CANONICAL_EVENT_NAME} editions. You can schedule an upcoming event while one is
+            live — speakers, sessions, sponsors, and store stay with each edition.
           </p>
         </div>
         <div className="page-header-actions">
           {event ? (
-            <Button variant="secondary" onClick={() => setEditOpen(true)}>
+            <Button variant="secondary" onClick={() => openEdit(event)}>
               <Pencil size={16} />
               Edit details
             </Button>
           ) : null}
-          <Button
-            onClick={() => setScheduleOpen(true)}
-            disabled={!canSchedule && Boolean(event)}
-            title={
-              !canSchedule && scheduleBlockedReason ? scheduleBlockedReason : 'Schedule new event'
-            }
-          >
+          <Button onClick={() => setScheduleOpen(true)} title="Schedule new event">
             <CalendarPlus size={16} />
             Schedule new event
           </Button>
@@ -162,21 +175,54 @@ export function EventsPage() {
       {event ? (
         <EventSummaryCard
           event={event}
-          canSchedule={canSchedule}
-          scheduleBlockedReason={scheduleBlockedReason}
-          onEdit={() => setEditOpen(true)}
+          onEdit={() => openEdit(event)}
           onSchedule={() => setScheduleOpen(true)}
         />
       ) : null}
 
-      {workspace?.pastEditions && workspace.pastEditions.length > 0 ? (
+      {upcomingEditions.length > 0 ? (
+        <section className="past-editions">
+          <h2>Upcoming / other active editions</h2>
+          <p className="muted">
+            Editions that are live or upcoming but not the preferred current row. Edit details or
+            open speakers, sessions, sponsors, store, and check-ins for that edition.
+          </p>
+          <ul className="past-editions-list">
+            {upcomingEditions.map((edition) => (
+              <li key={edition.id}>
+                <div>
+                  <strong>{formatEditionRange(edition)}</strong>
+                  <span className="muted">
+                    {edition.dayCount} {edition.dayCount === 1 ? 'day' : 'days'}
+                    {edition.venueCity ? ` · ${edition.venueCity}` : ''}
+                    {edition.published === false ? ' · Draft' : ''}
+                  </span>
+                  {editionManageLinks(edition)}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                  <span className="badge role-member">{statusLabel(edition.status)}</span>
+                  {edition.status !== 'ended' ? (
+                    <Button variant="secondary" onClick={() => openEdit(edition)}>
+                      <Pencil size={14} />
+                      Edit
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {pastEditions.length > 0 ? (
         <section className="past-editions">
           <h2>Past editions</h2>
           <p className="muted">
-            Open speakers, sessions, or sponsors for any past edition (fully editable by admin).
+            Open speakers, sessions, sponsors, store, or check-ins for any past edition (fully
+            editable by admin).
           </p>
           <ul className="past-editions-list">
-            {workspace.pastEditions.map((edition) => (
+            {pastEditions.map((edition) => (
               <li key={edition.id}>
                 <div>
                   <strong>{formatEditionRange(edition)}</strong>
@@ -184,11 +230,7 @@ export function EventsPage() {
                     {edition.dayCount} {edition.dayCount === 1 ? 'day' : 'days'}
                     {edition.venueCity ? ` · ${edition.venueCity}` : ''}
                   </span>
-                  <div className="past-edition-links">
-                    <Link to={`/speakers?edition=${edition.id}`}>Speakers</Link>
-                    <Link to={`/sessions?edition=${edition.id}`}>Sessions</Link>
-                    <Link to={`/sponsors?edition=${edition.id}`}>Sponsors</Link>
-                  </div>
+                  {editionManageLinks(edition)}
                 </div>
                 <span className="badge role-member">{statusLabel(edition.status)}</span>
               </li>
@@ -197,17 +239,16 @@ export function EventsPage() {
         </section>
       ) : null}
 
-      {!canSchedule && event && scheduleBlockedReason ? (
-        <p className="hint schedule-gate-hint">{scheduleBlockedReason}</p>
-      ) : null}
-
-      {event ? (
+      {editingEvent ? (
         <EventFormModal
           open={editOpen}
           mode="edit"
-          initialEvent={event}
+          initialEvent={editingEvent}
           loading={updateMutation.isPending}
-          onClose={() => setEditOpen(false)}
+          onClose={() => {
+            setEditOpen(false);
+            setEditingEvent(null);
+          }}
           onSubmit={handleEditSubmit}
         />
       ) : null}
@@ -226,14 +267,10 @@ export function EventsPage() {
 
 function EventSummaryCard({
   event,
-  canSchedule,
-  scheduleBlockedReason,
   onEdit,
   onSchedule,
 }: {
   event: PublicEvent;
-  canSchedule: boolean;
-  scheduleBlockedReason: string | null | undefined;
   onEdit: () => void;
   onSchedule: () => void;
 }) {
@@ -272,6 +309,11 @@ function EventSummaryCard({
           >
             {statusLabel(event.status)}
           </span>
+          {event.published === false ? (
+            <span className="badge role-sponsor">Draft</span>
+          ) : (
+            <span className="badge role-member">Published</span>
+          )}
           {(event.venueName || event.venueCity) && (
             <span className="event-single-venue">
               <MapPin size={14} />
@@ -300,11 +342,7 @@ function EventSummaryCard({
             <Pencil size={16} />
             Edit details
           </Button>
-          <Button
-            onClick={onSchedule}
-            disabled={!canSchedule}
-            title={!canSchedule && scheduleBlockedReason ? scheduleBlockedReason : undefined}
-          >
+          <Button onClick={onSchedule}>
             <CalendarPlus size={16} />
             Schedule new event
           </Button>
