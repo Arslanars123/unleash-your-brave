@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, CalendarPlus, MapPin, Pencil } from 'lucide-react';
+import { CalendarDays, CalendarPlus, MapPin, Pencil, Trash2 } from 'lucide-react';
 import { eventsApi } from '@/features/events/api/events-api';
 import { EventFormModal } from '@/features/events/components/EventFormModal';
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
@@ -90,9 +90,38 @@ export function EventsPage() {
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to schedule event')),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => eventsApi.remove(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['events'] }),
+        queryClient.invalidateQueries({ queryKey: ['speakers'] }),
+        queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+        queryClient.invalidateQueries({ queryKey: ['sponsors'] }),
+        queryClient.invalidateQueries({ queryKey: ['memberships'] }),
+        queryClient.invalidateQueries({ queryKey: ['store'] }),
+        queryClient.invalidateQueries({ queryKey: ['checkins'] }),
+        queryClient.invalidateQueries({ queryKey: ['checkin-forms'] }),
+      ]);
+      toast.success('Event deleted — attendees kept');
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to delete event')),
+  });
+
   function openEdit(event: PublicEvent) {
     setEditingEvent(event);
     setEditOpen(true);
+  }
+
+  async function handleDelete(edition: PublicEvent) {
+    const ok = await confirm({
+      title: 'Delete this event edition?',
+      message: `Permanently delete “${CANONICAL_EVENT_NAME}” (${formatEditionRange(edition)})? This removes speakers, sessions, sponsors, memberships, store items, and check-in data for this edition. Attendee accounts and purchase history are kept.`,
+      confirmLabel: 'Delete event',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    await deleteMutation.mutateAsync(edition.id);
   }
 
   async function handleEditSubmit(payload: EventPayload | ScheduleEventPayload) {
@@ -141,10 +170,20 @@ export function EventsPage() {
         </div>
         <div className="page-header-actions">
           {event ? (
-            <Button variant="secondary" onClick={() => openEdit(event)}>
-              <Pencil size={16} />
-              Edit details
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => openEdit(event)}>
+                <Pencil size={16} />
+                Edit details
+              </Button>
+              <Button
+                variant="danger"
+                disabled={deleteMutation.isPending}
+                onClick={() => void handleDelete(event)}
+              >
+                <Trash2 size={16} />
+                Delete event
+              </Button>
+            </>
           ) : null}
           <Button onClick={() => setScheduleOpen(true)} title="Schedule new event">
             <CalendarPlus size={16} />
@@ -175,7 +214,9 @@ export function EventsPage() {
       {event ? (
         <EventSummaryCard
           event={event}
+          deleting={deleteMutation.isPending}
           onEdit={() => openEdit(event)}
+          onDelete={() => void handleDelete(event)}
           onSchedule={() => setScheduleOpen(true)}
         />
       ) : null}
@@ -201,12 +242,22 @@ export function EventsPage() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
                   <span className="badge role-member">{statusLabel(edition.status)}</span>
-                  {edition.status !== 'ended' ? (
-                    <Button variant="secondary" onClick={() => openEdit(edition)}>
-                      <Pencil size={14} />
-                      Edit
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {edition.status !== 'ended' ? (
+                      <Button variant="secondary" onClick={() => openEdit(edition)}>
+                        <Pencil size={14} />
+                        Edit
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="danger"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => void handleDelete(edition)}
+                    >
+                      <Trash2 size={14} />
+                      Delete
                     </Button>
-                  ) : null}
+                  </div>
                 </div>
               </li>
             ))}
@@ -232,7 +283,17 @@ export function EventsPage() {
                   </span>
                   {editionManageLinks(edition)}
                 </div>
-                <span className="badge role-member">{statusLabel(edition.status)}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                  <span className="badge role-member">{statusLabel(edition.status)}</span>
+                  <Button
+                    variant="danger"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => void handleDelete(edition)}
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -267,11 +328,15 @@ export function EventsPage() {
 
 function EventSummaryCard({
   event,
+  deleting,
   onEdit,
+  onDelete,
   onSchedule,
 }: {
   event: PublicEvent;
+  deleting: boolean;
   onEdit: () => void;
+  onDelete: () => void;
   onSchedule: () => void;
 }) {
   const days = [...(event.days ?? [])].sort((a, b) => a.date.localeCompare(b.date));
@@ -341,6 +406,10 @@ function EventSummaryCard({
           <Button variant="secondary" onClick={onEdit}>
             <Pencil size={16} />
             Edit details
+          </Button>
+          <Button variant="danger" disabled={deleting} onClick={onDelete}>
+            <Trash2 size={16} />
+            Delete event
           </Button>
           <Button onClick={onSchedule}>
             <CalendarPlus size={16} />

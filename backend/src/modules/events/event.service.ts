@@ -1,4 +1,5 @@
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
+import { cascadeDeleteEventData } from '../../db/event-cascade.js';
 import { logger } from '../../core/logger.js';
 import type { AnnouncementService } from '../announcements/announcement.service.js';
 import type { EventRepository, PaginatedResult } from './event.repository.js';
@@ -335,8 +336,17 @@ export class EventService {
     return toPublicEvent(updated);
   }
 
-  async delete(_id: string): Promise<void> {
-    throw new ForbiddenError('Event editions cannot be deleted — history is preserved');
+  /**
+   * Deletes an edition and its related content (speakers, sessions, sponsors,
+   * memberships catalog, store, check-ins/forms). Attendee user accounts and
+   * purchase/order history are preserved.
+   */
+  async delete(id: string): Promise<void> {
+    await this.requireEvent(id);
+    await cascadeDeleteEventData(id);
+    if (!(await this.events.delete(id))) {
+      throw new NotFoundError('Event');
+    }
   }
 
   async requireEvent(id: string): Promise<Event> {
