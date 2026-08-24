@@ -24,9 +24,18 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
       { stripeCheckoutSessionId: 1 },
       { unique: true, name: 'store_orders_stripe_session_unique' },
     );
-    await this.collection.createIndex({ eventId: 1, purchasedAt: -1 });
-    await this.collection.createIndex({ userId: 1, purchasedAt: -1 });
-    await this.collection.createIndex({ productId: 1, purchasedAt: -1 });
+    await this.collection.createIndex(
+      { eventId: 1, purchasedAt: -1 },
+      { name: 'store_orders_event_purchased' },
+    );
+    await this.collection.createIndex(
+      { userId: 1, purchasedAt: -1 },
+      { name: 'store_orders_user_purchased' },
+    );
+    await this.collection.createIndex(
+      { productId: 1, purchasedAt: -1 },
+      { name: 'store_orders_product_purchased' },
+    );
   }
 
   async findById(id: string): Promise<StoreOrder | null> {

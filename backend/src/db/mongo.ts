@@ -80,6 +80,7 @@ async function ensureIndexes(database: Db): Promise<void> {
       },
       { key: { eventId: 1, purchasedAt: -1 }, name: 'store_orders_event_purchased' },
       { key: { userId: 1, purchasedAt: -1 }, name: 'store_orders_user_purchased' },
+      { key: { productId: 1, purchasedAt: -1 }, name: 'store_orders_product_purchased' },
     ]),
     database.collection('memberships').createIndexes([
       { key: { eventId: 1 }, name: 'memberships_eventId' },
