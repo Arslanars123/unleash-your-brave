@@ -346,7 +346,7 @@ export class StoreCheckoutService {
       trackInventory: true,
       stockQty: product.stockQty ?? 0,
       lowStockThreshold: product.lowStockThreshold ?? 5,
-      isActive: product.isActive !== false,
+      isActive: true,
       featured: Boolean(product.featured),
       sortOrder: product.sortOrder ?? 0,
     };

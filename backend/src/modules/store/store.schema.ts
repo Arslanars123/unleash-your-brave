@@ -133,3 +133,22 @@ export const updateStoreProductSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to update',
   });
+
+export const createStoreCheckoutSessionSchema = z.object({
+  productId: z.string().uuid('Product is required'),
+  quantity: z.coerce.number().int().min(1).max(100).optional().default(1),
+  successUrl: z.string().url().optional(),
+  cancelUrl: z.string().url().optional(),
+  expectedPrice: z.number().finite().min(0).optional(),
+});
+
+export const storeCheckoutSessionIdParamSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const listStoreOrdersQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  perPage: z.coerce.number().int().min(1).max(100).default(20),
+  eventId: z.string().uuid().optional(),
+  search: z.string().trim().min(1).optional(),
+});
