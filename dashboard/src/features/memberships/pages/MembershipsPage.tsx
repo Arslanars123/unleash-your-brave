@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { BadgeCheck, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
-import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { MembershipFormModal } from '@/features/memberships/components/MembershipFormModal';
 import { getApiErrorMessage } from '@/shared/api/client';
@@ -28,18 +26,15 @@ export function MembershipsPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
-  const { eventId, isPastEdition, workspaceQuery } = useEditionScope();
 
   const membershipsQuery = useQuery({
-    queryKey: ['memberships', 'list', eventId, search, page],
+    queryKey: ['memberships', 'list', search, page],
     queryFn: () =>
       membershipsApi.list({
         search: search || undefined,
         page,
         perPage: PER_PAGE,
-        eventId,
       }),
-    enabled: Boolean(eventId),
   });
 
   function applySearch(next: string) {
@@ -47,14 +42,17 @@ export function MembershipsPage() {
     setPage(1);
   }
 
-  useEffect(() => {
-    setPage(1);
-  }, [eventId]);
+  async function invalidateMembershipQueries() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['memberships', 'list'] }),
+      queryClient.invalidateQueries({ queryKey: ['memberships', 'library'] }),
+    ]);
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload: MembershipPayload) => membershipsApi.create(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['memberships', 'list'] });
+      await invalidateMembershipQueries();
       toast.success('Membership created');
       closeModal();
     },
@@ -65,7 +63,7 @@ export function MembershipsPage() {
     mutationFn: ({ id, payload }: { id: string; payload: MembershipPayload }) =>
       membershipsApi.update(id, payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['memberships', 'list'] });
+      await invalidateMembershipQueries();
       toast.success('Membership updated');
       closeModal();
     },
@@ -75,7 +73,7 @@ export function MembershipsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => membershipsApi.remove(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['memberships', 'list'] });
+      await invalidateMembershipQueries();
       toast.success('Membership deleted');
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to delete membership')),
@@ -108,11 +106,7 @@ export function MembershipsPage() {
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
-    if (!eventId) {
-      toast.error('Schedule an event before adding memberships');
-      return;
-    }
-    await createMutation.mutateAsync({ ...payload, eventId });
+    await createMutation.mutateAsync(payload);
   }
 
   async function handleDelete(membership: PublicMembership) {
@@ -127,9 +121,6 @@ export function MembershipsPage() {
   }
 
   const saving = createMutation.isPending || updateMutation.isPending;
-  const bootstrapLoading =
-    workspaceQuery.isLoading || (Boolean(eventId) && membershipsQuery.isLoading);
-  const canEdit = Boolean(eventId);
 
   return (
     <div className="page">
@@ -138,20 +129,15 @@ export function MembershipsPage() {
           <span className="page-kicker">Access</span>
           <h1>Memberships</h1>
           <p className="muted">
-            {isPastEdition
-              ? 'Membership tiers linked to this past edition.'
-              : 'Membership tiers linked to the selected event. The same tier can be linked to multiple events.'}
+            Shared membership library. Create tiers here, then link them to events from Edit edition.
+            The same tier can appear on multiple events.
           </p>
         </div>
-        {canEdit ? (
-          <Button onClick={openCreate}>
-            <Plus size={16} />
-            Create membership
-          </Button>
-        ) : null}
+        <Button onClick={openCreate}>
+          <Plus size={16} />
+          Create membership
+        </Button>
       </header>
-
-      <EditionSwitcher />
 
       <div className="toolbar">
         <SearchSuggest
@@ -159,13 +145,10 @@ export function MembershipsPage() {
           placeholder="Membership name or description"
           value={search}
           onChange={applySearch}
-          disabled={!eventId}
           loadSuggestions={async (draft) => {
-            if (!eventId) return [];
             const result = await membershipsApi.list({
               search: draft,
               perPage: 6,
-              eventId,
             });
             return result.items.map((membership) => ({
               id: membership.id,
@@ -185,33 +168,23 @@ export function MembershipsPage() {
         </div>
       ) : null}
 
-      {bootstrapLoading ? <Spinner /> : null}
-      {workspaceQuery.isError ? (
-        <p className="form-error">{getApiErrorMessage(workspaceQuery.error)}</p>
-      ) : null}
+      {membershipsQuery.isLoading ? <Spinner /> : null}
       {membershipsQuery.isError ? (
         <p className="form-error">{getApiErrorMessage(membershipsQuery.error)}</p>
       ) : null}
-      {!bootstrapLoading && !eventId ? (
-        <p className="form-error">Schedule an event on the Event page before managing memberships.</p>
-      ) : null}
 
-      {eventId && membershipsQuery.data ? (
+      {membershipsQuery.data ? (
         membershipsQuery.data.items.length === 0 ? (
           <div className="empty-state">
             <BadgeCheck size={28} />
-            <h2>No memberships for this edition</h2>
+            <h2>No memberships yet</h2>
             <p className="muted">
-              {isPastEdition
-                ? 'This past edition has no membership tiers saved.'
-                : 'Add Standard, VIP, or other tiers for this edition.'}
+              Add tiers to the shared library, then link them to an event from Edit edition.
             </p>
-            {canEdit ? (
-              <Button onClick={openCreate}>
-                <Plus size={16} />
-                Create membership
-              </Button>
-            ) : null}
+            <Button onClick={openCreate}>
+              <Plus size={16} />
+              Create membership
+            </Button>
           </div>
         ) : (
           <div className="table-wrap">
@@ -221,7 +194,7 @@ export function MembershipsPage() {
                   <th>Name</th>
                   <th>Price</th>
                   <th>Description</th>
-                  {canEdit ? <th /> : null}
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -234,22 +207,20 @@ export function MembershipsPage() {
                     <td>
                       <span className="cell-clamp">{membership.description || '—'}</span>
                     </td>
-                    {canEdit ? (
-                      <td className="actions">
-                        <Button variant="secondary" onClick={() => openEdit(membership)}>
-                          <Pencil size={14} />
-                          Edit
-                        </Button>
-                        <Button
-                          variant="danger"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => void handleDelete(membership)}
-                        >
-                          <Trash2 size={14} />
-                          Delete
-                        </Button>
-                      </td>
-                    ) : null}
+                    <td className="actions">
+                      <Button variant="secondary" onClick={() => openEdit(membership)}>
+                        <Pencil size={14} />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => void handleDelete(membership)}
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -266,17 +237,15 @@ export function MembershipsPage() {
         )
       ) : null}
 
-      {canEdit ? (
-        <MembershipFormModal
-          open={modalOpen}
-          mode={editing ? 'edit' : 'create'}
-          initialMembership={editing}
-          siblings={membershipsQuery.data?.items ?? []}
-          loading={saving}
-          onClose={closeModal}
-          onSubmit={handleSubmit}
-        />
-      ) : null}
+      <MembershipFormModal
+        open={modalOpen}
+        mode={editing ? 'edit' : 'create'}
+        initialMembership={editing}
+        siblings={membershipsQuery.data?.items ?? []}
+        loading={saving}
+        onClose={closeModal}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }

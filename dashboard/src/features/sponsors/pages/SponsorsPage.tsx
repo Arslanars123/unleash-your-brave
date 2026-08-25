@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Handshake, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
-import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { sponsorsApi } from '@/features/sponsors/api/sponsors-api';
 import { SponsorFormModal } from '@/features/sponsors/components/SponsorFormModal';
 import { getApiErrorMessage } from '@/shared/api/client';
@@ -25,18 +23,15 @@ export function SponsorsPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
-  const { eventId, isPastEdition, workspaceQuery } = useEditionScope();
 
   const sponsorsQuery = useQuery({
-    queryKey: ['sponsors', 'list', eventId, search, page],
+    queryKey: ['sponsors', 'list', search, page],
     queryFn: () =>
       sponsorsApi.list({
         search: search || undefined,
         page,
         perPage: PER_PAGE,
-        eventId,
       }),
-    enabled: Boolean(eventId),
   });
 
   function applySearch(next: string) {
@@ -44,14 +39,17 @@ export function SponsorsPage() {
     setPage(1);
   }
 
-  useEffect(() => {
-    setPage(1);
-  }, [eventId]);
+  async function invalidateSponsorQueries() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['sponsors', 'list'] }),
+      queryClient.invalidateQueries({ queryKey: ['sponsors', 'library'] }),
+    ]);
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload: SponsorPayload) => sponsorsApi.create(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['sponsors', 'list'] });
+      await invalidateSponsorQueries();
       toast.success('Sponsor created');
       closeModal();
     },
@@ -62,7 +60,7 @@ export function SponsorsPage() {
     mutationFn: ({ id, payload }: { id: string; payload: SponsorPayload }) =>
       sponsorsApi.update(id, payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['sponsors', 'list'] });
+      await invalidateSponsorQueries();
       toast.success('Sponsor updated');
       closeModal();
     },
@@ -72,7 +70,7 @@ export function SponsorsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => sponsorsApi.remove(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['sponsors', 'list'] });
+      await invalidateSponsorQueries();
       toast.success('Sponsor deleted');
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to delete sponsor')),
@@ -105,11 +103,7 @@ export function SponsorsPage() {
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
-    if (!eventId) {
-      toast.error('Schedule an event before adding sponsors');
-      return;
-    }
-    await createMutation.mutateAsync({ ...payload, eventId });
+    await createMutation.mutateAsync(payload);
   }
 
   async function handleDelete(sponsor: PublicSponsor) {
@@ -124,8 +118,6 @@ export function SponsorsPage() {
   }
 
   const saving = createMutation.isPending || updateMutation.isPending;
-  const bootstrapLoading = workspaceQuery.isLoading || (Boolean(eventId) && sponsorsQuery.isLoading);
-  const canEdit = Boolean(eventId);
 
   return (
     <div className="page">
@@ -134,20 +126,15 @@ export function SponsorsPage() {
           <span className="page-kicker">Partners</span>
           <h1>Sponsors</h1>
           <p className="muted">
-            {isPastEdition
-              ? 'Sponsors linked to this past edition.'
-              : 'Sponsors linked to the selected event. The same sponsor can be linked to multiple events; manage offers per edition context.'}
+            Shared sponsor library. Create sponsors here, then link them to events from Edit edition.
+            The same sponsor can appear on multiple events.
           </p>
         </div>
-        {canEdit ? (
-          <Button onClick={openCreate}>
-            <Plus size={16} />
-            Create sponsor
-          </Button>
-        ) : null}
+        <Button onClick={openCreate}>
+          <Plus size={16} />
+          Create sponsor
+        </Button>
       </header>
-
-      <EditionSwitcher />
 
       <div className="toolbar">
         <SearchSuggest
@@ -155,13 +142,10 @@ export function SponsorsPage() {
           placeholder="Sponsor name or description"
           value={search}
           onChange={applySearch}
-          disabled={!eventId}
           loadSuggestions={async (draft) => {
-            if (!eventId) return [];
             const result = await sponsorsApi.list({
               search: draft,
               perPage: 6,
-              eventId,
             });
             return result.items.map((sponsor) => ({
               id: sponsor.id,
@@ -185,33 +169,23 @@ export function SponsorsPage() {
         </div>
       ) : null}
 
-      {bootstrapLoading ? <Spinner /> : null}
-      {workspaceQuery.isError ? (
-        <p className="form-error">{getApiErrorMessage(workspaceQuery.error)}</p>
-      ) : null}
+      {sponsorsQuery.isLoading ? <Spinner /> : null}
       {sponsorsQuery.isError ? (
         <p className="form-error">{getApiErrorMessage(sponsorsQuery.error)}</p>
       ) : null}
-      {!bootstrapLoading && !eventId ? (
-        <p className="form-error">Schedule an event on the Event page before managing sponsors.</p>
-      ) : null}
 
-      {eventId && sponsorsQuery.data ? (
+      {sponsorsQuery.data ? (
         sponsorsQuery.data.items.length === 0 ? (
           <div className="empty-state">
             <Handshake size={28} />
-            <h2>No sponsors for this edition</h2>
+            <h2>No sponsors yet</h2>
             <p className="muted">
-              {isPastEdition
-                ? 'This past edition has no sponsors saved.'
-                : 'Add sponsors for this edition. Past editions keep their own lists.'}
+              Add sponsors to the shared library, then link them to an event from Edit edition.
             </p>
-            {canEdit ? (
-              <Button onClick={openCreate}>
-                <Plus size={16} />
-                Create sponsor
-              </Button>
-            ) : null}
+            <Button onClick={openCreate}>
+              <Plus size={16} />
+              Create sponsor
+            </Button>
           </div>
         ) : (
           <div className="table-wrap">
@@ -221,7 +195,7 @@ export function SponsorsPage() {
                   <th>Sponsor</th>
                   <th>Offers</th>
                   <th>Description</th>
-                  {canEdit ? <th /> : null}
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -252,22 +226,20 @@ export function SponsorsPage() {
                     <td>
                       <span className="cell-clamp">{sponsor.description || '—'}</span>
                     </td>
-                    {canEdit ? (
-                      <td className="actions">
-                        <Button variant="secondary" onClick={() => openEdit(sponsor)}>
-                          <Pencil size={14} />
-                          Edit
-                        </Button>
-                        <Button
-                          variant="danger"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => void handleDelete(sponsor)}
-                        >
-                          <Trash2 size={14} />
-                          Delete
-                        </Button>
-                      </td>
-                    ) : null}
+                    <td className="actions">
+                      <Button variant="secondary" onClick={() => openEdit(sponsor)}>
+                        <Pencil size={14} />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => void handleDelete(sponsor)}
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -284,16 +256,14 @@ export function SponsorsPage() {
         )
       ) : null}
 
-      {canEdit ? (
-        <SponsorFormModal
-          open={modalOpen}
-          mode={editing ? 'edit' : 'create'}
-          initialSponsor={editing}
-          loading={saving}
-          onClose={closeModal}
-          onSubmit={handleSubmit}
-        />
-      ) : null}
+      <SponsorFormModal
+        open={modalOpen}
+        mode={editing ? 'edit' : 'create'}
+        initialSponsor={editing}
+        loading={saving}
+        onClose={closeModal}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }

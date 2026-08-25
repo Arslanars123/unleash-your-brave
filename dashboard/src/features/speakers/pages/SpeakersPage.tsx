@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Mic2, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
-import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { speakersApi } from '@/features/speakers/api/speakers-api';
 import { SpeakerFormModal } from '@/features/speakers/components/SpeakerFormModal';
 import { getApiErrorMessage } from '@/shared/api/client';
@@ -24,18 +22,15 @@ export function SpeakersPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
-  const { eventId, isPastEdition, workspaceQuery } = useEditionScope();
 
   const speakersQuery = useQuery({
-    queryKey: ['speakers', 'list', eventId, search, page],
+    queryKey: ['speakers', 'list', search, page],
     queryFn: () =>
       speakersApi.list({
         search: search || undefined,
         page,
         perPage: PER_PAGE,
-        eventId,
       }),
-    enabled: Boolean(eventId),
   });
 
   function applySearch(next: string) {
@@ -43,14 +38,17 @@ export function SpeakersPage() {
     setPage(1);
   }
 
-  useEffect(() => {
-    setPage(1);
-  }, [eventId]);
+  async function invalidateSpeakerQueries() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['speakers', 'list'] }),
+      queryClient.invalidateQueries({ queryKey: ['speakers', 'library'] }),
+    ]);
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload: SpeakerPayload) => speakersApi.create(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['speakers', 'list'] });
+      await invalidateSpeakerQueries();
       toast.success('Speaker created');
       closeModal();
     },
@@ -61,7 +59,7 @@ export function SpeakersPage() {
     mutationFn: ({ id, payload }: { id: string; payload: SpeakerPayload }) =>
       speakersApi.update(id, payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['speakers', 'list'] });
+      await invalidateSpeakerQueries();
       toast.success('Speaker updated');
       closeModal();
     },
@@ -71,7 +69,7 @@ export function SpeakersPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => speakersApi.remove(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['speakers', 'list'] });
+      await invalidateSpeakerQueries();
       toast.success('Speaker deleted');
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to delete speaker')),
@@ -104,11 +102,8 @@ export function SpeakersPage() {
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
-    if (!eventId) {
-      toast.error('Schedule an event before adding speakers');
-      return;
-    }
-    await createMutation.mutateAsync({ ...payload, eventId });
+    // Global library — link to events from Edit edition associations.
+    await createMutation.mutateAsync(payload);
   }
 
   async function handleDelete(speaker: PublicSpeaker) {
@@ -123,8 +118,6 @@ export function SpeakersPage() {
   }
 
   const saving = createMutation.isPending || updateMutation.isPending;
-  const bootstrapLoading = workspaceQuery.isLoading || (Boolean(eventId) && speakersQuery.isLoading);
-  const canEdit = Boolean(eventId);
 
   return (
     <div className="page">
@@ -133,20 +126,15 @@ export function SpeakersPage() {
           <span className="page-kicker">Stage</span>
           <h1>Speakers</h1>
           <p className="muted">
-            {isPastEdition
-              ? 'Speakers linked to the selected event edition. The same speaker can be linked to multiple events; their sessions stay separate per event.'
-              : 'Speakers linked to the selected event edition.'}
+            Shared speaker library. Create speakers here, then link them to events from Edit edition.
+            The same speaker can appear on multiple events; sessions stay separate per event.
           </p>
         </div>
-        {canEdit ? (
-          <Button onClick={openCreate}>
-            <Plus size={16} />
-            Create speaker
-          </Button>
-        ) : null}
+        <Button onClick={openCreate}>
+          <Plus size={16} />
+          Create speaker
+        </Button>
       </header>
-
-      <EditionSwitcher />
 
       <div className="toolbar">
         <SearchSuggest
@@ -154,13 +142,10 @@ export function SpeakersPage() {
           placeholder="Name, title, or bio"
           value={search}
           onChange={applySearch}
-          disabled={!eventId}
           loadSuggestions={async (draft) => {
-            if (!eventId) return [];
             const result = await speakersApi.list({
               search: draft,
               perPage: 6,
-              eventId,
             });
             return result.items.map((speaker) => ({
               id: speaker.id,
@@ -184,33 +169,23 @@ export function SpeakersPage() {
         </div>
       ) : null}
 
-      {bootstrapLoading ? <Spinner /> : null}
-      {workspaceQuery.isError ? (
-        <p className="form-error">{getApiErrorMessage(workspaceQuery.error)}</p>
-      ) : null}
+      {speakersQuery.isLoading ? <Spinner /> : null}
       {speakersQuery.isError ? (
         <p className="form-error">{getApiErrorMessage(speakersQuery.error)}</p>
       ) : null}
-      {!bootstrapLoading && !eventId ? (
-        <p className="form-error">Schedule an event on the Event page before managing speakers.</p>
-      ) : null}
 
-      {eventId && speakersQuery.data ? (
+      {speakersQuery.data ? (
         speakersQuery.data.items.length === 0 ? (
           <div className="empty-state">
             <Mic2 size={28} />
-            <h2>No speakers for this edition</h2>
+            <h2>No speakers yet</h2>
             <p className="muted">
-              {isPastEdition
-                ? 'This past edition has no speakers saved.'
-                : 'Add speakers for this edition. Past editions keep their own lists.'}
+              Add speakers to the shared library, then link them to an event from Edit edition.
             </p>
-            {canEdit ? (
-              <Button onClick={openCreate}>
-                <Plus size={16} />
-                Create speaker
-              </Button>
-            ) : null}
+            <Button onClick={openCreate}>
+              <Plus size={16} />
+              Create speaker
+            </Button>
           </div>
         ) : (
           <div className="table-wrap">
@@ -220,7 +195,7 @@ export function SpeakersPage() {
                   <th>Speaker</th>
                   <th>Title</th>
                   <th>Description</th>
-                  {canEdit ? <th /> : null}
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -246,22 +221,20 @@ export function SpeakersPage() {
                     <td>
                       <span className="cell-clamp">{speaker.description || '—'}</span>
                     </td>
-                    {canEdit ? (
-                      <td className="actions">
-                        <Button variant="secondary" onClick={() => openEdit(speaker)}>
-                          <Pencil size={14} />
-                          Edit
-                        </Button>
-                        <Button
-                          variant="danger"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => void handleDelete(speaker)}
-                        >
-                          <Trash2 size={14} />
-                          Delete
-                        </Button>
-                      </td>
-                    ) : null}
+                    <td className="actions">
+                      <Button variant="secondary" onClick={() => openEdit(speaker)}>
+                        <Pencil size={14} />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => void handleDelete(speaker)}
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -278,16 +251,14 @@ export function SpeakersPage() {
         )
       ) : null}
 
-      {canEdit ? (
-        <SpeakerFormModal
-          open={modalOpen}
-          mode={editing ? 'edit' : 'create'}
-          initialSpeaker={editing}
-          loading={saving}
-          onClose={closeModal}
-          onSubmit={handleSubmit}
-        />
-      ) : null}
+      <SpeakerFormModal
+        open={modalOpen}
+        mode={editing ? 'edit' : 'create'}
+        initialSpeaker={editing}
+        loading={saving}
+        onClose={closeModal}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }
