@@ -52,14 +52,24 @@ const optionalEmail = z
   .or(z.literal(''))
   .transform((value) => value || undefined);
 
-export const createSponsorSchema = z.object({
-  eventId: z.string().uuid('Event is required').optional(),
-  name: z.string().trim().min(2, 'Sponsor name is required').max(160),
-  email: optionalEmail,
-  description: z.string().trim().max(5000).optional().default(''),
-  image: optionalMedia,
-  offers: z.array(offerSchema).max(30).optional().default([]),
-});
+export const createSponsorSchema = z
+  .object({
+    eventId: z.string().uuid('Event is required').optional(),
+    name: z.string().trim().min(2, 'Sponsor name is required').max(160),
+    email: optionalEmail,
+    description: z.string().trim().max(5000).optional().default(''),
+    image: optionalMedia,
+    offers: z.array(offerSchema).max(30).optional().default([]),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.offers?.length ?? 0) > 0 && !value.eventId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Select an event when creating sponsor offers',
+        path: ['eventId'],
+      });
+    }
+  });
 
 export const updateSponsorSchema = z
   .object({
@@ -74,8 +84,22 @@ export const updateSponsorSchema = z
       .refine((value) => value === undefined || isValidMediaUrl(value), {
         message: 'Must be a valid URL or uploaded file path',
       }),
+    eventId: z.string().uuid('Select an event for these offers').optional(),
     offers: z.array(offerSchema).max(30).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to update',
+  })
+  .superRefine((value, ctx) => {
+    if (value.offers !== undefined && !value.eventId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Select an event when saving sponsor offers',
+        path: ['eventId'],
+      });
+    }
   });
+
+export const getSponsorQuerySchema = z.object({
+  eventId: z.string().uuid().optional(),
+});

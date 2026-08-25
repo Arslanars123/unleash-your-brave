@@ -27,6 +27,8 @@ export interface SponsorFormValues {
   email: string;
   description: string;
   image: string;
+  /** Required when creating or editing offers — offers are event-specific. */
+  eventId: string;
   offers: OfferRow[];
 }
 
@@ -49,27 +51,33 @@ const emptyForm: SponsorFormValues = {
   email: '',
   description: '',
   image: '',
+  eventId: '',
   offers: [],
 };
 
-function sponsorToForm(sponsor: PublicSponsor): SponsorFormValues {
+function offersToRows(offers: PublicSponsor['offers']): OfferRow[] {
+  return [...offers]
+    .sort((a, b) => a.offerNumber - b.offerNumber)
+    .map((offer) => ({
+      key: offer.id || newKey(),
+      description: offer.description,
+      image: offer.image,
+      links: offer.links.map((link) => ({
+        key: link.id || newKey(),
+        label: link.label,
+        url: link.url,
+      })),
+    }));
+}
+
+function sponsorToForm(sponsor: PublicSponsor, eventId = ''): SponsorFormValues {
   return {
     name: sponsor.name,
     email: sponsor.email,
     description: sponsor.description,
     image: sponsor.image,
-    offers: [...sponsor.offers]
-      .sort((a, b) => a.offerNumber - b.offerNumber)
-      .map((offer) => ({
-        key: offer.id || newKey(),
-        description: offer.description,
-        image: offer.image,
-        links: offer.links.map((link) => ({
-          key: link.id || newKey(),
-          label: link.label,
-          url: link.url,
-        })),
-      })),
+    eventId: eventId || sponsor.eventId || '',
+    offers: offersToRows(sponsor.offers),
   };
 }
 
@@ -86,6 +94,10 @@ function validate(values: SponsorFormValues): FieldErrors {
   const email = values.email.trim();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     errors.email = 'Enter a valid email address';
+  }
+
+  if (values.offers.length > 0 && !values.eventId) {
+    errors.eventId = 'Select which event these offers belong to';
   }
 
   values.offers.forEach((offer, offerIndex) => {
@@ -108,29 +120,45 @@ function validate(values: SponsorFormValues): FieldErrors {
 }
 
 export function toSponsorPayload(values: SponsorFormValues): SponsorPayload {
+  const eventId = values.eventId.trim() || undefined;
   return {
     name: values.name.trim(),
     email: values.email.trim() || undefined,
     description: values.description.trim(),
     image: values.image.trim(),
-    offers: values.offers.map((offer, index) => ({
-      offerNumber: index + 1,
-      description: offer.description.trim(),
-      image: offer.image.trim(),
-      links: offer.links
-        .filter((link) => link.url.trim())
-        .map((link) => ({
-          label: link.label.trim(),
-          url: link.url.trim(),
-        })),
-    })),
+    ...(eventId ? { eventId } : {}),
+    // Only send offers when an event is selected — they are stored per event.
+    ...(eventId
+      ? {
+          offers: values.offers.map((offer, index) => ({
+            offerNumber: index + 1,
+            description: offer.description.trim(),
+            image: offer.image.trim(),
+            links: offer.links
+              .filter((link) => link.url.trim())
+              .map((link) => ({
+                label: link.label.trim(),
+                url: link.url.trim(),
+              })),
+          })),
+        }
+      : {}),
   };
+}
+
+export interface SponsorEventOption {
+  id: string;
+  label: string;
 }
 
 interface SponsorFormModalProps {
   open: boolean;
   mode: 'create' | 'edit';
   initialSponsor?: PublicSponsor | null;
+  /** Editions the user can attach offers to. */
+  eventOptions?: SponsorEventOption[];
+  /** Load offers for the selected event (edit mode). */
+  loadOffersForEvent?: (eventId: string) => Promise<PublicSponsor['offers']>;
   loading?: boolean;
   onClose: () => void;
   onSubmit: (payload: SponsorPayload) => Promise<void> | void;
@@ -140,6 +168,8 @@ export function SponsorFormModal({
   open,
   mode,
   initialSponsor,
+  eventOptions = [],
+  loadOffersForEvent,
   loading = false,
   onClose,
   onSubmit,
@@ -151,6 +181,7 @@ export function SponsorFormModal({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [loadingOffers, setLoadingOffers] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<
     Record<string, { file: File; preview: string }>
   >({});
@@ -160,6 +191,7 @@ export function SponsorFormModal({
     setSubmitted(false);
     setErrors({});
     setUploading(false);
+    setLoadingOffers(false);
     setPendingFiles((prev) => {
       for (const item of Object.values(prev)) URL.revokeObjectURL(item.preview);
       return {};
@@ -178,12 +210,38 @@ export function SponsorFormModal({
     setForm({ ...values, [key]: value });
   }
 
+  async function handleEventChange(eventId: string) {
+    if (!eventId) {
+      setForm({ ...values, eventId: '', offers: [] });
+      return;
+    }
+    if (!loadOffersForEvent) {
+      setForm({ ...values, eventId, offers: [] });
+      return;
+    }
+    setLoadingOffers(true);
+    try {
+      const offers = await loadOffersForEvent(eventId);
+      setForm({ ...values, eventId, offers: offersToRows(offers) });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to load offers for this event'));
+      setForm({ ...values, eventId, offers: [] });
+    } finally {
+      setLoadingOffers(false);
+    }
+  }
+
   function updateOffer(index: number, patch: Partial<OfferRow>) {
     const offers = values.offers.map((offer, i) => (i === index ? { ...offer, ...patch } : offer));
     setForm({ ...values, offers });
   }
 
   function addOffer() {
+    if (!values.eventId) {
+      toast.error('Select an event before adding offers');
+      setErrors((current) => ({ ...current, eventId: 'Select which event these offers belong to' }));
+      return;
+    }
     setForm({ ...values, offers: [...values.offers, emptyOffer()] });
   }
 
@@ -299,7 +357,7 @@ export function SponsorFormModal({
     await onSubmit(toSponsorPayload(nextValues));
   }
 
-  const busy = loading || uploading;
+  const busy = loading || uploading || loadingOffers;
   const sponsorPreview =
     pendingFiles.sponsor?.preview ||
     (values.image && isValidMediaRef(values.image) ? resolveMediaUrl(values.image) : '');
@@ -409,13 +467,47 @@ export function SponsorFormModal({
           <fieldset className="schedule-fieldset">
             <legend>Sponsor offers</legend>
             <p className="hint">
-              Add Offer 1, Offer 2, Offer 3… Each offer needs a description. Image and links are
-              optional.
+              Offers are event-specific. Select an event, then add Offer 1, Offer 2… Attendees only
+              see offers for the event they have selected.
             </p>
+
+            <label className="field">
+              <span className="field-label">
+                Event for these offers{values.offers.length > 0 ? ' *' : ''}
+              </span>
+              <select
+                className={`field-input${errors.eventId ? ' field-input-error' : ''}`}
+                value={values.eventId}
+                disabled={busy || eventOptions.length === 0}
+                onChange={(e) => void handleEventChange(e.target.value)}
+              >
+                <option value="">
+                  {eventOptions.length === 0
+                    ? 'No events available — schedule or link an event first'
+                    : 'Select an event…'}
+                </option>
+                {eventOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.eventId ? <span className="field-error">{errors.eventId}</span> : null}
+            </label>
+
+            {!values.eventId ? (
+              <p className="muted">
+                {mode === 'create'
+                  ? 'Create the profile now, or select an event above to add offers immediately.'
+                  : 'Select an event to view and edit offers for that edition.'}
+              </p>
+            ) : null}
 
             <div className="day-list">
               {values.offers.length === 0 ? (
-                <p className="muted">No offers yet.</p>
+                <p className="muted">
+                  {values.eventId ? 'No offers for this event yet.' : 'No offers yet.'}
+                </p>
               ) : (
                 values.offers.map((offer, offerIndex) => (
                   <div className="material-row" key={offer.key}>

@@ -46,6 +46,22 @@ export class MongoEventAssociationRepository {
     return docs.map((doc) => doc.entityId);
   }
 
+  async listEventIds(entityId: string, kind: AssociationKind): Promise<string[]> {
+    const docs = await collection()
+      .find({ entityId, kind })
+      .project({ eventId: 1 })
+      .toArray();
+    return docs.map((doc) => doc.eventId);
+  }
+
+  async listLinksForEvent(
+    eventId: string,
+    kind: AssociationKind,
+  ): Promise<EventAssociation[]> {
+    const docs = await collection().find({ eventId, kind }).toArray();
+    return docs.map((doc) => toRow(doc)!);
+  }
+
   async listByEvent(eventId: string): Promise<EventAssociation[]> {
     const docs = await collection().find({ eventId }).toArray();
     return docs.map((doc) => toRow(doc)!);

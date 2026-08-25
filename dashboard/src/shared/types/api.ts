@@ -650,6 +650,15 @@ export interface SponsorPayload {
   offers?: SponsorOfferPayload[];
 }
 
+export interface SponsorLinkedEvent {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  offerCount: number;
+}
+
 export type AnnouncementKind = 'manual' | 'system';
 export type AnnouncementStatus = 'draft' | 'scheduled' | 'published' | 'cancelled';
 export type AudienceType = 'all' | 'roles' | 'users';

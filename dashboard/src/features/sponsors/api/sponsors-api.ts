@@ -2,6 +2,7 @@ import { apiClient } from '@/shared/api/client';
 import type {
   PaginationMeta,
   PublicSponsor,
+  SponsorLinkedEvent,
   SponsorPayload,
   SuccessEnvelope,
 } from '@/shared/types/api';
@@ -29,13 +30,24 @@ export const sponsorsApi = {
     };
   },
 
-  async getById(id: string): Promise<PublicSponsor> {
-    const { data } = await apiClient.get<SuccessEnvelope<PublicSponsor>>(`/sponsors/${id}`);
+  async getById(id: string, params: { eventId?: string } = {}): Promise<PublicSponsor> {
+    const { data } = await apiClient.get<SuccessEnvelope<PublicSponsor>>(`/sponsors/${id}`, {
+      params,
+    });
     return data.data;
   },
 
-  async getMe(): Promise<PublicSponsor> {
-    const { data } = await apiClient.get<SuccessEnvelope<PublicSponsor>>('/sponsors/me');
+  async getMe(params: { eventId?: string } = {}): Promise<PublicSponsor> {
+    const { data } = await apiClient.get<SuccessEnvelope<PublicSponsor>>('/sponsors/me', {
+      params,
+    });
+    return data.data;
+  },
+
+  async listMyEvents(): Promise<SponsorLinkedEvent[]> {
+    const { data } = await apiClient.get<SuccessEnvelope<SponsorLinkedEvent[]>>(
+      '/sponsors/me/events',
+    );
     return data.data;
   },
 

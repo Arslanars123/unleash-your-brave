@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Handshake, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { eventsApi } from '@/features/events/api/events-api';
 import { sponsorsApi } from '@/features/sponsors/api/sponsors-api';
 import { SponsorFormModal } from '@/features/sponsors/components/SponsorFormModal';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
-import type { PublicSponsor, SponsorPayload } from '@/shared/types/api';
+import type { PublicEvent, PublicSponsor, SponsorPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { ListPagination } from '@/shared/ui/ListPagination';
@@ -14,6 +15,20 @@ import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
 const PER_PAGE = 20;
+
+function editionLabel(edition: PublicEvent): string {
+  const start = new Date(edition.startDate).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const end = new Date(edition.endDate).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  return `${start} – ${end} (${edition.status})`;
+}
 
 export function SponsorsPage() {
   const [search, setSearch] = useState('');
@@ -33,6 +48,33 @@ export function SponsorsPage() {
         perPage: PER_PAGE,
       }),
   });
+
+  const workspaceQuery = useQuery({
+    queryKey: ['events', 'workspace'],
+    queryFn: () => eventsApi.getWorkspace(),
+  });
+
+  const eventOptions = useMemo(() => {
+    const workspace = workspaceQuery.data;
+    if (!workspace) return [];
+    const editions: PublicEvent[] = [
+      workspace.current,
+      ...(workspace.upcomingEditions ?? []),
+      ...(workspace.pastEditions ?? []),
+      ...(workspace.editions ?? []),
+    ].filter((edition): edition is PublicEvent => Boolean(edition));
+    const seen = new Set<string>();
+    return editions
+      .filter((edition) => {
+        if (seen.has(edition.id)) return false;
+        seen.add(edition.id);
+        return true;
+      })
+      .map((edition) => ({
+        id: edition.id,
+        label: editionLabel(edition),
+      }));
+  }, [workspaceQuery.data]);
 
   function applySearch(next: string) {
     setSearch(next);
@@ -127,7 +169,7 @@ export function SponsorsPage() {
           <h1>Sponsors</h1>
           <p className="muted">
             Shared sponsor library. Create sponsors here, then link them to events from Edit edition.
-            The same sponsor can appear on multiple events.
+            Offers are event-specific — choose an event when adding offers.
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -180,7 +222,8 @@ export function SponsorsPage() {
             <Handshake size={28} />
             <h2>No sponsors yet</h2>
             <p className="muted">
-              Add sponsors to the shared library, then link them to an event from Edit edition.
+              Add sponsors to the shared library, link them to an event, then add offers for that
+              event.
             </p>
             <Button onClick={openCreate}>
               <Plus size={16} />
@@ -218,10 +261,7 @@ export function SponsorsPage() {
                       </div>
                     </td>
                     <td>
-                      <span className="badge role-member">
-                        {sponsor.offers.length}{' '}
-                        {sponsor.offers.length === 1 ? 'offer' : 'offers'}
-                      </span>
+                      <span className="badge role-member">Per event</span>
                     </td>
                     <td>
                       <span className="cell-clamp">{sponsor.description || '—'}</span>
@@ -260,6 +300,15 @@ export function SponsorsPage() {
         open={modalOpen}
         mode={editing ? 'edit' : 'create'}
         initialSponsor={editing}
+        eventOptions={eventOptions}
+        loadOffersForEvent={
+          editing
+            ? async (eventId) => {
+                const sponsor = await sponsorsApi.getById(editing.id, { eventId });
+                return sponsor.offers;
+              }
+            : undefined
+        }
         loading={saving}
         onClose={closeModal}
         onSubmit={handleSubmit}

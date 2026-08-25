@@ -83,6 +83,44 @@ export class EventAssociationService {
     await this.associations.link(eventId, 'sponsor', sponsorId);
   }
 
+  /** Event IDs this sponsor is linked to (for portal offer editing). */
+  async listEventIdsForSponsor(sponsorId: string): Promise<string[]> {
+    return this.associations.listEventIds(sponsorId, 'sponsor');
+  }
+
+  async getSponsorAssociation(
+    eventId: string,
+    sponsorId: string,
+  ): Promise<{ offersJson?: unknown } | null> {
+    const link = await this.associations.findLink(eventId, 'sponsor', sponsorId);
+    if (!link) return null;
+    return { offersJson: link.offersJson };
+  }
+
+  async listSponsorAssociations(eventId: string): Promise<
+    Array<{ sponsorId: string; offersJson?: unknown }>
+  > {
+    const links = await this.associations.listLinksForEvent(eventId, 'sponsor');
+    return links.map((link) => ({
+      sponsorId: link.entityId,
+      offersJson: link.offersJson,
+    }));
+  }
+
+  /**
+   * Store edition-specific offers on the sponsor↔event association.
+   * Creates the link if missing.
+   */
+  async setSponsorOffers(
+    eventId: string,
+    sponsorId: string,
+    offersJson: unknown,
+  ): Promise<void> {
+    await this.events.requireEvent(eventId);
+    await this.assertSponsorsExist([sponsorId]);
+    await this.associations.link(eventId, 'sponsor', sponsorId, offersJson);
+  }
+
   async linkMembership(eventId: string, membershipId: string): Promise<void> {
     await this.events.requireEvent(eventId);
     await this.assertMembershipsExist([membershipId]);

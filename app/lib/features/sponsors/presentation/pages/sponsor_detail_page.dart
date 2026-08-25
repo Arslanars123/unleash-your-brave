@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
@@ -56,7 +58,14 @@ class _SponsorDetailPageState extends State<SponsorDetailPage> {
     });
 
     try {
-      final sponsor = await sl<SponsorsRemoteDataSource>().getById(widget.sponsorId);
+      final eventId = context.read<SelectedEventCubit>().state.eventId;
+      if (eventId == null || eventId.isEmpty) {
+        throw const ServerException('Select an event to view sponsor offers');
+      }
+      final sponsor = await sl<SponsorsRemoteDataSource>().getById(
+        widget.sponsorId,
+        eventId: eventId,
+      );
       if (!mounted) return;
       setState(() {
         _sponsor = sponsor;

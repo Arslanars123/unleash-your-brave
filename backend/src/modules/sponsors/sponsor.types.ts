@@ -80,7 +80,21 @@ export interface UpdateSponsorInput {
   email?: string;
   description?: string;
   image?: string;
+  /**
+   * Required when `offers` is provided. Offers are stored per event association,
+   * not on the shared sponsor profile.
+   */
+  eventId?: string;
   offers?: SponsorOfferInput[];
+}
+
+export interface LinkedSponsorEvent {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  offerCount: number;
 }
 
 export interface ListSponsorsQuery {

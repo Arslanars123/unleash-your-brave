@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate.js';
 import type { SponsorController } from './sponsor.controller.js';
 import {
   createSponsorSchema,
+  getSponsorQuerySchema,
   listSponsorsQuerySchema,
   sponsorIdParamSchema,
   updateSponsorSchema,
@@ -17,8 +18,18 @@ export function createSponsorRouter(controller: SponsorController): Router {
 
   router.get('/me', authenticate, authorize('sponsor'), asyncHandler(controller.me));
 
-  router.get('/:id', validate({ params: sponsorIdParamSchema }), asyncHandler(controller.getById));
+  router.get(
+    '/me/events',
+    authenticate,
+    authorize('sponsor'),
+    asyncHandler(controller.linkedEvents),
+  );
 
+  router.get(
+    '/:id',
+    validate({ params: sponsorIdParamSchema, query: getSponsorQuerySchema }),
+    asyncHandler(controller.getById),
+  );
   router.post(
     '/',
     authenticate,

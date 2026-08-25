@@ -14,12 +14,25 @@ export class SponsorController {
   };
 
   getById = async (req: Request, res: Response): Promise<void> => {
-    sendSuccess(res, await this.service.getById(req.params.id as string));
+    const eventId =
+      typeof req.query.eventId === 'string' && req.query.eventId.trim()
+        ? req.query.eventId.trim()
+        : undefined;
+    sendSuccess(res, await this.service.getById(req.params.id as string, eventId));
   };
 
   me = async (req: Request, res: Response): Promise<void> => {
     if (!req.auth?.sponsorId) throw new ForbiddenError('No sponsor profile linked to this account');
-    sendSuccess(res, await this.service.getById(req.auth.sponsorId));
+    const eventId =
+      typeof req.query.eventId === 'string' && req.query.eventId.trim()
+        ? req.query.eventId.trim()
+        : undefined;
+    sendSuccess(res, await this.service.getById(req.auth.sponsorId, eventId));
+  };
+
+  linkedEvents = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth?.sponsorId) throw new ForbiddenError('No sponsor profile linked to this account');
+    sendSuccess(res, await this.service.listLinkedEvents(req.auth.sponsorId));
   };
 
   create = async (req: Request, res: Response): Promise<void> => {

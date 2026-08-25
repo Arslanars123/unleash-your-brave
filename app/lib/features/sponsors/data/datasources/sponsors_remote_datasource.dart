@@ -33,9 +33,12 @@ class SponsorsRemoteDataSource {
     }
   }
 
-  Future<SponsorModel> getById(String id) async {
+  Future<SponsorModel> getById(String id, {required String eventId}) async {
     try {
-      final response = await _dioClient.client.get('${ApiConstants.sponsors}/$id');
+      final response = await _dioClient.client.get(
+        '${ApiConstants.sponsors}/$id',
+        queryParameters: {'eventId': eventId},
+      );
       final data = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
       return SponsorModel.fromJson(data);
     } on DioException catch (error) {
