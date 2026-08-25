@@ -47,8 +47,8 @@ export function SessionsPage() {
   });
 
   const speakersQuery = useQuery({
-    queryKey: ['speakers', 'list', eventId, 'all'],
-    queryFn: () => speakersApi.list({ perPage: 100, eventId }),
+    queryKey: ['speakers', 'library', 'session-picker'],
+    queryFn: () => speakersApi.list({ perPage: 100 }),
     enabled: Boolean(eventId),
   });
 
@@ -160,7 +160,7 @@ export function SessionsPage() {
           <p className="muted">
             {isPastEdition
               ? 'Agenda from a past edition — admins can still edit sessions, materials, and reviews.'
-              : 'Agenda for the selected edition — speakers and materials stay with this event.'}
+              : 'Agenda for the selected edition. Pick speakers from the shared library when you create a session.'}
           </p>
         </div>
         {canEdit ? (

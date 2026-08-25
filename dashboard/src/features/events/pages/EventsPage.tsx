@@ -66,8 +66,8 @@ export function EventsPage() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: EventPayload }) => {
       const updated = await eventsApi.update(id, payload);
+      // Speakers are linked via sessions — only update memberships/sponsors here.
       await eventsApi.setAssociations(id, {
-        speakerIds: payload.speakerIds ?? [],
         sponsorIds: payload.sponsorIds ?? [],
         membershipIds: payload.membershipIds ?? [],
       });
@@ -179,9 +179,10 @@ export function EventsPage() {
         <div>
           <h1>Event</h1>
           <p className="muted">
-            Manage {CANONICAL_EVENT_NAME} editions. Each event is separate. Link shared memberships,
-            speakers, and sponsors per edition (reusable across events). Sessions and content stay
-            event-specific. A new edition must start after the previous one ends.
+            Manage {CANONICAL_EVENT_NAME} editions. Each event is separate. Link shared memberships
+            and sponsors per edition (reusable across events). Speakers are assigned on sessions.
+            Sessions and content stay event-specific. A new edition must start after the previous one
+            ends.
           </p>
         </div>
         <div className="page-header-actions">

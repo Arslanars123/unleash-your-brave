@@ -357,7 +357,8 @@ export function EventFormModal({
     if (!open || mode !== 'edit' || !associationsQuery.data) return;
     setValues((current) => ({
       ...current,
-      speakerIds: associationsQuery.data.speakerIds,
+      // Speakers are linked via sessions — do not manage them here.
+      speakerIds: [],
       sponsorIds: associationsQuery.data.sponsorIds,
       membershipIds: associationsQuery.data.membershipIds,
     }));
@@ -814,7 +815,6 @@ export function EventFormModal({
 
           <EventAssociationPicker
             value={{
-              speakerIds: values.speakerIds,
               sponsorIds: values.sponsorIds,
               membershipIds: values.membershipIds,
             }}
@@ -822,15 +822,14 @@ export function EventFormModal({
             onChange={(next) =>
               setForm({
                 ...values,
-                speakerIds: next.speakerIds,
                 sponsorIds: next.sponsorIds,
                 membershipIds: next.membershipIds,
               })
             }
             hint={
               isSchedule
-                ? 'Select shared memberships, speakers, and sponsors for this new event. You can change these later in Edit details.'
-                : 'Link shared memberships, speakers, and sponsors to this event. The same person or tier can be linked to multiple events; sessions and content stay separate per event.'
+                ? 'Select shared memberships and sponsors for this new event. Speakers are assigned when you create sessions. You can change these later in Edit details.'
+                : 'Link shared memberships and sponsors to this event. Speakers are assigned when you create sessions. The same tier or sponsor can be linked to multiple events.'
             }
           />
 

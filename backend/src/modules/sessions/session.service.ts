@@ -271,14 +271,17 @@ export class SessionService {
     };
   }
 
+  /**
+   * Speakers live in a shared library. Assigning one to a session links them to the
+   * edition automatically — no separate event-level speaker association step.
+   */
   private async requireSpeakerForEvent(speakerId: string, eventId: string): Promise<void> {
     const speaker = await this.speakers.findById(speakerId);
     if (!speaker) throw new BadRequestError('Selected speaker was not found');
     if (speaker.eventId === eventId) return;
-    if (this.associations && (await this.associations.isSpeakerLinked(eventId, speakerId))) {
-      return;
+    if (this.associations) {
+      await this.associations.linkSpeaker(eventId, speakerId);
     }
-    throw new BadRequestError('Speaker must be associated with this event edition');
   }
 
   private async assertMembershipsForEvent(

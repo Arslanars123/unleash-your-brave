@@ -75,7 +75,7 @@ export const eventsApi = {
 
   async setAssociations(
     eventId: string,
-    payload: Omit<EventAssociations, 'eventId'>,
+    payload: Partial<Omit<EventAssociations, 'eventId'>>,
   ): Promise<EventAssociations> {
     const { data } = await apiClient.put<SuccessEnvelope<EventAssociations>>(
       `/events/${eventId}/associations`,
