@@ -360,6 +360,9 @@ export interface EventPayload {
   paused?: boolean;
   published?: boolean;
   notifyAttendees?: boolean;
+  speakerIds?: string[];
+  sponsorIds?: string[];
+  membershipIds?: string[];
 }
 
 export interface ScheduleEventPayload {

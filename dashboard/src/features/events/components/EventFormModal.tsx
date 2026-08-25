@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
 import { EventAssociationPicker } from '@/features/events/components/EventAssociationPicker';
 import { VenuePlacesField } from '@/features/events/components/VenuePlacesField';
+import { eventsApi } from '@/features/events/api/events-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { uploadImageFile } from '@/shared/lib/upload-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
@@ -274,6 +276,9 @@ export function toEventPayload(values: EventFormValues): EventPayload {
     paused: values.paused,
     published: values.published,
     notifyAttendees: values.notifyAttendees,
+    speakerIds: values.speakerIds,
+    sponsorIds: values.sponsorIds,
+    membershipIds: values.membershipIds,
   };
 }
 
@@ -341,6 +346,22 @@ export function EventFormModal({
       setValues(scheduleBlankForm(initialEvent));
     }
   }, [open, mode, initialEvent]);
+
+  const associationsQuery = useQuery({
+    queryKey: ['events', initialEvent?.id, 'associations'],
+    queryFn: () => eventsApi.getAssociations(initialEvent!.id),
+    enabled: open && mode === 'edit' && Boolean(initialEvent?.id),
+  });
+
+  useEffect(() => {
+    if (!open || mode !== 'edit' || !associationsQuery.data) return;
+    setValues((current) => ({
+      ...current,
+      speakerIds: associationsQuery.data.speakerIds,
+      sponsorIds: associationsQuery.data.sponsorIds,
+      membershipIds: associationsQuery.data.membershipIds,
+    }));
+  }, [open, mode, associationsQuery.data]);
 
   if (!open) return null;
 
@@ -791,24 +812,27 @@ export function EventFormModal({
             </>
           ) : null}
 
-          {isSchedule ? (
-            <EventAssociationPicker
-              value={{
-                speakerIds: values.speakerIds,
-                sponsorIds: values.sponsorIds,
-                membershipIds: values.membershipIds,
-              }}
-              disabled={loading || uploading}
-              onChange={(next) =>
-                setForm({
-                  ...values,
-                  speakerIds: next.speakerIds,
-                  sponsorIds: next.sponsorIds,
-                  membershipIds: next.membershipIds,
-                })
-              }
-            />
-          ) : null}
+          <EventAssociationPicker
+            value={{
+              speakerIds: values.speakerIds,
+              sponsorIds: values.sponsorIds,
+              membershipIds: values.membershipIds,
+            }}
+            disabled={loading || uploading || (mode === 'edit' && associationsQuery.isLoading)}
+            onChange={(next) =>
+              setForm({
+                ...values,
+                speakerIds: next.speakerIds,
+                sponsorIds: next.sponsorIds,
+                membershipIds: next.membershipIds,
+              })
+            }
+            hint={
+              isSchedule
+                ? 'Select shared memberships, speakers, and sponsors for this new event. You can change these later in Edit details.'
+                : 'Link shared memberships, speakers, and sponsors to this event. The same person or tier can be linked to multiple events; sessions and content stay separate per event.'
+            }
+          />
 
           <div className="modal-actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={loading || uploading}>

@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarDays, CalendarPlus, MapPin, Pencil, Trash2 } from 'lucide-react';
 import { eventsApi } from '@/features/events/api/events-api';
-import { EventAssociationsPanel } from '@/features/events/components/EventAssociationsPanel';
 import { EventFormModal } from '@/features/events/components/EventFormModal';
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
 import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
@@ -65,10 +64,22 @@ export function EventsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: EventPayload }) =>
-      eventsApi.update(id, payload),
+    mutationFn: async ({ id, payload }: { id: string; payload: EventPayload }) => {
+      const updated = await eventsApi.update(id, payload);
+      await eventsApi.setAssociations(id, {
+        speakerIds: payload.speakerIds ?? [],
+        sponsorIds: payload.sponsorIds ?? [],
+        membershipIds: payload.membershipIds ?? [],
+      });
+      return updated;
+    },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['events'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['events'] }),
+        queryClient.invalidateQueries({ queryKey: ['speakers'] }),
+        queryClient.invalidateQueries({ queryKey: ['sponsors'] }),
+        queryClient.invalidateQueries({ queryKey: ['memberships'] }),
+      ]);
       toast.success('Event updated');
       setEditOpen(false);
       setEditingEvent(null);
@@ -217,16 +228,13 @@ export function EventsPage() {
       ) : null}
 
       {event ? (
-        <>
-          <EventSummaryCard
-            event={event}
-            deleting={deleteMutation.isPending}
-            onEdit={() => openEdit(event)}
-            onDelete={() => void handleDelete(event)}
-            onSchedule={() => setScheduleOpen(true)}
-          />
-          <EventAssociationsPanel event={event} />
-        </>
+        <EventSummaryCard
+          event={event}
+          deleting={deleteMutation.isPending}
+          onEdit={() => openEdit(event)}
+          onDelete={() => void handleDelete(event)}
+          onSchedule={() => setScheduleOpen(true)}
+        />
       ) : null}
 
       {upcomingEditions.length > 0 ? (
