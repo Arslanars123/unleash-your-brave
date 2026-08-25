@@ -223,7 +223,9 @@ export function SessionsPage() {
         <p className="form-error">Schedule an event on the Event page before managing sessions.</p>
       ) : null}
       {!bootstrapLoading && canEdit && speakers.length === 0 ? (
-        <p className="form-error">Add at least one speaker before creating sessions.</p>
+        <p className="form-error">
+          Add at least one speaker on the Speakers page before creating sessions.
+        </p>
       ) : null}
       {!bootstrapLoading && canEdit && eventDays.length === 0 ? (
         <p className="form-error">Set event days on the Event page before creating sessions.</p>
