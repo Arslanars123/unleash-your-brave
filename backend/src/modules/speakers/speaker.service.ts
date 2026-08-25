@@ -1,5 +1,6 @@
 import { env } from '../../config/env.js';
-import { NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import type { UserService } from '../users/user.service.js';
@@ -14,6 +15,8 @@ import type {
 } from './speaker.types.js';
 
 export class SpeakerService {
+  private associations: EventAssociationService | null = null;
+
   constructor(
     private readonly speakers: SpeakerRepository,
     private readonly events: EventService,
@@ -21,7 +24,50 @@ export class SpeakerService {
     private readonly mail: MailService,
   ) {}
 
+  setAssociationService(service: EventAssociationService): void {
+    this.associations = service;
+  }
+
   async list(query: ListSpeakersQuery): Promise<PaginatedResult<PublicSpeaker>> {
+    if (query.eventId && this.associations) {
+      const linkedIds = await this.associations.listSpeakerIds(query.eventId);
+      const legacy = await this.speakers.list({
+        page: 1,
+        perPage: 500,
+        eventId: query.eventId,
+        search: query.search,
+      });
+      const byId = new Map<string, Speaker>();
+      for (const speaker of await this.speakers.listByIds(linkedIds)) {
+        byId.set(speaker.id, speaker);
+      }
+      for (const speaker of legacy.items) {
+        byId.set(speaker.id, speaker);
+      }
+
+      let items = [...byId.values()];
+      if (query.search?.trim()) {
+        const search = query.search.trim().toLowerCase();
+        items = items.filter(
+          (speaker) =>
+            speaker.name.toLowerCase().includes(search) ||
+            speaker.email.toLowerCase().includes(search) ||
+            speaker.title.toLowerCase().includes(search) ||
+            speaker.description.toLowerCase().includes(search),
+        );
+      }
+      items.sort((a, b) => a.name.localeCompare(b.name));
+      const total = items.length;
+      const start = (query.page - 1) * query.perPage;
+      const pageItems = items.slice(start, start + query.perPage);
+      return {
+        items: pageItems.map((speaker) =>
+          toPublicSpeaker({ ...speaker, eventId: query.eventId! }),
+        ),
+        total,
+      };
+    }
+
     const { items, total } = await this.speakers.list(query);
     return { items: items.map(toPublicSpeaker), total };
   }
@@ -31,10 +77,13 @@ export class SpeakerService {
   }
 
   async create(input: CreateSpeakerInput): Promise<PublicSpeaker> {
-    await this.events.requireEvent(input.eventId);
+    const eventId = input.eventId?.trim() || '';
+    if (eventId) {
+      await this.events.requireEvent(eventId);
+    }
 
     const created = await this.speakers.create({
-      eventId: input.eventId,
+      eventId,
       name: input.name,
       email: input.email?.trim().toLowerCase() ?? '',
       title: input.title ?? '',
@@ -42,11 +91,17 @@ export class SpeakerService {
       photo: input.photo ?? '',
     });
 
+    if (eventId && this.associations) {
+      await this.associations.linkSpeaker(eventId, created.id);
+    }
+
     if (input.email?.trim()) {
       await this.provisionPortalAccount(created, input.email.trim(), true);
     }
 
-    return toPublicSpeaker(created);
+    return toPublicSpeaker(
+      eventId ? { ...created, eventId } : created,
+    );
   }
 
   async update(id: string, input: UpdateSpeakerInput): Promise<PublicSpeaker> {
@@ -76,6 +131,16 @@ export class SpeakerService {
     }
   }
 
+  async assertLinkedToEvent(speakerId: string, eventId: string): Promise<void> {
+    const speaker = await this.speakers.findById(speakerId);
+    if (!speaker) throw new BadRequestError('Selected speaker was not found');
+    if (speaker.eventId === eventId) return;
+    if (this.associations && (await this.associations.isSpeakerLinked(eventId, speakerId))) {
+      return;
+    }
+    throw new BadRequestError('Speaker must be associated with this event edition');
+  }
+
   private async provisionPortalAccount(
     speaker: Speaker,
     email: string,
@@ -101,7 +166,6 @@ export class SpeakerService {
         dualAccess: true,
       });
     } else if (issueInvite) {
-      // Attendee (or other) already has a password — same login unlocks dashboard.
       await this.mail.sendExistingAccountPortalAccess({
         to: email,
         name: speaker.name,

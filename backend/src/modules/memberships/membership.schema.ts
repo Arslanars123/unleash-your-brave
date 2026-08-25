@@ -25,7 +25,7 @@ export const listMembershipsQuerySchema = z.object({
 const featuresSchema = z.array(z.string().trim().min(1).max(240)).max(30).optional().default([]);
 
 export const createMembershipSchema = z.object({
-  eventId: z.string().uuid('Event is required'),
+  eventId: z.string().uuid('Event is required').optional(),
   name: z.string().trim().min(2, 'Membership name is required').max(160),
   valueLink: optionalLink,
   price: z.coerce.number().min(0).max(1_000_000).optional().default(0),

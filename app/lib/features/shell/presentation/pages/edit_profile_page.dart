@@ -109,48 +109,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       setState(() {
         _localPhoto = File(picked.path);
-        _uploadingPhoto = true;
       });
-
-      final url = await sl<UploadsRemoteDataSource>().uploadImage(_localPhoto!);
-      if (!mounted) return;
-      final resolved = resolveMediaUrl(url);
-      if (resolved.isNotEmpty) {
-        await CachedNetworkImage.evictFromCache(resolved);
-      }
-      if (!mounted) return;
-
-      // Persist immediately so leaving the screen doesn't lose the photo.
-      final photoResult = await sl<UpdateMyProfileUseCase>()(
-        UpdateMyProfileParams({'photoUrl': url}),
-      );
-      if (!mounted) return;
-
-      await photoResult.fold(
-        (failure) async {
-          setState(() {
-            _photoUrl = url;
-            _uploadingPhoto = false;
-          });
-          AppToast.error(failure.message);
-        },
-        (user) async {
-          context.read<AuthBloc>().add(AuthUserUpdated(user));
-          setState(() {
-            _photoUrl = user.photoUrl.isNotEmpty ? user.photoUrl : url;
-            _uploadingPhoto = false;
-            _localPhoto = null;
-          });
-          AppToast.success('Photo saved');
-        },
-      );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _uploadingPhoto = false);
       final message = switch (error) {
         ServerException(:final message) => message,
         NetworkException(:final message) => message,
-        _ => 'Unable to upload photo',
+        _ => 'Unable to select photo',
       };
       AppToast.error(message);
     }
@@ -215,9 +180,41 @@ class _EditProfilePageState extends State<EditProfilePage> {
     if (_saving || _uploadingPhoto) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    setState(() => _saving = true);
+
+    var photoUrl = _photoUrl;
+    if (_localPhoto != null) {
+      setState(() => _uploadingPhoto = true);
+      try {
+        photoUrl = await sl<UploadsRemoteDataSource>().uploadImage(_localPhoto!);
+        final resolved = resolveMediaUrl(photoUrl);
+        if (resolved.isNotEmpty) {
+          await CachedNetworkImage.evictFromCache(resolved);
+        }
+      } catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _saving = false;
+          _uploadingPhoto = false;
+        });
+        final message = switch (error) {
+          ServerException(:final message) => message,
+          NetworkException(:final message) => message,
+          _ => 'Unable to upload photo',
+        };
+        AppToast.error(message);
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _photoUrl = photoUrl;
+        _uploadingPhoto = false;
+      });
+    }
+
     final payload = <String, dynamic>{
       'name': _nameController.text.trim(),
-      'photoUrl': _photoUrl,
+      'photoUrl': photoUrl,
       'title': _titleController.text.trim(),
       'business': _businessController.text.trim(),
       'industry': _industryController.text.trim(),
@@ -231,8 +228,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
       'websiteUrl': _websiteController.text.trim(),
       'profileCompleted': true,
     };
-
-    setState(() => _saving = true);
 
     final result = await sl<UpdateMyProfileUseCase>()(
       UpdateMyProfileParams(payload),
@@ -255,6 +250,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         setState(() {
           _saving = false;
           _localPhoto = null;
+          _photoUrl = user.photoUrl.isNotEmpty ? user.photoUrl : photoUrl;
         });
         AppToast.success('Profile updated');
         context.pop();

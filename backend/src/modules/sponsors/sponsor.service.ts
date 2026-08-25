@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { env } from '../../config/env.js';
-import { NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import type { UserService } from '../users/user.service.js';
@@ -33,6 +34,8 @@ function normalizeOffers(offers: SponsorOfferInput[] | undefined): SponsorOffer[
 }
 
 export class SponsorService {
+  private associations: EventAssociationService | null = null;
+
   constructor(
     private readonly sponsors: SponsorRepository,
     private readonly events: EventService,
@@ -40,7 +43,49 @@ export class SponsorService {
     private readonly mail: MailService,
   ) {}
 
+  setAssociationService(service: EventAssociationService): void {
+    this.associations = service;
+  }
+
   async list(query: ListSponsorsQuery): Promise<PaginatedResult<PublicSponsor>> {
+    if (query.eventId && this.associations) {
+      const linkedIds = await this.associations.listSponsorIds(query.eventId);
+      const legacy = await this.sponsors.list({
+        page: 1,
+        perPage: 500,
+        eventId: query.eventId,
+        search: query.search,
+      });
+      const byId = new Map<string, Sponsor>();
+      for (const sponsor of await this.sponsors.listByIds(linkedIds)) {
+        byId.set(sponsor.id, sponsor);
+      }
+      for (const sponsor of legacy.items) {
+        byId.set(sponsor.id, sponsor);
+      }
+
+      let items = [...byId.values()];
+      if (query.search?.trim()) {
+        const search = query.search.trim().toLowerCase();
+        items = items.filter(
+          (sponsor) =>
+            sponsor.name.toLowerCase().includes(search) ||
+            sponsor.email.toLowerCase().includes(search) ||
+            sponsor.description.toLowerCase().includes(search),
+        );
+      }
+      items.sort((a, b) => a.name.localeCompare(b.name));
+      const total = items.length;
+      const start = (query.page - 1) * query.perPage;
+      const pageItems = items.slice(start, start + query.perPage);
+      return {
+        items: pageItems.map((sponsor) =>
+          toPublicSponsor({ ...sponsor, eventId: query.eventId! }),
+        ),
+        total,
+      };
+    }
+
     const { items, total } = await this.sponsors.list(query);
     return { items: items.map(toPublicSponsor), total };
   }
@@ -50,10 +95,13 @@ export class SponsorService {
   }
 
   async create(input: CreateSponsorInput): Promise<PublicSponsor> {
-    await this.events.requireEvent(input.eventId);
+    const eventId = input.eventId?.trim() || '';
+    if (eventId) {
+      await this.events.requireEvent(eventId);
+    }
 
     const created = await this.sponsors.create({
-      eventId: input.eventId,
+      eventId,
       name: input.name,
       email: input.email?.trim().toLowerCase() ?? '',
       description: input.description ?? '',
@@ -61,11 +109,15 @@ export class SponsorService {
       offers: normalizeOffers(input.offers),
     });
 
+    if (eventId && this.associations) {
+      await this.associations.linkSponsor(eventId, created.id);
+    }
+
     if (input.email?.trim()) {
       await this.provisionPortalAccount(created, input.email.trim(), true);
     }
 
-    return toPublicSponsor(created);
+    return toPublicSponsor(eventId ? { ...created, eventId } : created);
   }
 
   async update(id: string, input: UpdateSponsorInput): Promise<PublicSponsor> {
@@ -93,6 +145,16 @@ export class SponsorService {
     if (!(await this.sponsors.delete(id))) {
       throw new NotFoundError('Sponsor');
     }
+  }
+
+  async assertLinkedToEvent(sponsorId: string, eventId: string): Promise<void> {
+    const sponsor = await this.sponsors.findById(sponsorId);
+    if (!sponsor) throw new BadRequestError('Selected sponsor was not found');
+    if (sponsor.eventId === eventId) return;
+    if (this.associations && (await this.associations.isSponsorLinked(eventId, sponsorId))) {
+      return;
+    }
+    throw new BadRequestError('Sponsor must be associated with this event edition');
   }
 
   private async provisionPortalAccount(

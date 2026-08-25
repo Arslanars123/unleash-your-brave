@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ImagePlus, X } from 'lucide-react';
-import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { prepareImageForUpload } from '@/shared/lib/compress-image';
+import { uploadImageFile } from '@/shared/lib/upload-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type { PublicStoreCategory, StoreCategoryPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -82,11 +81,19 @@ export function CategoryFormModal({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
     setErrors({});
+    setUploading(false);
+    setPendingImage(null);
+    setPendingPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setValues(initial ? toForm(initial) : emptyForm);
   }, [open, initial]);
 
@@ -98,33 +105,52 @@ export function CategoryFormModal({
     if (submitted) setErrors(validate(next));
   }
 
-  async function handleUpload(file: File | undefined) {
+  function handleSelect(file: File | undefined) {
     if (!file) return;
-    setUploading(true);
-    try {
-      const prepared = await prepareImageForUpload(file);
-      const uploaded = await uploadsApi.uploadImage(prepared);
-      update('image', uploaded.url);
-      toast.success('Image uploaded');
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to upload image'));
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file');
+      return;
     }
+    setPendingPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setPendingImage(file);
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    const nextErrors = validate(values);
+
+    let image = values.image;
+    if (pendingImage) {
+      setUploading(true);
+      try {
+        image = await uploadImageFile(pendingImage);
+        setPendingImage(null);
+        setPendingPreview((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+        update('image', image);
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, 'Unable to upload image'));
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    const nextValues = { ...values, image };
+    const nextErrors = validate(nextValues);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(toCategoryPayload(values));
+    await onSubmit(toCategoryPayload(nextValues));
   }
 
   const busy = loading || uploading;
-  const preview = resolveMediaUrl(values.image);
+  const preview = pendingPreview || resolveMediaUrl(values.image);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -172,17 +198,25 @@ export function CategoryFormModal({
             ) : null}
             <Input
               label="Image URL"
-              value={values.image}
+              value={pendingImage ? '' : values.image}
               error={errors.image}
-              onChange={(e) => update('image', e.target.value)}
-              placeholder="Upload or paste URL"
+              disabled={Boolean(pendingImage)}
+              onChange={(e) => {
+                setPendingImage(null);
+                setPendingPreview((prev) => {
+                  if (prev) URL.revokeObjectURL(prev);
+                  return null;
+                });
+                update('image', e.target.value);
+              }}
+              placeholder="Choose a file or paste URL"
             />
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
               hidden
-              onChange={(e) => void handleUpload(e.target.files?.[0])}
+              onChange={(e) => handleSelect(e.target.files?.[0])}
             />
             <Button
               type="button"
@@ -192,8 +226,13 @@ export function CategoryFormModal({
               onClick={() => fileRef.current?.click()}
             >
               <ImagePlus size={14} />
-              Upload image
+              {pendingImage ? 'Change image' : 'Choose image'}
             </Button>
+            <p className="hint">
+              {pendingImage
+                ? 'Image selected — it will upload when you save.'
+                : 'Image uploads when you save the form'}
+            </p>
           </div>
           <label className="checkbox-row">
             <input

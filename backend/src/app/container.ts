@@ -27,6 +27,7 @@ import { CheckoutService } from '../modules/checkout/checkout.service.js';
 import { EventController } from '../modules/events/event.controller.js';
 import { createEventRouter } from '../modules/events/event.routes.js';
 import { EventService } from '../modules/events/event.service.js';
+import { EventAssociationService } from '../modules/event-associations/event-association.service.js';
 import { MailService } from '../modules/mail/mail.service.js';
 import { PostController } from '../modules/posts/post.controller.js';
 import { createPostRouter } from '../modules/posts/post.routes.js';
@@ -71,6 +72,7 @@ import { MongoCouponRepository } from '../db/repositories/mongo-coupon.repositor
 import { MongoCheckInRepository } from '../db/repositories/mongo-checkin.repository.js';
 import { MongoCheckInFormRepository } from '../db/repositories/mongo-checkin-form.repository.js';
 import { MongoEventRepository } from '../db/repositories/mongo-event.repository.js';
+import { MongoEventAssociationRepository } from '../db/repositories/mongo-event-association.repository.js';
 import { MongoPostRepository } from '../db/repositories/mongo-post.repository.js';
 import { MongoSessionFeedbackRepository } from '../db/repositories/mongo-session-feedback.repository.js';
 import { MongoSessionRepository } from '../db/repositories/mongo-session.repository.js';
@@ -88,6 +90,7 @@ import { StoreService } from '../modules/store/store.service.js';
 import { MongoMembershipRepository } from '../db/repositories/mongo-membership.repository.js';
 import { MongoMembershipPurchaseRepository } from '../db/repositories/mongo-membership-purchase.repository.js';
 import { MongoUserRepository } from '../db/repositories/mongo-user.repository.js';
+import { logger } from '../core/logger.js';
 import { seedDemoData } from './seed.js';
 
 /**
@@ -132,6 +135,18 @@ export async function createContainer() {
   );
   const authService = new AuthService(userRepository, userService, mailService);
   const eventService = new EventService(eventRepository);
+  const eventAssociationRepository = new MongoEventAssociationRepository();
+  await eventAssociationRepository.ensureIndexes();
+  const eventAssociationService = new EventAssociationService(
+    eventAssociationRepository,
+    eventService,
+  );
+  try {
+    const backfill = await eventAssociationRepository.backfillFromLegacy();
+    logger.info(backfill, 'Backfilled event associations from legacy eventId fields');
+  } catch (error) {
+    logger.warn({ err: error }, 'Event association backfill skipped');
+  }
   const membershipService = new MembershipService(membershipRepository, eventService);
   const effectiveAccessService = new EffectiveAccessService(
     userRepository,
@@ -140,6 +155,7 @@ export async function createContainer() {
     membershipPurchaseRepository,
   );
   const speakerService = new SpeakerService(speakerRepository, eventService, userService, mailService);
+  const sponsorService = new SponsorService(sponsorRepository, eventService, userService, mailService);
   const sessionService = new SessionService(
     sessionRepository,
     speakerRepository,
@@ -148,13 +164,22 @@ export async function createContainer() {
     userRepository,
     membershipRepository,
     effectiveAccessService,
+    eventAssociationService,
   );
+  eventAssociationService.setCatalogServices({
+    speakers: speakerService,
+    sponsors: sponsorService,
+    memberships: membershipService,
+  });
+  speakerService.setAssociationService(eventAssociationService);
+  sponsorService.setAssociationService(eventAssociationService);
+  membershipService.setAssociationService(eventAssociationService);
+  eventService.setAssociationService(eventAssociationService);
   const sessionFeedbackService = new SessionFeedbackService(
     sessionFeedbackRepository,
     sessionRepository,
     userRepository,
   );
-  const sponsorService = new SponsorService(sponsorRepository, eventService, userService, mailService);
   const storeService = new StoreService(
     storeCategoryRepository,
     storeProductRepository,
@@ -228,7 +253,7 @@ export async function createContainer() {
 
   const userController = new UserController(userService, checkoutService);
   const authController = new AuthController(authService);
-  const eventController = new EventController(eventService);
+  const eventController = new EventController(eventService, eventAssociationService);
   const speakerController = new SpeakerController(speakerService);
   const sessionController = new SessionController(sessionService);
   const sessionFeedbackController = new SessionFeedbackController(sessionFeedbackService);

@@ -1,9 +1,13 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
 import type { PublicSpeaker, SpeakerPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
-import { MediaImageField, isValidMediaRef } from '@/shared/ui/MediaImageField';
+import {
+  MediaImageField,
+  isValidMediaRef,
+  type MediaImageFieldHandle,
+} from '@/shared/ui/MediaImageField';
 import { TextArea } from '@/shared/ui/TextArea';
 
 export interface SpeakerFormValues {
@@ -82,6 +86,8 @@ export function SpeakerFormModal({
   const [values, setValues] = useState<SpeakerFormValues>(emptyForm);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [committingPhoto, setCommittingPhoto] = useState(false);
+  const photoRef = useRef<MediaImageFieldHandle>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -103,10 +109,25 @@ export function SpeakerFormModal({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    const nextErrors = validate(values);
+
+    let photo = values.photo;
+    if (photoRef.current?.hasPendingFile()) {
+      setCommittingPhoto(true);
+      try {
+        photo = await photoRef.current.commit();
+      } catch {
+        setCommittingPhoto(false);
+        return;
+      }
+      setCommittingPhoto(false);
+    }
+
+    const nextValues = { ...values, photo };
+    setValues(nextValues);
+    const nextErrors = validate(nextValues);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(toSpeakerPayload(values));
+    await onSubmit(toSpeakerPayload(nextValues));
   }
 
   return (
@@ -162,18 +183,24 @@ export function SpeakerFormModal({
             placeholder="A short bio for the speaker..."
           />
           <MediaImageField
+            ref={photoRef}
             label="Photo"
             value={values.photo}
             error={errors.photo}
-            disabled={loading}
+            disabled={loading || committingPhoto}
             onChange={(url) => update('photo', url)}
           />
 
           <div className="modal-actions">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+              disabled={loading || committingPhoto}
+            >
               Cancel
             </Button>
-            <Button type="submit" loading={loading}>
+            <Button type="submit" loading={loading || committingPhoto}>
               {mode === 'create' ? 'Create speaker' : 'Save changes'}
             </Button>
           </div>

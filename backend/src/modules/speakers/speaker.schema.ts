@@ -35,7 +35,7 @@ const optionalEmail = z
   .transform((value) => value || undefined);
 
 export const createSpeakerSchema = z.object({
-  eventId: z.string().uuid('Event is required'),
+  eventId: z.string().uuid('Event is required').optional(),
   name: z.string().trim().min(2, 'Name is required').max(160),
   email: optionalEmail,
   title: optionalText,

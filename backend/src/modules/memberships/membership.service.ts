@@ -1,4 +1,5 @@
-import { NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventService } from '../events/event.service.js';
 import { toPublicMembership } from './membership.mapper.js';
 import type { PaginatedResult, MembershipRepository } from './membership.repository.js';
@@ -11,12 +12,60 @@ import type {
 } from './membership.types.js';
 
 export class MembershipService {
+  private associations: EventAssociationService | null = null;
+
   constructor(
     private readonly memberships: MembershipRepository,
     private readonly events: EventService,
   ) {}
 
+  setAssociationService(service: EventAssociationService): void {
+    this.associations = service;
+  }
+
   async list(query: ListMembershipsQuery): Promise<PaginatedResult<PublicMembership>> {
+    if (query.eventId && this.associations) {
+      const linkedIds = await this.associations.listMembershipIds(query.eventId);
+      const legacy = await this.memberships.list({
+        page: 1,
+        perPage: 500,
+        eventId: query.eventId,
+        search: query.search,
+      });
+      const byId = new Map<string, Membership>();
+      for (const membership of await this.memberships.listByIds(linkedIds)) {
+        byId.set(membership.id, membership);
+      }
+      for (const membership of legacy.items) {
+        byId.set(membership.id, membership);
+      }
+
+      let items = [...byId.values()];
+      if (query.search?.trim()) {
+        const search = query.search.trim().toLowerCase();
+        items = items.filter(
+          (membership) =>
+            membership.name.toLowerCase().includes(search) ||
+            membership.description.toLowerCase().includes(search),
+        );
+      }
+      items.sort(
+        (a, b) =>
+          a.sortOrder - b.sortOrder ||
+          a.price - b.price ||
+          a.name.localeCompare(b.name),
+      );
+      const total = items.length;
+      const start = (query.page - 1) * query.perPage;
+      const pageItems = items.slice(start, start + query.perPage);
+      return {
+        items: pageItems.map((membership) =>
+          toPublicMembership({ ...membership, eventId: query.eventId! }),
+        ),
+        total,
+      };
+    }
+
     const { items, total } = await this.memberships.list(query);
     return { items: items.map(toPublicMembership), total };
   }
@@ -26,10 +75,13 @@ export class MembershipService {
   }
 
   async create(input: CreateMembershipInput): Promise<PublicMembership> {
-    await this.events.requireEvent(input.eventId);
+    const eventId = input.eventId?.trim() || '';
+    if (eventId) {
+      await this.events.requireEvent(eventId);
+    }
 
     const created = await this.memberships.create({
-      eventId: input.eventId,
+      eventId,
       name: input.name,
       valueLink: input.valueLink ?? '',
       price: input.price ?? 0,
@@ -48,7 +100,12 @@ export class MembershipService {
           : Math.max(0, input.durationDays ?? 0),
       upgradeToMembershipId: input.upgradeToMembershipId ?? null,
     });
-    return toPublicMembership(created);
+
+    if (eventId && this.associations) {
+      await this.associations.linkMembership(eventId, created.id);
+    }
+
+    return toPublicMembership(eventId ? { ...created, eventId } : created);
   }
 
   async update(id: string, input: UpdateMembershipInput): Promise<PublicMembership> {
@@ -89,6 +146,16 @@ export class MembershipService {
     }
   }
 
+  async assertLinkedToEvent(membershipId: string, eventId: string): Promise<void> {
+    const membership = await this.memberships.findById(membershipId);
+    if (!membership) throw new BadRequestError('Selected membership was not found');
+    if (membership.eventId === eventId) return;
+    if (this.associations && (await this.associations.isMembershipLinked(eventId, membershipId))) {
+      return;
+    }
+    throw new BadRequestError('Membership must be associated with this event edition');
+  }
+
   async requireMembership(id: string): Promise<Membership> {
     const membership = await this.memberships.findById(id);
     if (!membership) throw new NotFoundError('Membership');
@@ -97,13 +164,7 @@ export class MembershipService {
 
   async assertMembershipsForEvent(membershipIds: string[], eventId: string): Promise<void> {
     for (const membershipId of membershipIds) {
-      const membership = await this.memberships.findById(membershipId);
-      if (!membership) {
-        throw new NotFoundError('Membership');
-      }
-      if (membership.eventId !== eventId) {
-        throw new NotFoundError('Membership');
-      }
+      await this.assertLinkedToEvent(membershipId, eventId);
     }
   }
 }

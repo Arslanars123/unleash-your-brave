@@ -9,6 +9,7 @@ export interface PaginatedResult<T> {
 export interface MembershipRepository {
   findById(id: string): Promise<Membership | null>;
   list(query: ListMembershipsQuery): Promise<PaginatedResult<Membership>>;
+  listByIds(ids: string[]): Promise<Membership[]>;
   create(data: Omit<Membership, 'id' | 'createdAt' | 'updatedAt'>): Promise<Membership>;
   update(
     id: string,
@@ -43,6 +44,18 @@ export class InMemoryMembershipRepository implements MembershipRepository {
       items: filtered.slice(start, start + query.perPage),
       total: filtered.length,
     };
+  }
+
+  async listByIds(ids: string[]): Promise<Membership[]> {
+    const set = new Set(ids);
+    return [...this.memberships.values()]
+      .filter((membership) => set.has(membership.id))
+      .sort(
+        (a, b) =>
+          a.sortOrder - b.sortOrder ||
+          a.price - b.price ||
+          a.name.localeCompare(b.name),
+      );
   }
 
   async create(data: Omit<Membership, 'id' | 'createdAt' | 'updatedAt'>): Promise<Membership> {

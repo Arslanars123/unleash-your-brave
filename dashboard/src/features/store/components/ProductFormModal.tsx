@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ImagePlus, Trash2, X } from 'lucide-react';
-import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { prepareImageForUpload } from '@/shared/lib/compress-image';
+import { uploadImageFile } from '@/shared/lib/upload-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type {
   PublicStoreCategory,
@@ -136,11 +135,19 @@ export function ProductFormModal({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pendingImages, setPendingImages] = useState<
+    Array<{ key: string; file: File; preview: string }>
+  >([]);
 
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
     setErrors({});
+    setUploading(false);
+    setPendingImages((prev) => {
+      for (const item of prev) URL.revokeObjectURL(item.preview);
+      return [];
+    });
     setValues(initial ? toForm(initial) : emptyForm);
   }, [open, initial]);
 
@@ -152,33 +159,59 @@ export function ProductFormModal({
     if (submitted) setErrors(validate(next));
   }
 
-  async function handleUpload(file: File | undefined) {
+  function handleSelect(file: File | undefined) {
     if (!file) return;
-    if (values.images.length >= 12) {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file');
+      return;
+    }
+    if (values.images.length + pendingImages.length >= 12) {
       toast.error('Maximum 12 images per product');
       return;
     }
-    setUploading(true);
-    try {
-      const prepared = await prepareImageForUpload(file);
-      const uploaded = await uploadsApi.uploadImage(prepared);
-      update('images', [...values.images, uploaded.url]);
-      toast.success('Image uploaded');
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to upload image'));
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
+    const preview = URL.createObjectURL(file);
+    setPendingImages((current) => [
+      ...current,
+      { key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file, preview },
+    ]);
+    if (fileRef.current) fileRef.current.value = '';
+  }
+
+  function removePending(key: string) {
+    setPendingImages((current) => {
+      const target = current.find((item) => item.key === key);
+      if (target) URL.revokeObjectURL(target.preview);
+      return current.filter((item) => item.key !== key);
+    });
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    const nextErrors = validate(values);
+
+    let images = [...values.images];
+    if (pendingImages.length > 0) {
+      setUploading(true);
+      try {
+        for (const item of pendingImages) {
+          images.push(await uploadImageFile(item.file));
+        }
+        for (const item of pendingImages) URL.revokeObjectURL(item.preview);
+        setPendingImages([]);
+        update('images', images);
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, 'Unable to upload image'));
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    const nextValues = { ...values, images };
+    const nextErrors = validate(nextValues);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(toProductPayload(values));
+    await onSubmit(toProductPayload(nextValues));
   }
 
   const busy = loading || uploading;
@@ -295,58 +328,76 @@ export function ProductFormModal({
           <fieldset className="schedule-fieldset">
             <legend>Images</legend>
             <div className="day-list">
-              {values.images.length === 0 ? (
+              {values.images.length === 0 && pendingImages.length === 0 ? (
                 <p className="muted">No images yet.</p>
               ) : (
-                values.images.map((image, index) => (
-                  <div key={`${image}-${index}`} className="material-row">
-                    <img
-                      src={resolveMediaUrl(image)}
-                      alt=""
-                      style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }}
-                    />
-                    <Input
-                      label={`Image ${index + 1}`}
-                      value={image}
-                      error={errors[`image-${index}`]}
-                      onChange={(e) => {
-                        const images = [...values.images];
-                        images[index] = e.target.value;
-                        update('images', images);
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() =>
-                        update(
-                          'images',
-                          values.images.filter((_, i) => i !== index),
-                        )
-                      }
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </div>
-                ))
+                <>
+                  {values.images.map((image, index) => (
+                    <div key={`${image}-${index}`} className="material-row">
+                      <img
+                        src={resolveMediaUrl(image)}
+                        alt=""
+                        style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }}
+                      />
+                      <Input
+                        label={`Image ${index + 1}`}
+                        value={image}
+                        error={errors[`image-${index}`]}
+                        onChange={(e) => {
+                          const images = [...values.images];
+                          images[index] = e.target.value;
+                          update('images', images);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() =>
+                          update(
+                            'images',
+                            values.images.filter((_, i) => i !== index),
+                          )
+                        }
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                  {pendingImages.map((item) => (
+                    <div key={item.key} className="material-row">
+                      <img
+                        src={item.preview}
+                        alt=""
+                        style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }}
+                      />
+                      <p className="muted" style={{ flex: 1, margin: 0 }}>
+                        Selected — uploads on save
+                      </p>
+                      <Button type="button" variant="ghost" onClick={() => removePending(item.key)}>
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                </>
               )}
               <input
                 ref={fileRef}
                 type="file"
                 accept="image/*"
                 hidden
-                onChange={(e) => void handleUpload(e.target.files?.[0])}
+                onChange={(e) => handleSelect(e.target.files?.[0])}
               />
               <Button
                 type="button"
                 variant="secondary"
                 loading={uploading}
-                disabled={busy || values.images.length >= 12}
+                disabled={busy || values.images.length + pendingImages.length >= 12}
                 onClick={() => fileRef.current?.click()}
               >
                 <ImagePlus size={14} />
-                Upload image
+                Choose image
               </Button>
+              <p className="hint">Images upload when you save the product</p>
             </div>
           </fieldset>
 

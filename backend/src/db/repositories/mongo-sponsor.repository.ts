@@ -36,6 +36,15 @@ export class MongoSponsorRepository implements SponsorRepository {
     return { items: fromDocs<Sponsor>(docs), total };
   }
 
+  async listByIds(ids: string[]): Promise<Sponsor[]> {
+    if (ids.length === 0) return [];
+    const docs = await this.collection
+      .find({ _id: { $in: [...new Set(ids)] } })
+      .sort({ name: 1 })
+      .toArray();
+    return fromDocs<Sponsor>(docs);
+  }
+
   async create(data: Omit<Sponsor, 'id' | 'createdAt' | 'updatedAt'>): Promise<Sponsor> {
     const now = new Date();
     const sponsor: Sponsor = { id: randomUUID(), ...data, createdAt: now, updatedAt: now };

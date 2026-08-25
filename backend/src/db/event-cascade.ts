@@ -91,9 +91,8 @@ export async function cascadeDeleteEventData(eventId: string): Promise<void> {
 
   await Promise.all([
     db.collection('sessions').deleteMany({ eventId }),
-    db.collection('speakers').deleteMany({ eventId }),
-    db.collection('sponsors').deleteMany({ eventId }),
-    db.collection('memberships').deleteMany({ eventId }),
+    db.collection('event_associations').deleteMany({ eventId }),
+    // Shared speakers / sponsors / memberships are kept for reuse on other editions.
     db.collection('store_products').deleteMany({ eventId }),
     db.collection('store_categories').deleteMany({ eventId }),
     db.collection('checkins').deleteMany({ eventId }),

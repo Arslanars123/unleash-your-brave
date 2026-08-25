@@ -139,8 +139,8 @@ export function MembershipsPage() {
           <h1>Memberships</h1>
           <p className="muted">
             {isPastEdition
-              ? 'Membership tiers from a past edition.'
-              : 'Define membership tiers and restrict sessions by tier.'}
+              ? 'Membership tiers linked to this past edition.'
+              : 'Membership tiers linked to the selected event. The same tier can be linked to multiple events.'}
           </p>
         </div>
         {canEdit ? (

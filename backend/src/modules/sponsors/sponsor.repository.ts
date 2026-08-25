@@ -9,6 +9,7 @@ export interface PaginatedResult<T> {
 export interface SponsorRepository {
   findById(id: string): Promise<Sponsor | null>;
   list(query: ListSponsorsQuery): Promise<PaginatedResult<Sponsor>>;
+  listByIds(ids: string[]): Promise<Sponsor[]>;
   create(data: Omit<Sponsor, 'id' | 'createdAt' | 'updatedAt'>): Promise<Sponsor>;
   update(id: string, data: Partial<Omit<Sponsor, 'id' | 'createdAt'>>): Promise<Sponsor | null>;
   delete(id: string): Promise<boolean>;
@@ -40,6 +41,13 @@ export class InMemorySponsorRepository implements SponsorRepository {
       items: filtered.slice(start, start + query.perPage),
       total: filtered.length,
     };
+  }
+
+  async listByIds(ids: string[]): Promise<Sponsor[]> {
+    const set = new Set(ids);
+    return [...this.sponsors.values()]
+      .filter((sponsor) => set.has(sponsor.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async create(data: Omit<Sponsor, 'id' | 'createdAt' | 'updatedAt'>): Promise<Sponsor> {

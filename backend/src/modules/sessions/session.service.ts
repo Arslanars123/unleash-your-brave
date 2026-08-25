@@ -1,6 +1,7 @@
 import type { EffectiveAccessService } from '../access/access.service.js';
 import { randomUUID } from 'node:crypto';
 import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventService } from '../events/event.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
@@ -56,6 +57,7 @@ export class SessionService {
     private readonly users?: UserRepository,
     private readonly memberships?: MembershipRepository,
     private readonly access?: EffectiveAccessService,
+    private readonly associations?: EventAssociationService,
   ) {}
 
   async list(
@@ -272,9 +274,11 @@ export class SessionService {
   private async requireSpeakerForEvent(speakerId: string, eventId: string): Promise<void> {
     const speaker = await this.speakers.findById(speakerId);
     if (!speaker) throw new BadRequestError('Selected speaker was not found');
-    if (speaker.eventId !== eventId) {
-      throw new BadRequestError('Speaker must belong to the same event edition');
+    if (speaker.eventId === eventId) return;
+    if (this.associations && (await this.associations.isSpeakerLinked(eventId, speakerId))) {
+      return;
     }
+    throw new BadRequestError('Speaker must be associated with this event edition');
   }
 
   private async assertMembershipsForEvent(
@@ -288,9 +292,14 @@ export class SessionService {
       if (!membership) {
         throw new BadRequestError('Selected membership was not found');
       }
-      if (membership.eventId !== eventId) {
-        throw new BadRequestError('Membership must belong to the same event edition');
+      if (membership.eventId === eventId) continue;
+      if (
+        this.associations &&
+        (await this.associations.isMembershipLinked(eventId, membershipId))
+      ) {
+        continue;
       }
+      throw new BadRequestError('Membership must be associated with this event edition');
     }
   }
 

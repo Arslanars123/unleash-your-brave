@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '@/features/auth/context/AuthProvider';
 import { speakersApi } from '@/features/speakers/api/speakers-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { SpeakerPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
-import { MediaImageField } from '@/shared/ui/MediaImageField';
+import {
+  MediaImageField,
+  type MediaImageFieldHandle,
+} from '@/shared/ui/MediaImageField';
 import { Spinner } from '@/shared/ui/Spinner';
 import { TextArea } from '@/shared/ui/TextArea';
 import { useToast } from '@/shared/ui/toast';
@@ -15,6 +18,7 @@ export function SpeakerProfilePage() {
   const { user } = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const photoRef = useRef<MediaImageFieldHandle>(null);
 
   const speakerQuery = useQuery({
     queryKey: ['speakers', 'me', user?.speakerId],
@@ -50,11 +54,22 @@ export function SpeakerProfilePage() {
       toast.error('Name is required');
       return;
     }
+
+    let nextPhoto = photo;
+    if (photoRef.current?.hasPendingFile()) {
+      try {
+        nextPhoto = await photoRef.current.commit();
+        setPhoto(nextPhoto);
+      } catch {
+        return;
+      }
+    }
+
     await saveMutation.mutateAsync({
       name: name.trim(),
       title: title.trim(),
       description: description.trim(),
-      photo: photo.trim(),
+      photo: nextPhoto.trim(),
     });
   }
 
@@ -87,6 +102,7 @@ export function SpeakerProfilePage() {
           placeholder="Tell attendees about your work…"
         />
         <MediaImageField
+          ref={photoRef}
           label="Photo"
           value={photo}
           disabled={saveMutation.isPending}

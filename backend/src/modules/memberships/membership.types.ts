@@ -71,7 +71,7 @@ export interface PublicMembership {
 }
 
 export interface CreateMembershipInput {
-  eventId: string;
+  eventId?: string;
   name: string;
   valueLink?: string;
   price?: number;

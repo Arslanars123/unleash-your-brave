@@ -79,3 +79,24 @@ export function pickPreferredEvent<T extends Pick<Event, 'startDate' | 'endDate'
   if (upcoming[0]) return upcoming[0];
   return [...events].sort((a, b) => b.startDate.getTime() - a.startDate.getTime())[0] ?? null;
 }
+
+/** Edition that ends last — the previous schedule new editions must follow. */
+export function pickChronologicallyLastEvent<
+  T extends Pick<Event, 'startDate' | 'endDate'>,
+>(events: T[]): T | null {
+  if (events.length === 0) return null;
+  return (
+    [...events].sort((a, b) => {
+      const endDiff = b.endDate.getTime() - a.endDate.getTime();
+      if (endDiff !== 0) return endDiff;
+      return b.startDate.getTime() - a.startDate.getTime();
+    })[0] ?? null
+  );
+}
+
+/** Next UTC calendar day after `date` (YYYY-MM-DD input helper). */
+export function utcDayAfter(date: Date): Date {
+  const day = startOfUtcDay(date);
+  day.setUTCDate(day.getUTCDate() + 1);
+  return day;
+}

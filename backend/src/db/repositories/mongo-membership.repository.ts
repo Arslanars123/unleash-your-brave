@@ -36,6 +36,15 @@ export class MongoMembershipRepository implements MembershipRepository {
     return { items: fromDocs<Membership>(docs), total };
   }
 
+  async listByIds(ids: string[]): Promise<Membership[]> {
+    if (ids.length === 0) return [];
+    const docs = await this.collection
+      .find({ _id: { $in: [...new Set(ids)] } })
+      .sort({ sortOrder: 1, price: 1, name: 1 })
+      .toArray();
+    return fromDocs<Membership>(docs);
+  }
+
   async create(data: Omit<Membership, 'id' | 'createdAt' | 'updatedAt'>): Promise<Membership> {
     const now = new Date();
     const membership: Membership = { id: randomUUID(), ...data, createdAt: now, updatedAt: now };

@@ -134,8 +134,8 @@ export function SpeakersPage() {
           <h1>Speakers</h1>
           <p className="muted">
             {isPastEdition
-              ? 'Speakers from a past edition — admins can still create, edit, and delete.'
-              : 'Speakers for the selected event edition.'}
+              ? 'Speakers linked to the selected event edition. The same speaker can be linked to multiple events; their sessions stay separate per event.'
+              : 'Speakers linked to the selected event edition.'}
           </p>
         </div>
         {canEdit ? (

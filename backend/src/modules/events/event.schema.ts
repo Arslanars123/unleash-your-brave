@@ -205,6 +205,9 @@ export const scheduleEventSchema = z
     blockQrWhenRenewalUnpaid: z.boolean().optional().default(true),
     published: z.boolean().optional().default(true),
     notifyAttendees: z.boolean().optional().default(true),
+    speakerIds: z.array(z.string().uuid()).optional().default([]),
+    sponsorIds: z.array(z.string().uuid()).optional().default([]),
+    membershipIds: z.array(z.string().uuid()).optional().default([]),
   })
   .superRefine((value, ctx) => {
     assertDaysUnique(value.days, ctx);

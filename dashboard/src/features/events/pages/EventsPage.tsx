@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarDays, CalendarPlus, MapPin, Pencil, Trash2 } from 'lucide-react';
 import { eventsApi } from '@/features/events/api/events-api';
+import { EventAssociationsPanel } from '@/features/events/components/EventAssociationsPanel';
 import { EventFormModal } from '@/features/events/components/EventFormModal';
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
 import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
@@ -145,7 +146,7 @@ export function EventsPage() {
     const ok = await confirm({
       title: 'Schedule new edition?',
       message:
-        'Create a new event edition with the details you entered? You can schedule while another edition is live. Attendees will get a push about the new dates unless you turned notifications off.',
+        'Create a separate event edition with these dates? It must start after the previous edition ends. Attendees will get a push about the new dates unless you turned notifications off.',
       confirmLabel: 'Schedule',
       tone: 'primary',
     });
@@ -157,6 +158,9 @@ export function EventsPage() {
   const event = workspace?.current ?? null;
   const upcomingEditions = workspace?.upcomingEditions ?? [];
   const pastEditions = workspace?.pastEditions ?? [];
+  const previousEditionForSchedule =
+    [...(workspace?.editions ?? [])].sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ??
+    event;
 
   return (
     <div className="page">
@@ -164,8 +168,9 @@ export function EventsPage() {
         <div>
           <h1>Event</h1>
           <p className="muted">
-            Manage {CANONICAL_EVENT_NAME} editions. You can schedule an upcoming event while one is
-            live — speakers, sessions, sponsors, and store stay with each edition.
+            Manage {CANONICAL_EVENT_NAME} editions. Each event is separate. Link shared memberships,
+            speakers, and sponsors per edition (reusable across events). Sessions and content stay
+            event-specific. A new edition must start after the previous one ends.
           </p>
         </div>
         <div className="page-header-actions">
@@ -212,21 +217,24 @@ export function EventsPage() {
       ) : null}
 
       {event ? (
-        <EventSummaryCard
-          event={event}
-          deleting={deleteMutation.isPending}
-          onEdit={() => openEdit(event)}
-          onDelete={() => void handleDelete(event)}
-          onSchedule={() => setScheduleOpen(true)}
-        />
+        <>
+          <EventSummaryCard
+            event={event}
+            deleting={deleteMutation.isPending}
+            onEdit={() => openEdit(event)}
+            onDelete={() => void handleDelete(event)}
+            onSchedule={() => setScheduleOpen(true)}
+          />
+          <EventAssociationsPanel event={event} />
+        </>
       ) : null}
 
       {upcomingEditions.length > 0 ? (
         <section className="past-editions">
           <h2>Upcoming / other active editions</h2>
           <p className="muted">
-            Editions that are live or upcoming but not the preferred current row. Edit details or
-            open speakers, sessions, sponsors, store, and check-ins for that edition.
+            Other live or upcoming editions. Each has its own speakers, sessions, sponsors, store,
+            and check-ins. A newly scheduled edition must start after the previous one ends.
           </p>
           <ul className="past-editions-list">
             {upcomingEditions.map((edition) => (
@@ -317,7 +325,7 @@ export function EventsPage() {
       <EventFormModal
         open={scheduleOpen}
         mode="schedule"
-        initialEvent={event}
+        initialEvent={previousEditionForSchedule}
         loading={scheduleMutation.isPending}
         onClose={() => setScheduleOpen(false)}
         onSubmit={handleScheduleSubmit}

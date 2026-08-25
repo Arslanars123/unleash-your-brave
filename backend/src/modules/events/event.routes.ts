@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../core/http/async-handler.js';
 import { authenticate, authorize } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
+import { eventAssociationsBodySchema } from '../event-associations/event-association.schema.js';
 import type { EventController } from './event.controller.js';
 import {
   createEventSchema,
@@ -19,6 +20,13 @@ export function createEventRouter(controller: EventController): Router {
   router.get('/current', asyncHandler(controller.getCurrent));
   router.get('/available', asyncHandler(controller.listAvailable));
   router.get('/:id', validate({ params: eventIdParamSchema }), asyncHandler(controller.getById));
+  router.get(
+    '/:id/associations',
+    authenticate,
+    authorize('admin'),
+    validate({ params: eventIdParamSchema }),
+    asyncHandler(controller.getAssociations),
+  );
 
   router.post(
     '/',
@@ -42,6 +50,14 @@ export function createEventRouter(controller: EventController): Router {
     authorize('admin'),
     validate({ params: eventIdParamSchema, body: updateEventSchema }),
     asyncHandler(controller.update),
+  );
+
+  router.put(
+    '/:id/associations',
+    authenticate,
+    authorize('admin'),
+    validate({ params: eventIdParamSchema, body: eventAssociationsBodySchema }),
+    asyncHandler(controller.setAssociations),
   );
 
   router.delete(

@@ -53,7 +53,7 @@ const optionalEmail = z
   .transform((value) => value || undefined);
 
 export const createSponsorSchema = z.object({
-  eventId: z.string().uuid('Event is required'),
+  eventId: z.string().uuid('Event is required').optional(),
   name: z.string().trim().min(2, 'Sponsor name is required').max(160),
   email: optionalEmail,
   description: z.string().trim().max(5000).optional().default(''),

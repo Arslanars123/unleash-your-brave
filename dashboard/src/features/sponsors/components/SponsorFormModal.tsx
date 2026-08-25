@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ImagePlus, Link2, Plus, Trash2, X } from 'lucide-react';
-import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { prepareImageForUpload } from '@/shared/lib/compress-image';
+import { uploadImageFile } from '@/shared/lib/upload-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type { PublicSponsor, SponsorPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -151,13 +150,20 @@ export function SponsorFormModal({
   const [values, setValues] = useState<SponsorFormValues>(emptyForm);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
-  const [uploading, setUploading] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<
+    Record<string, { file: File; preview: string }>
+  >({});
 
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
     setErrors({});
-    setUploading(null);
+    setUploading(false);
+    setPendingFiles((prev) => {
+      for (const item of Object.values(prev)) URL.revokeObjectURL(item.preview);
+      return {};
+    });
     setValues(initialSponsor ? sponsorToForm(initialSponsor) : emptyForm);
   }, [open, initialSponsor]);
 
@@ -182,6 +188,17 @@ export function SponsorFormModal({
   }
 
   function removeOffer(index: number) {
+    const offer = values.offers[index];
+    if (offer) {
+      setPendingFiles((current) => {
+        const next = { ...current };
+        if (next[offer.key]) {
+          URL.revokeObjectURL(next[offer.key]!.preview);
+          delete next[offer.key];
+        }
+        return next;
+      });
+    }
     setForm({ ...values, offers: values.offers.filter((_, i) => i !== index) });
   }
 
@@ -212,47 +229,80 @@ export function SponsorFormModal({
     setForm({ ...values, offers });
   }
 
-  async function uploadImage(file: File | undefined, target: 'sponsor' | string) {
+  function selectImage(file: File | undefined, target: 'sponsor' | string) {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       toast.error('Please choose an image file');
       return;
     }
+    setPendingFiles((current) => {
+      const next = { ...current };
+      if (next[target]) URL.revokeObjectURL(next[target]!.preview);
+      next[target] = { file, preview: URL.createObjectURL(file) };
+      return next;
+    });
+    if (target === 'sponsor' && sponsorImageRef.current) sponsorImageRef.current.value = '';
+    else if (offerImageRefs.current[target]) offerImageRefs.current[target]!.value = '';
+  }
 
-    setUploading(target);
-    try {
-      const prepared = await prepareImageForUpload(file);
-      const uploaded = await uploadsApi.uploadImage(prepared);
-      if (target === 'sponsor') {
-        update('image', uploaded.url);
-      } else {
-        const index = values.offers.findIndex((offer) => offer.key === target);
-        if (index >= 0) updateOffer(index, { image: uploaded.url });
+  function clearPending(target: string) {
+    setPendingFiles((current) => {
+      const next = { ...current };
+      if (next[target]) {
+        URL.revokeObjectURL(next[target]!.preview);
+        delete next[target];
       }
-      toast.success('Image uploaded');
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : getApiErrorMessage(error, 'Unable to upload image'),
-      );
-    } finally {
-      setUploading(null);
-      if (target === 'sponsor' && sponsorImageRef.current) sponsorImageRef.current.value = '';
-      else if (offerImageRefs.current[target]) offerImageRefs.current[target]!.value = '';
-    }
+      return next;
+    });
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    const nextErrors = validate(values);
+
+    let nextValues = { ...values, offers: values.offers.map((o) => ({ ...o, links: [...o.links] })) };
+    const entries = Object.entries(pendingFiles);
+    if (entries.length > 0) {
+      setUploading(true);
+      try {
+        for (const [target, item] of entries) {
+          const url = await uploadImageFile(item.file);
+          if (target === 'sponsor') {
+            nextValues = { ...nextValues, image: url };
+          } else {
+            nextValues = {
+              ...nextValues,
+              offers: nextValues.offers.map((offer) =>
+                offer.key === target ? { ...offer, image: url } : offer,
+              ),
+            };
+          }
+        }
+        for (const item of Object.values(pendingFiles)) URL.revokeObjectURL(item.preview);
+        setPendingFiles({});
+        setValues(nextValues);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : getApiErrorMessage(error, 'Unable to upload image'),
+        );
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    const nextErrors = validate(nextValues);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(toSponsorPayload(values));
+    await onSubmit(toSponsorPayload(nextValues));
   }
 
-  const busy = loading || uploading !== null;
+  const busy = loading || uploading;
+  const sponsorPreview =
+    pendingFiles.sponsor?.preview ||
+    (values.image && isValidMediaRef(values.image) ? resolveMediaUrl(values.image) : '');
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -307,20 +357,27 @@ export function SponsorFormModal({
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 hidden
-                onChange={(e) => void uploadImage(e.target.files?.[0], 'sponsor')}
+                onChange={(e) => selectImage(e.target.files?.[0], 'sponsor')}
               />
               <Button
                 type="button"
                 variant="secondary"
-                loading={uploading === 'sponsor'}
+                loading={uploading}
                 disabled={busy}
                 onClick={() => sponsorImageRef.current?.click()}
               >
                 <ImagePlus size={16} />
-                Upload image
+                {pendingFiles.sponsor ? 'Change image' : 'Choose image'}
               </Button>
-              {values.image ? (
-                <Button type="button" variant="ghost" onClick={() => update('image', '')}>
+              {values.image || pendingFiles.sponsor ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    clearPending('sponsor');
+                    update('image', '');
+                  }}
+                >
                   Remove
                 </Button>
               ) : null}
@@ -328,16 +385,25 @@ export function SponsorFormModal({
             <Input
               label="Or paste image URL"
               name="image"
-              value={values.image}
+              value={pendingFiles.sponsor ? '' : values.image}
               error={errors.image}
-              onChange={(e) => update('image', e.target.value)}
+              disabled={Boolean(pendingFiles.sponsor)}
+              onChange={(e) => {
+                clearPending('sponsor');
+                update('image', e.target.value);
+              }}
               placeholder="https://… or /uploads/…"
             />
-            {values.image && isValidMediaRef(values.image) ? (
+            {sponsorPreview ? (
               <div className="cover-preview">
-                <img src={resolveMediaUrl(values.image)} alt="Sponsor preview" />
+                <img src={sponsorPreview} alt="Sponsor preview" />
               </div>
             ) : null}
+            <p className="hint">
+              {pendingFiles.sponsor
+                ? 'Photo selected — it will upload when you save.'
+                : 'Photos upload when you save the form'}
+            </p>
           </div>
 
           <fieldset className="schedule-fieldset">
@@ -385,25 +451,26 @@ export function SponsorFormModal({
                           type="file"
                           accept="image/jpeg,image/png,image/webp,image/gif"
                           hidden
-                          onChange={(e) =>
-                            void uploadImage(e.target.files?.[0], offer.key)
-                          }
+                          onChange={(e) => selectImage(e.target.files?.[0], offer.key)}
                         />
                         <Button
                           type="button"
                           variant="secondary"
-                          loading={uploading === offer.key}
+                          loading={uploading}
                           disabled={busy}
                           onClick={() => offerImageRefs.current[offer.key]?.click()}
                         >
                           <ImagePlus size={14} />
-                          Upload
+                          {pendingFiles[offer.key] ? 'Change' : 'Choose'}
                         </Button>
-                        {offer.image ? (
+                        {offer.image || pendingFiles[offer.key] ? (
                           <Button
                             type="button"
                             variant="ghost"
-                            onClick={() => updateOffer(offerIndex, { image: '' })}
+                            onClick={() => {
+                              clearPending(offer.key);
+                              updateOffer(offerIndex, { image: '' });
+                            }}
                           >
                             Remove
                           </Button>
@@ -412,14 +479,25 @@ export function SponsorFormModal({
                       <Input
                         label="Or paste image URL"
                         name={`offer-image-${offerIndex}`}
-                        value={offer.image}
+                        value={pendingFiles[offer.key] ? '' : offer.image}
                         error={errors[`offer-image-${offerIndex}`]}
-                        onChange={(e) => updateOffer(offerIndex, { image: e.target.value })}
+                        disabled={Boolean(pendingFiles[offer.key])}
+                        onChange={(e) => {
+                          clearPending(offer.key);
+                          updateOffer(offerIndex, { image: e.target.value });
+                        }}
                         placeholder="https://…"
                       />
-                      {offer.image && isValidMediaRef(offer.image) ? (
+                      {pendingFiles[offer.key]?.preview ||
+                      (offer.image && isValidMediaRef(offer.image)) ? (
                         <div className="speaker-photo-preview">
-                          <img src={resolveMediaUrl(offer.image)} alt="" />
+                          <img
+                            src={
+                              pendingFiles[offer.key]?.preview ||
+                              resolveMediaUrl(offer.image)
+                            }
+                            alt=""
+                          />
                         </div>
                       ) : null}
                     </div>

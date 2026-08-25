@@ -41,6 +41,15 @@ export class MongoSpeakerRepository implements SpeakerRepository {
     return { items: fromDocs<Speaker>(docs), total };
   }
 
+  async listByIds(ids: string[]): Promise<Speaker[]> {
+    if (ids.length === 0) return [];
+    const docs = await this.collection
+      .find({ _id: { $in: [...new Set(ids)] } })
+      .sort({ name: 1 })
+      .toArray();
+    return fromDocs<Speaker>(docs);
+  }
+
   async create(data: Omit<Speaker, 'id' | 'createdAt' | 'updatedAt'>): Promise<Speaker> {
     const now = new Date();
     const speaker: Speaker = { id: randomUUID(), ...data, createdAt: now, updatedAt: now };

@@ -9,6 +9,7 @@ export interface PaginatedResult<T> {
 export interface SpeakerRepository {
   findById(id: string): Promise<Speaker | null>;
   list(query: ListSpeakersQuery): Promise<PaginatedResult<Speaker>>;
+  listByIds(ids: string[]): Promise<Speaker[]>;
   create(data: Omit<Speaker, 'id' | 'createdAt' | 'updatedAt'>): Promise<Speaker>;
   update(id: string, data: Partial<Omit<Speaker, 'id' | 'createdAt'>>): Promise<Speaker | null>;
   delete(id: string): Promise<boolean>;
@@ -41,6 +42,13 @@ export class InMemorySpeakerRepository implements SpeakerRepository {
       items: filtered.slice(start, start + query.perPage),
       total: filtered.length,
     };
+  }
+
+  async listByIds(ids: string[]): Promise<Speaker[]> {
+    const set = new Set(ids);
+    return [...this.speakers.values()]
+      .filter((speaker) => set.has(speaker.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async create(data: Omit<Speaker, 'id' | 'createdAt' | 'updatedAt'>): Promise<Speaker> {

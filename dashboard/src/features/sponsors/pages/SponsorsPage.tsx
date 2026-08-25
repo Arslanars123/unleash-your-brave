@@ -135,8 +135,8 @@ export function SponsorsPage() {
           <h1>Sponsors</h1>
           <p className="muted">
             {isPastEdition
-              ? 'Sponsors from a past edition — admins can still manage profiles and offers.'
-              : 'Sponsors and offers for the selected event edition.'}
+              ? 'Sponsors linked to this past edition.'
+              : 'Sponsors linked to the selected event. The same sponsor can be linked to multiple events; manage offers per edition context.'}
           </p>
         </div>
         {canEdit ? (

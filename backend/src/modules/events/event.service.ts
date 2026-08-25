@@ -2,13 +2,16 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors
 import { cascadeDeleteEventData } from '../../db/event-cascade.js';
 import { logger } from '../../core/logger.js';
 import type { AnnouncementService } from '../announcements/announcement.service.js';
+import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventRepository, PaginatedResult } from './event.repository.js';
 import { CANONICAL_EVENT_NAME } from './event.constants.js';
 import {
   editionStatus,
+  pickChronologicallyLastEvent,
   pickPreferredEvent,
   startOfUtcDay,
   toPublicEvent,
+  utcDayAfter,
 } from './event.mapper.js';
 import type {
   CreateEventInput,
@@ -123,12 +126,17 @@ export function resolveEventDays(input: {
 
 export class EventService {
   private announcements: AnnouncementService | null = null;
+  private associations: EventAssociationService | null = null;
 
   constructor(private readonly events: EventRepository) {}
 
   /** Wired after AnnouncementService is constructed (avoids circular DI). */
   setAnnouncementService(service: AnnouncementService): void {
     this.announcements = service;
+  }
+
+  setAssociationService(service: EventAssociationService): void {
+    this.associations = service;
   }
 
   async list(query: ListEventsQuery): Promise<PaginatedResult<PublicEvent>> {
@@ -182,14 +190,19 @@ export class EventService {
         (edition.status === 'upcoming' || edition.status === 'live' || edition.status === 'paused') &&
         edition.id !== current?.id,
     );
+    const last = pickChronologicallyLastEvent(items);
+    const earliestNextStart = last ? utcDayAfter(last.endDate) : null;
 
     return {
       current,
       canScheduleNew: true,
-      scheduleBlockedReason: null,
+      scheduleBlockedReason: last
+        ? `New editions must start after ${last.endDate.toISOString().slice(0, 10)} (the day after the previous edition ends).`
+        : null,
       editions,
       pastEditions,
       upcomingEditions,
+      earliestNextStart: earliestNextStart ? earliestNextStart.toISOString() : null,
     };
   }
 
@@ -212,48 +225,76 @@ export class EventService {
   }
 
   /**
-   * Creates another edition with new dates.
-   * Allowed while a live/upcoming edition already exists.
+   * Creates another separate edition with new dates.
+   * Dates must start after the previous edition's end date (not before or same day).
    */
   async scheduleNew(input: ScheduleEventInput): Promise<PublicEvent> {
-    const latest = await this.getLatest();
+    const { items } = await this.events.list({ page: 1, perPage: 100 });
+    const previous = pickChronologicallyLastEvent(items);
 
-    const copy = Boolean(input.copyDetailsFromPrevious && latest);
-    const pick = (override: string | undefined, previous: string): string => {
+    const days = resolveEventDays({
+      days: input.days,
+    });
+
+    if (previous) {
+      const previousEnd = startOfUtcDay(previous.endDate);
+      const newStart = startOfUtcDay(days[0]!.date);
+      if (newStart.getTime() <= previousEnd.getTime()) {
+        const after = utcDayAfter(previous.endDate).toISOString().slice(0, 10);
+        throw new BadRequestError(
+          `New event must start after the previous edition ends (${previousEnd.toISOString().slice(0, 10)}). Earliest allowed start date is ${after}.`,
+        );
+      }
+    }
+
+    const copy = Boolean(input.copyDetailsFromPrevious && previous);
+    const pick = (override: string | undefined, previousValue: string): string => {
       const trimmed = override?.trim() ?? '';
       if (trimmed) return trimmed;
-      return copy ? previous : '';
+      return copy ? previousValue : '';
     };
 
     const created = await this.createEdition({
-      days: input.days,
-      tagline: pick(input.tagline, latest?.tagline ?? ''),
-      description: pick(input.description, latest?.description ?? ''),
-      venueName: pick(input.venueName, latest?.venueName ?? ''),
-      venueAddress: pick(input.venueAddress, latest?.venueAddress ?? ''),
-      venueCity: pick(input.venueCity, latest?.venueCity ?? ''),
+      days: days.map((day) => ({
+        dayNumber: day.dayNumber,
+        date: day.date.toISOString(),
+        label: day.label,
+      })),
+      tagline: pick(input.tagline, previous?.tagline ?? ''),
+      description: pick(input.description, previous?.description ?? ''),
+      venueName: pick(input.venueName, previous?.venueName ?? ''),
+      venueAddress: pick(input.venueAddress, previous?.venueAddress ?? ''),
+      venueCity: pick(input.venueCity, previous?.venueCity ?? ''),
       latitude:
         input.latitude !== undefined
           ? input.latitude
           : copy
-            ? (latest?.latitude ?? null)
+            ? (previous?.latitude ?? null)
             : null,
       longitude:
         input.longitude !== undefined
           ? input.longitude
           : copy
-            ? (latest?.longitude ?? null)
+            ? (previous?.longitude ?? null)
             : null,
-      coverImage: pick(input.coverImage, latest?.coverImage ?? ''),
+      coverImage: pick(input.coverImage, previous?.coverImage ?? ''),
       allowPreviousAttendeesAccess:
         input.allowPreviousAttendeesAccess ??
-        (copy ? Boolean(latest?.allowPreviousAttendeesAccess) : false),
+        (copy ? Boolean(previous?.allowPreviousAttendeesAccess) : false),
       blockQrWhenRenewalUnpaid:
         input.blockQrWhenRenewalUnpaid ??
-        (copy ? latest?.blockQrWhenRenewalUnpaid !== false : true),
+        (copy ? previous?.blockQrWhenRenewalUnpaid !== false : true),
       published: input.published !== false,
       paused: false,
     });
+
+    if (this.associations) {
+      await this.associations.setForEvent(created.id, {
+        speakerIds: input.speakerIds ?? [],
+        sponsorIds: input.sponsorIds ?? [],
+        membershipIds: input.membershipIds ?? [],
+      });
+    }
 
     if (input.notifyAttendees !== false && created.published) {
       await this.notifyDatesAnnounced(created.id, created.name, created.days.map((d) => ({

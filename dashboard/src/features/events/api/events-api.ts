@@ -1,5 +1,6 @@
 import { apiClient } from '@/shared/api/client';
 import type {
+  EventAssociations,
   EventPayload,
   EventWorkspace,
   PaginationMeta,
@@ -63,5 +64,23 @@ export const eventsApi = {
 
   async remove(id: string): Promise<void> {
     await apiClient.delete(`/events/${id}`);
+  },
+
+  async getAssociations(eventId: string): Promise<EventAssociations> {
+    const { data } = await apiClient.get<SuccessEnvelope<EventAssociations>>(
+      `/events/${eventId}/associations`,
+    );
+    return data.data;
+  },
+
+  async setAssociations(
+    eventId: string,
+    payload: Omit<EventAssociations, 'eventId'>,
+  ): Promise<EventAssociations> {
+    const { data } = await apiClient.put<SuccessEnvelope<EventAssociations>>(
+      `/events/${eventId}/associations`,
+      payload,
+    );
+    return data.data;
   },
 };

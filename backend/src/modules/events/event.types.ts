@@ -92,9 +92,12 @@ export interface PublicEvent {
 export interface EventWorkspace {
   /** Preferred active edition (live → soonest upcoming → latest). */
   current: PublicEvent | null;
-  /** Always true — upcoming editions can be created while another is live. */
+  /** New editions are always allowed; dates must start after the previous edition ends. */
   canScheduleNew: boolean;
+  /** Guidance about the earliest allowed start date when a previous edition exists. */
   scheduleBlockedReason: string | null;
+  /** Earliest UTC midnight ISO date a new edition may start (day after previous end). */
+  earliestNextStart: string | null;
   /** All editions newest-first (including current). */
   editions: PublicEvent[];
   /** Ended editions only (excludes current when it is still active). */
@@ -141,6 +144,10 @@ export interface ScheduleEventInput {
   published?: boolean;
   /** When false, skip the “new dates announced” push. Default true. */
   notifyAttendees?: boolean;
+  /** Shared catalog entities to link to this new edition. */
+  speakerIds?: string[];
+  sponsorIds?: string[];
+  membershipIds?: string[];
 }
 
 export interface UpdateEventInput {

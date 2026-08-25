@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ImagePlus, X } from 'lucide-react';
-import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { prepareImageForUpload } from '@/shared/lib/compress-image';
+import { uploadImageFile } from '@/shared/lib/upload-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type { PostPayload, PublicPost } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -72,11 +71,19 @@ export function PostFormModal({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
     setErrors({});
+    setUploading(false);
+    setPendingImage(null);
+    setPendingPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setValues(initialPost ? toForm(initialPost) : emptyForm);
   }, [open, initialPost]);
 
@@ -90,37 +97,52 @@ export function PostFormModal({
     });
   }
 
-  async function uploadImage(file: File | undefined) {
+  function selectImage(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       toast.error('Please choose an image file');
       return;
     }
-
-    setUploading(true);
-    try {
-      const prepared = await prepareImageForUpload(file, { maxEdge: 1440 });
-      const uploaded = await uploadsApi.uploadImage(prepared);
-      update('image', uploaded.url);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : getApiErrorMessage(error, 'Unable to upload image'),
-      );
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
+    setPendingPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setPendingImage(file);
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    const nextErrors = validate(values);
+
+    let image = values.image;
+    if (pendingImage) {
+      setUploading(true);
+      try {
+        image = await uploadImageFile(pendingImage, { maxEdge: 1440 });
+        setPendingImage(null);
+        setPendingPreview((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+        update('image', image);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : getApiErrorMessage(error, 'Unable to upload image'),
+        );
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    const nextValues = { ...values, image };
+    const nextErrors = validate(nextValues);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(toPostPayload(values));
+    await onSubmit(toPostPayload(nextValues));
   }
 
   return (
@@ -158,7 +180,7 @@ export function PostFormModal({
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
                 hidden
-                onChange={(e) => void uploadImage(e.target.files?.[0])}
+                onChange={(e) => selectImage(e.target.files?.[0])}
               />
               <Button
                 type="button"
@@ -167,24 +189,36 @@ export function PostFormModal({
                 onClick={() => fileRef.current?.click()}
               >
                 <ImagePlus size={16} />
-                Upload image
+                {pendingImage ? 'Change image' : 'Choose image'}
               </Button>
             </div>
             <p className="hint">
-              Pick any photo from your device — it’s resized and compressed automatically
-              before upload (Instagram-style).
+              {pendingImage
+                ? 'Photo selected — it will upload when you publish/save.'
+                : 'Photo uploads when you save the form'}
             </p>
             <Input
               label="Image URL"
               name="image"
-              value={values.image}
+              value={pendingImage ? '' : values.image}
               error={errors.image}
-              onChange={(e) => update('image', e.target.value)}
+              disabled={Boolean(pendingImage)}
+              onChange={(e) => {
+                setPendingImage(null);
+                setPendingPreview((prev) => {
+                  if (prev) URL.revokeObjectURL(prev);
+                  return null;
+                });
+                update('image', e.target.value);
+              }}
               placeholder="https://… or /uploads/…"
             />
-            {values.image && isValidMediaRef(values.image) ? (
+            {pendingPreview || (values.image && isValidMediaRef(values.image)) ? (
               <div className="cover-preview">
-                <img src={resolveMediaUrl(values.image)} alt="Post preview" />
+                <img
+                  src={pendingPreview || resolveMediaUrl(values.image)}
+                  alt="Post preview"
+                />
               </div>
             ) : null}
           </div>

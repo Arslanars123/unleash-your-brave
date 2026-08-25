@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
+import { EventAssociationPicker } from '@/features/events/components/EventAssociationPicker';
 import { VenuePlacesField } from '@/features/events/components/VenuePlacesField';
-import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { prepareImageForUpload } from '@/shared/lib/compress-image';
+import { uploadImageFile } from '@/shared/lib/upload-image';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type { EventPayload, PublicEvent, ScheduleEventPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -39,6 +39,9 @@ export interface EventFormValues {
   paused: boolean;
   published: boolean;
   notifyAttendees: boolean;
+  speakerIds: string[];
+  sponsorIds: string[];
+  membershipIds: string[];
 }
 
 type FieldErrors = Partial<Record<string, string>>;
@@ -53,6 +56,26 @@ function toDateInput(iso: string): string {
   if (Number.isNaN(date.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+}
+
+/** UTC calendar day after an ISO date (exclusive of that day). */
+function dayAfterIso(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setUTCDate(date.getUTCDate() + 1);
+  return toDateInput(date.toISOString());
+}
+
+function formatUtcDateLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso.slice(0, 10);
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 function addUtcDays(dateValue: string, offset: number): string {
@@ -98,6 +121,9 @@ const emptyForm: EventFormValues = {
   paused: false,
   published: true,
   notifyAttendees: true,
+  speakerIds: [],
+  sponsorIds: [],
+  membershipIds: [],
 };
 
 function eventToForm(event: PublicEvent): EventFormValues {
@@ -133,11 +159,17 @@ function eventToForm(event: PublicEvent): EventFormValues {
     paused: Boolean(event.paused) || event.status === 'paused',
     published: event.published !== false,
     notifyAttendees: true,
+    speakerIds: [],
+    sponsorIds: [],
+    membershipIds: [],
   };
 }
 
 function scheduleBlankForm(previous: PublicEvent | null): EventFormValues {
   if (!previous) return { ...emptyForm, days: buildConsecutiveDays('', 3) };
+
+  const earliestStart = dayAfterIso(previous.endDate);
+  const dayCount = previous.dayCount || 3;
 
   return {
     ...emptyForm,
@@ -150,9 +182,12 @@ function scheduleBlankForm(previous: PublicEvent | null): EventFormValues {
     longitude: previous.longitude ?? null,
     coverImage: previous.coverImage,
     copyDetailsFromPrevious: true,
-    consecutiveStart: '',
-    dayCount: previous.dayCount || 3,
-    days: buildConsecutiveDays('', previous.dayCount || 3),
+    consecutiveStart: earliestStart,
+    dayCount,
+    days: buildConsecutiveDays(earliestStart, dayCount),
+    speakerIds: [],
+    sponsorIds: [],
+    membershipIds: [],
   };
 }
 
@@ -163,7 +198,10 @@ function resolvedDays(values: EventFormValues): DayRow[] {
   return values.days;
 }
 
-function validate(values: EventFormValues): FieldErrors {
+function validate(
+  values: EventFormValues,
+  options?: { mode?: EventFormMode; previousEvent?: PublicEvent | null },
+): FieldErrors {
   const errors: FieldErrors = {};
 
   if (values.scheduleMode === 'consecutive') {
@@ -183,6 +221,24 @@ function validate(values: EventFormValues): FieldErrors {
       }
       seen.add(day.date);
     });
+  }
+
+  if (options?.mode === 'schedule' && options.previousEvent) {
+    const earliest = dayAfterIso(options.previousEvent.endDate);
+    const firstDay = resolvedDays(values)
+      .map((day) => day.date)
+      .filter(Boolean)
+      .sort()[0];
+    if (earliest && firstDay && firstDay <= toDateInput(options.previousEvent.endDate)) {
+      errors.consecutiveStart =
+        errors.consecutiveStart ||
+        `Must start after the previous edition ends (${formatUtcDateLabel(options.previousEvent.endDate)}). Earliest: ${formatUtcDateLabel(`${earliest}T00:00:00.000Z`)}.`;
+      if (values.scheduleMode === 'custom') {
+        errors.days =
+          errors.days ||
+          `All dates must be after ${formatUtcDateLabel(options.previousEvent.endDate)}.`;
+      }
+    }
   }
 
   if (values.coverImage.trim() && !isValidMediaRef(values.coverImage.trim())) {
@@ -236,6 +292,9 @@ export function toSchedulePayload(values: EventFormValues): ScheduleEventPayload
     coverImage: values.coverImage.trim(),
     published: values.published,
     notifyAttendees: values.notifyAttendees,
+    speakerIds: values.speakerIds,
+    sponsorIds: values.sponsorIds,
+    membershipIds: values.membershipIds,
   };
 }
 
@@ -263,12 +322,19 @@ export function EventFormModal({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pendingCover, setPendingCover] = useState<File | null>(null);
+  const [pendingCoverPreview, setPendingCoverPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
     setErrors({});
     setUploading(false);
+    setPendingCover(null);
+    setPendingCoverPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     if (mode === 'edit' && initialEvent) {
       setValues(eventToForm(initialEvent));
     } else {
@@ -280,39 +346,33 @@ export function EventFormModal({
 
   function setForm(next: EventFormValues) {
     setValues(next);
-    if (submitted) setErrors(validate(next));
+    if (submitted) setErrors(validate(next, { mode, previousEvent: initialEvent }));
   }
 
   function update<K extends keyof EventFormValues>(key: K, value: EventFormValues[K]) {
     setForm({ ...values, [key]: value });
   }
 
-  async function handleCoverUpload(file: File | undefined) {
+  function handleCoverSelect(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       toast.error('Please choose an image file');
       return;
     }
-
-    setUploading(true);
-    try {
-      const prepared = await prepareImageForUpload(file);
-      const uploaded = await uploadsApi.uploadImage(prepared);
-      update('coverImage', uploaded.url);
-      toast.success('Cover image uploaded');
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : getApiErrorMessage(error, 'Unable to upload image'),
-      );
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+    setPendingCoverPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setPendingCover(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
   function clearCoverImage() {
+    setPendingCover(null);
+    setPendingCoverPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     update('coverImage', '');
   }
 
@@ -382,10 +442,37 @@ export function EventFormModal({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    const nextErrors = validate(values);
+
+    let coverImage = values.coverImage;
+    if (pendingCover) {
+      setUploading(true);
+      try {
+        coverImage = await uploadImageFile(pendingCover);
+        setPendingCover(null);
+        setPendingCoverPreview((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+        update('coverImage', coverImage);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : getApiErrorMessage(error, 'Unable to upload image'),
+        );
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    const nextValues = { ...values, coverImage };
+    const nextErrors = validate(nextValues, { mode, previousEvent: initialEvent });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(mode === 'schedule' ? toSchedulePayload(values) : toEventPayload(values));
+    await onSubmit(
+      mode === 'schedule' ? toSchedulePayload(nextValues) : toEventPayload(nextValues),
+    );
   }
 
   const previewDays =
@@ -418,8 +505,8 @@ export function EventFormModal({
           <Input label="Name" name="name" value={CANONICAL_EVENT_NAME} readOnly disabled />
           <p className="hint" style={{ marginTop: '-0.35rem' }}>
             {isSchedule
-              ? 'Creates a new edition with fresh dates. You can schedule while another edition is live. Speakers, sessions, and sponsors start empty for this edition.'
-              : 'Updates this edition only. Use Schedule new event to create another gathering (allowed while one is live).'}
+              ? 'Creates a separate edition with its own speakers, sessions, and store. Dates must start after the previous edition ends (not before or on the same day).'
+              : 'Updates this edition only. Use Schedule new event to create another gathering after this one ends.'}
           </p>
 
           {!isSchedule ? (
@@ -495,9 +582,11 @@ export function EventFormModal({
           <fieldset className="schedule-fieldset">
             <legend>{isSchedule ? 'New event dates' : 'Event schedule'}</legend>
             <p className="hint">
-              {isSchedule
-                ? 'Choose the dates for this new edition.'
-                : 'Adjust dates for this edition if needed. Do not use this to start a new gathering.'}
+              {isSchedule && initialEvent
+                ? `This is a separate edition. Start on or after ${formatUtcDateLabel(`${dayAfterIso(initialEvent.endDate)}T00:00:00.000Z`)} (the day after the previous edition ends on ${formatUtcDateLabel(initialEvent.endDate)}).`
+                : isSchedule
+                  ? 'Choose the dates for this new edition.'
+                  : 'Adjust dates for this edition if needed. Do not use this to start a new gathering.'}
             </p>
 
             <div className="schedule-mode-toggle" role="group" aria-label="Schedule mode">
@@ -524,6 +613,11 @@ export function EventFormModal({
                   type="date"
                   name="consecutiveStart"
                   requiredMark
+                  min={
+                    isSchedule && initialEvent
+                      ? dayAfterIso(initialEvent.endDate)
+                      : undefined
+                  }
                   value={values.consecutiveStart}
                   error={errors.consecutiveStart}
                   onChange={(e) => updateConsecutiveStart(e.target.value)}
@@ -551,6 +645,11 @@ export function EventFormModal({
                       type="date"
                       name={`day-date-${index}`}
                       requiredMark
+                      min={
+                        isSchedule && initialEvent
+                          ? dayAfterIso(initialEvent.endDate)
+                          : undefined
+                      }
                       value={day.date}
                       error={errors[`day-${index}`]}
                       onChange={(e) => updateDay(index, { date: e.target.value })}
@@ -633,7 +732,7 @@ export function EventFormModal({
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
                     hidden
-                    onChange={(e) => void handleCoverUpload(e.target.files?.[0])}
+                    onChange={(e) => handleCoverSelect(e.target.files?.[0])}
                   />
                   <Button
                     type="button"
@@ -643,9 +742,9 @@ export function EventFormModal({
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <ImagePlus size={16} />
-                    Upload from device
+                    {pendingCover ? 'Change photo' : 'Choose from device'}
                   </Button>
-                  {values.coverImage ? (
+                  {values.coverImage || pendingCover ? (
                     <Button
                       type="button"
                       variant="ghost"
@@ -659,19 +758,56 @@ export function EventFormModal({
                 <Input
                   label="Or paste image URL"
                   name="coverImage"
-                  value={values.coverImage}
+                  value={pendingCover ? '' : values.coverImage}
                   error={errors.coverImage}
-                  onChange={(e) => update('coverImage', e.target.value)}
+                  disabled={Boolean(pendingCover)}
+                  onChange={(e) => {
+                    setPendingCover(null);
+                    setPendingCoverPreview((prev) => {
+                      if (prev) URL.revokeObjectURL(prev);
+                      return null;
+                    });
+                    update('coverImage', e.target.value);
+                  }}
                   placeholder="https://… or /uploads/…"
                 />
-                {values.coverImage && isValidMediaRef(values.coverImage) ? (
+                {pendingCoverPreview ||
+                (values.coverImage && isValidMediaRef(values.coverImage)) ? (
                   <div className="cover-preview">
-                    <img src={resolveMediaUrl(values.coverImage)} alt="Event cover preview" />
+                    <img
+                      src={
+                        pendingCoverPreview || resolveMediaUrl(values.coverImage)
+                      }
+                      alt="Event cover preview"
+                    />
                   </div>
                 ) : null}
-                <p className="hint">Any photo size — resized & compressed automatically</p>
+                <p className="hint">
+                  {pendingCover
+                    ? 'Photo selected — it will upload when you save.'
+                    : 'Photo uploads when you save the form'}
+                </p>
               </div>
             </>
+          ) : null}
+
+          {isSchedule ? (
+            <EventAssociationPicker
+              value={{
+                speakerIds: values.speakerIds,
+                sponsorIds: values.sponsorIds,
+                membershipIds: values.membershipIds,
+              }}
+              disabled={loading || uploading}
+              onChange={(next) =>
+                setForm({
+                  ...values,
+                  speakerIds: next.speakerIds,
+                  sponsorIds: next.sponsorIds,
+                  membershipIds: next.membershipIds,
+                })
+              }
+            />
           ) : null}
 
           <div className="modal-actions">

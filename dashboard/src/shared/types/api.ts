@@ -331,9 +331,11 @@ export interface PublicEvent {
 
 export interface EventWorkspace {
   current: PublicEvent | null;
-  /** Always true — upcoming editions can be created while another is live. */
+  /** New editions are allowed; dates must start after the previous edition ends. */
   canScheduleNew: boolean;
   scheduleBlockedReason: string | null;
+  /** Earliest UTC midnight ISO date a new edition may start. */
+  earliestNextStart: string | null;
   /** All editions newest-first (including current). */
   editions: PublicEvent[];
   /** Ended editions only (excludes current when it is still active). */
@@ -376,6 +378,16 @@ export interface ScheduleEventPayload {
   /** Draft until published (default true when omitted). */
   published?: boolean;
   notifyAttendees?: boolean;
+  speakerIds?: string[];
+  sponsorIds?: string[];
+  membershipIds?: string[];
+}
+
+export interface EventAssociations {
+  eventId: string;
+  speakerIds: string[];
+  sponsorIds: string[];
+  membershipIds: string[];
 }
 
 export interface PublicSpeaker {

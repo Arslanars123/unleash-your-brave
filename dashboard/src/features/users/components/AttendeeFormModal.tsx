@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
 import type {
   CreateUserPayload,
@@ -10,7 +10,7 @@ import type {
 import { NETWORKING_PREFS } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
-import { MediaImageField } from '@/shared/ui/MediaImageField';
+import { MediaImageField, type MediaImageFieldHandle } from '@/shared/ui/MediaImageField';
 import { TextArea } from '@/shared/ui/TextArea';
 
 export interface AttendeeFormValues {
@@ -262,6 +262,8 @@ export function AttendeeFormModal({
   const [values, setValues] = useState<AttendeeFormValues>(emptyForm);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [committingPhoto, setCommittingPhoto] = useState(false);
+  const photoRef = useRef<MediaImageFieldHandle>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -283,10 +285,25 @@ export function AttendeeFormModal({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    const nextErrors = validate(values, mode);
+
+    let photoUrl = values.photoUrl;
+    if (photoRef.current?.hasPendingFile()) {
+      setCommittingPhoto(true);
+      try {
+        photoUrl = await photoRef.current.commit();
+      } catch {
+        setCommittingPhoto(false);
+        return;
+      }
+      setCommittingPhoto(false);
+    }
+
+    const nextValues = { ...values, photoUrl };
+    setValues(nextValues);
+    const nextErrors = validate(nextValues, mode);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(mode === 'create' ? toCreatePayload(values) : toUpdatePayload(values));
+    await onSubmit(mode === 'create' ? toCreatePayload(nextValues) : toUpdatePayload(nextValues));
   }
 
   return (
@@ -343,10 +360,11 @@ export function AttendeeFormModal({
           />
 
           <MediaImageField
+            ref={photoRef}
             label="Photo"
             value={values.photoUrl}
             error={errors.photoUrl}
-            disabled={loading}
+            disabled={loading || committingPhoto}
             onChange={(url) => update('photoUrl', url)}
           />
 
@@ -498,10 +516,10 @@ export function AttendeeFormModal({
           </label>
 
           <div className="modal-actions">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={loading || committingPhoto}>
               Cancel
             </Button>
-            <Button type="submit" loading={loading}>
+            <Button type="submit" loading={loading || committingPhoto}>
               {mode === 'create' ? 'Create attendee' : 'Save changes'}
             </Button>
           </div>

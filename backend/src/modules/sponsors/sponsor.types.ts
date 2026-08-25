@@ -67,7 +67,7 @@ export interface PublicSponsor {
 }
 
 export interface CreateSponsorInput {
-  eventId: string;
+  eventId?: string;
   name: string;
   email?: string;
   description?: string;
