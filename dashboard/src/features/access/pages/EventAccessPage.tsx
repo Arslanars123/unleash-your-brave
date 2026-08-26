@@ -335,7 +335,13 @@ export function EventAccessPage() {
           <p className="muted">
             Edition: <strong>{formatEditionRange(scopedEvent)}</strong>
             {' · '}
-            <span className="hint">{scopedEvent.status}</span>
+            <span className="hint">
+              {scopedEvent.id === current?.id
+                ? 'current'
+                : scopedEvent.status === 'ended'
+                  ? 'past'
+                  : scopedEvent.status}
+            </span>
           </p>
 
           <FeatureAccessPanel
