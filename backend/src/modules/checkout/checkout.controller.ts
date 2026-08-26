@@ -18,9 +18,15 @@ export class CheckoutController {
       typeof req.query.firstName === 'string' ? req.query.firstName : undefined;
     const lastName =
       typeof req.query.lastName === 'string' ? req.query.lastName : undefined;
+    const eventId =
+      typeof req.query.eventId === 'string' ? req.query.eventId : undefined;
     sendSuccess(
       res,
-      await this.service.checkEligibility(email, membershipId, { firstName, lastName }),
+      await this.service.checkEligibility(email, membershipId, {
+        firstName,
+        lastName,
+        eventId,
+      }),
     );
   };
 

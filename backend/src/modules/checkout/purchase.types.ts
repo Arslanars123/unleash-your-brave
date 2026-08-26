@@ -126,6 +126,8 @@ export interface CreateCheckoutSessionInput {
   email: string;
   firstName: string;
   lastName: string;
+  /** Required when the same pass is linked to multiple editions. */
+  eventId?: string;
   successUrl?: string;
   cancelUrl?: string;
   couponCode?: string;

@@ -5,6 +5,7 @@ export const createCheckoutSessionSchema = z.object({
   email: z.string().email().max(254),
   firstName: z.string().trim().min(1).max(100),
   lastName: z.string().trim().min(1).max(100),
+  eventId: z.string().uuid().optional(),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
   couponCode: z.string().trim().min(1).max(64).optional(),
@@ -16,6 +17,7 @@ export const createCheckoutSessionSchema = z.object({
 export const checkoutEligibilityQuerySchema = z.object({
   email: z.string().email().max(254),
   membershipId: z.string().uuid(),
+  eventId: z.string().uuid().optional(),
   firstName: z.string().trim().min(1).max(100).optional(),
   lastName: z.string().trim().min(1).max(100).optional(),
 });

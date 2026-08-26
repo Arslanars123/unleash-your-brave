@@ -13,6 +13,7 @@ import { computeMembershipPeriod } from '../memberships/membership-entitlement.j
 import type { Membership } from '../memberships/membership.types.js';
 import { toPublicMembership } from '../memberships/membership.mapper.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
+import type { MembershipService } from '../memberships/membership.service.js';
 import type { RealtimeHub } from '../realtime/realtime.hub.js';
 import type { UserRepository } from '../users/user.repository.js';
 import type { UserService } from '../users/user.service.js';
@@ -63,6 +64,7 @@ export class CheckoutService {
     private readonly realtimeHub: RealtimeHub,
     private readonly coupons?: CouponService,
     private readonly storeCheckout?: { fulfillCheckoutSession: (session: Stripe.Checkout.Session) => Promise<void> },
+    private readonly membershipCatalog?: MembershipService,
   ) {}
 
   private requireStripe(): Stripe {
@@ -77,86 +79,72 @@ export class CheckoutService {
     return this.stripe;
   }
 
+  private async listMembershipsForEvent(eventId: string) {
+    if (this.membershipCatalog) {
+      const { items } = await this.membershipCatalog.list({
+        page: 1,
+        perPage: 200,
+        eventId,
+      });
+      return items;
+    }
+
+    const { items } = await this.memberships.list({
+      page: 1,
+      perPage: 200,
+      eventId,
+    });
+    return items.map(toPublicMembership);
+  }
+
+  private catalogEventSummary(event: {
+    id: string;
+    name: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    tagline: string;
+    description: string;
+    venueName: string;
+    venueCity: string;
+    coverImage: string | null;
+    published: boolean;
+  }) {
+    return {
+      id: event.id,
+      name: event.name,
+      status: event.status,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      tagline: event.tagline,
+      description: event.description,
+      venueName: event.venueName,
+      venueCity: event.venueCity,
+      coverImage: event.coverImage,
+      published: event.published,
+    };
+  }
+
   async listCatalog(eventId?: string) {
     if (eventId) {
       const event = await this.events.getById(eventId);
-      const { items } = await this.memberships.list({
-        page: 1,
-        perPage: 200,
-        eventId: event.id,
-      });
-      const sorted = [...items].sort(
-        (a, b) =>
-          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
-          a.price - b.price ||
-          a.name.localeCompare(b.name),
-      );
+      const memberships = await this.listMembershipsForEvent(event.id);
+      const summary = this.catalogEventSummary(event);
       return {
-        event: {
-          id: event.id,
-          name: event.name,
-          status: event.status,
-          startDate: event.startDate,
-          endDate: event.endDate,
-          tagline: event.tagline,
-          description: event.description,
-          venueName: event.venueName,
-          venueCity: event.venueCity,
-          coverImage: event.coverImage,
-          published: event.published,
-        },
-        memberships: sorted.map(toPublicMembership),
-        events: [
-          {
-            event: {
-              id: event.id,
-              name: event.name,
-              status: event.status,
-              startDate: event.startDate,
-              endDate: event.endDate,
-              tagline: event.tagline,
-              description: event.description,
-              venueName: event.venueName,
-              venueCity: event.venueCity,
-              coverImage: event.coverImage,
-              published: event.published,
-            },
-            memberships: sorted.map(toPublicMembership),
-          },
-        ],
+        event: summary,
+        memberships,
+        events: [{ event: summary, memberships }],
       };
     }
 
     const available = await this.events.listAvailableForPurchase();
     const events = [];
     for (const event of available) {
-      const { items } = await this.memberships.list({
-        page: 1,
-        perPage: 200,
-        eventId: event.id,
-      });
-      if (items.length === 0) continue;
-      const sorted = [...items].sort(
-        (a, b) =>
-          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
-          a.price - b.price ||
-          a.name.localeCompare(b.name),
-      );
+      const memberships = await this.listMembershipsForEvent(event.id);
+      if (memberships.length === 0) continue;
       events.push({
-        event: {
-          id: event.id,
-          name: event.name,
-          status: event.status,
-          startDate: event.startDate,
-          endDate: event.endDate,
-          tagline: event.tagline,
-          description: event.description,
-          venueName: event.venueName,
-          venueCity: event.venueCity,
-          coverImage: event.coverImage,
-          published: event.published,
-        },
-        memberships: sorted.map(toPublicMembership),
+        event: this.catalogEventSummary(event),
+        memberships,
       });
     }
 
@@ -168,12 +156,29 @@ export class CheckoutService {
     };
   }
 
+  private async resolveCheckoutEventId(
+    membership: Membership,
+    eventId?: string,
+  ): Promise<string> {
+    const resolved = eventId?.trim() || membership.eventId;
+    if (!resolved) {
+      throw new BadRequestError('Event is required for this membership');
+    }
+    if (this.membershipCatalog) {
+      await this.membershipCatalog.assertLinkedToEvent(membership.id, resolved);
+    } else if (membership.eventId && membership.eventId !== resolved) {
+      throw new BadRequestError('Membership must be associated with this event edition');
+    }
+    return resolved;
+  }
+
   async checkEligibility(
     email: string,
     membershipId: string,
-    nameInput?: { firstName?: string; lastName?: string },
+    nameInput?: { firstName?: string; lastName?: string; eventId?: string },
   ): Promise<CheckoutEligibility> {
     const membership = await this.requireMembership(membershipId);
+    const checkoutEventId = await this.resolveCheckoutEventId(membership, nameInput?.eventId);
     const normalizedEmail = email.trim().toLowerCase();
     const existing = await this.users.findByEmail(normalizedEmail);
 
@@ -183,7 +188,7 @@ export class CheckoutService {
 
     // Event-scoped: what they already paid for on THIS edition.
     const paidForEvent = existing
-      ? (await this.purchases.listByEmailAndEvent(normalizedEmail, membership.eventId)).filter(
+      ? (await this.purchases.listByEmailAndEvent(normalizedEmail, checkoutEventId)).filter(
           (item) => item.paymentStatus === 'paid',
         )
       : [];
@@ -204,7 +209,7 @@ export class CheckoutService {
             targetMembershipId: membership.id,
             targetMembershipName: membership.name,
             targetMembershipPrice: membership.price,
-            eventId: membership.eventId,
+            eventId: checkoutEventId,
           });
         }
         return withAccount({
@@ -217,7 +222,7 @@ export class CheckoutService {
           targetMembershipId: membership.id,
           targetMembershipName: membership.name,
           targetMembershipPrice: membership.price,
-          eventId: membership.eventId,
+          eventId: checkoutEventId,
         });
       }
 
@@ -242,7 +247,7 @@ export class CheckoutService {
           targetMembershipId: membership.id,
           targetMembershipName: membership.name,
           targetMembershipPrice: membership.price,
-          eventId: membership.eventId,
+          eventId: checkoutEventId,
         });
       }
 
@@ -256,7 +261,7 @@ export class CheckoutService {
         targetMembershipId: membership.id,
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
-        eventId: membership.eventId,
+        eventId: checkoutEventId,
       });
     }
 
@@ -272,12 +277,12 @@ export class CheckoutService {
         targetMembershipId: membership.id,
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
-        eventId: membership.eventId,
+        eventId: checkoutEventId,
       });
     }
 
     const current = await this.memberships.findById(existing.membershipId);
-    if (!current || current.eventId !== membership.eventId) {
+    if (!current || current.eventId !== checkoutEventId) {
       return withAccount({
         allowed: true,
         reason: null,
@@ -288,7 +293,7 @@ export class CheckoutService {
         targetMembershipId: membership.id,
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
-        eventId: membership.eventId,
+        eventId: checkoutEventId,
       });
     }
 
@@ -304,7 +309,7 @@ export class CheckoutService {
           targetMembershipId: membership.id,
           targetMembershipName: membership.name,
           targetMembershipPrice: membership.price,
-          eventId: membership.eventId,
+          eventId: checkoutEventId,
         });
       }
       return withAccount({
@@ -317,7 +322,7 @@ export class CheckoutService {
         targetMembershipId: membership.id,
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
-        eventId: membership.eventId,
+        eventId: checkoutEventId,
       });
     }
 
@@ -342,7 +347,7 @@ export class CheckoutService {
         targetMembershipId: membership.id,
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
-        eventId: membership.eventId,
+        eventId: checkoutEventId,
       });
     }
 
@@ -358,7 +363,7 @@ export class CheckoutService {
         targetMembershipId: membership.id,
         targetMembershipName: membership.name,
         targetMembershipPrice: membership.price,
-        eventId: membership.eventId,
+        eventId: checkoutEventId,
       });
     }
 
@@ -372,7 +377,7 @@ export class CheckoutService {
       targetMembershipId: membership.id,
       targetMembershipName: membership.name,
       targetMembershipPrice: membership.price,
-      eventId: membership.eventId,
+      eventId: checkoutEventId,
     });
   }
 
@@ -384,11 +389,13 @@ export class CheckoutService {
     let firstName = input.firstName.trim();
     let lastName = input.lastName.trim();
     const membership = await this.requireMembership(input.membershipId);
-    const event = await this.events.requireEvent(membership.eventId);
+    const checkoutEventId = await this.resolveCheckoutEventId(membership, input.eventId);
+    const event = await this.events.requireEvent(checkoutEventId);
 
     const eligibility = await this.checkEligibility(email, membership.id, {
       firstName,
       lastName,
+      eventId: checkoutEventId,
     });
     if (!eligibility.allowed || !eligibility.kind) {
       throw new ConflictError(eligibility.reason ?? 'Purchase is not allowed');
@@ -699,10 +706,16 @@ export class CheckoutService {
     }
 
     const membership = await this.requireMembership(membershipId);
-    const event = await this.events.requireEvent(membership.eventId);
+    const checkoutEventId = await this.resolveCheckoutEventId(
+      membership,
+      metadata.eventId?.trim() || undefined,
+    );
+    const event = await this.events.requireEvent(checkoutEventId);
 
     // Re-validate at fulfill time (race / stale session).
-    const eligibility = await this.checkEligibility(email, membership.id);
+    const eligibility = await this.checkEligibility(email, membership.id, {
+      eventId: checkoutEventId,
+    });
     if (!eligibility.allowed || !eligibility.kind) {
       logger.warn(
         { sessionId: session.id, email, reason: eligibility.reason },

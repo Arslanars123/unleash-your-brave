@@ -226,6 +226,7 @@ export async function createContainer() {
     realtimeHub,
     couponService,
     storeCheckoutService,
+    membershipService,
   );
   const checkInFormService = new CheckInFormService(checkInFormRepository, eventService);
   const checkInService = new CheckInService(
