@@ -22,6 +22,8 @@ import 'package:unleash_your_brave/features/home/data/models/event_model.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_day_entity.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
 import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
+import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
+import 'package:unleash_your_brave/features/memberships/domain/entities/membership_entity.dart';
 
 enum _AgendaStatus { bootstrapping, loading, refreshing, success, offline, error }
 
@@ -39,6 +41,7 @@ class _AgendaPageState extends State<AgendaPage> {
 
   _AgendaStatus _status = _AgendaStatus.bootstrapping;
   EventEntity? _event;
+  bool _agendaLocked = false;
   final Map<int, List<SessionEntity>> _sessionsByDay = {};
   final Map<int, _DayLoadStatus> _dayStatus = {};
   final Map<int, String> _dayErrors = {};
@@ -182,10 +185,21 @@ class _AgendaPageState extends State<AgendaPage> {
       await _local.cacheEvent(event);
       if (!mounted) return;
 
+      EffectiveEventAccess? access;
+      var agendaLocked = false;
+      try {
+        access = await sl<MembershipsRemoteDataSource>().myAccess(eventId: event.id);
+        agendaLocked = !access.viewAgenda;
+      } catch (_) {
+        agendaLocked = false;
+      }
+      if (!mounted) return;
+
       _boundEventId = event.id;
       final nextDay = event.days.isEmpty ? null : _resolveSelectedDay(event);
       setState(() {
         _event = event;
+        _agendaLocked = agendaLocked;
         _selectedDayNumber = nextDay;
         _status = _AgendaStatus.success;
         _servingCachedData = false;
@@ -195,7 +209,7 @@ class _AgendaPageState extends State<AgendaPage> {
         _dayErrors.clear();
       });
 
-      if (nextDay != null) {
+      if (!agendaLocked && nextDay != null) {
         await _loadSessionsForDay(
           eventId: event.id,
           dayNumber: nextDay,
@@ -505,7 +519,13 @@ class _AgendaPageState extends State<AgendaPage> {
               ),
             _AgendaStatus.refreshing ||
             _AgendaStatus.success =>
-              _AgendaBody(
+              _agendaLocked
+                  ? _ScrollableFill(
+                      child: _AgendaLockedView(
+                        event: _event,
+                      ),
+                    )
+                  : _AgendaBody(
                 sidePad: sidePad,
                 event: _event,
                 selectedDay: _selectedDay,
@@ -557,6 +577,48 @@ class _ScrollableFill extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _AgendaLockedView extends StatelessWidget {
+  const _AgendaLockedView({required this.event});
+
+  final EventEntity? event;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: context.pagePadding,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: context.maxContentWidth),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.lock_outline,
+                size: 40,
+                color: AppColors.textTertiary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Agenda locked',
+                style: AppTypography.headline.copyWith(fontSize: 24),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                event?.dateRangeLabel.isNotEmpty == true
+                    ? '${event!.dateRangeLabel}\nAdmin has not enabled agenda access for this edition.'
+                    : 'Admin has not enabled agenda access for this edition.',
+                style: AppTypography.caption.copyWith(height: 1.45),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -649,6 +711,17 @@ class _AgendaBody extends StatelessWidget {
                           : 'Sessions and extra activities for each gathering day',
                       style: AppTypography.caption.copyWith(fontSize: 14),
                     ),
+                    if (event?.dateRangeLabel.isNotEmpty == true) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        event!.dateRangeLabel,
+                        style: AppTypography.caption.copyWith(
+                          fontSize: 13,
+                          color: AppColors.accentPink,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     if (servingCachedData) ...[
                       const SizedBox(height: 14),
                       const _OfflineBanner(),

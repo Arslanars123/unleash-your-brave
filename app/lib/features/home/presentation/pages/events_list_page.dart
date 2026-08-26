@@ -277,7 +277,7 @@ class _EventsListPageState extends State<EventsListPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Your passes and check-in QR for each edition. Open an event to view its agenda, store, and sponsors.',
+                          'Open any past or upcoming booking to view its agenda. What you can see follows Event access permissions set by admin.',
                           style: AppTypography.caption.copyWith(height: 1.45),
                         ),
                         SizedBox(height: context.sectionGap),
@@ -309,6 +309,11 @@ class _EventsListPageState extends State<EventsListPage> {
                                     extra: booking,
                                   );
                                 },
+                                onViewAgenda: () async {
+                                  await _selectEvent(booking.event);
+                                  if (!context.mounted) return;
+                                  context.go('/agenda');
+                                },
                                 onQr: booking.qrEntitled
                                     ? () async {
                                         await _selectEvent(booking.event);
@@ -336,6 +341,11 @@ class _EventsListPageState extends State<EventsListPage> {
                                     '/events/${booking.event.id}',
                                     extra: booking,
                                   );
+                                },
+                                onViewAgenda: () async {
+                                  await _selectEvent(booking.event);
+                                  if (!context.mounted) return;
+                                  context.go('/agenda');
                                 },
                                 onQr: booking.qrEntitled
                                     ? () async {
@@ -421,11 +431,13 @@ class _BookingCard extends StatelessWidget {
   const _BookingCard({
     required this.booking,
     required this.onOpen,
+    required this.onViewAgenda,
     this.onQr,
   });
 
   final EventBookingEntity booking;
   final VoidCallback onOpen;
+  final VoidCallback onViewAgenda;
   final VoidCallback? onQr;
 
   @override
@@ -489,17 +501,32 @@ class _BookingCard extends StatelessWidget {
                   ),
                 ),
               ],
-              if (onQr != null) ...[
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: onQr,
-                    icon: const Icon(Icons.qr_code_2, size: 18),
-                    label: const Text('QR'),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onViewAgenda,
+                      icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                      label: const Text('View agenda'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(color: AppColors.borderSubtle),
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  if (onQr != null) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: onQr,
+                        icon: const Icon(Icons.qr_code_2, size: 18),
+                        label: const Text('QR'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
