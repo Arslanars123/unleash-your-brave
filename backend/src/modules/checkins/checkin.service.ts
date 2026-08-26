@@ -5,7 +5,9 @@ import type { SubmitCheckInFormInput } from '../checkin-forms/checkin-form.types
 import { toPublicCheckInForm } from '../checkin-forms/checkin-form.mapper.js';
 import type { EffectiveAccessService, QrDeniedReason } from '../access/access.service.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
+import { editionStatus } from '../events/event.mapper.js';
 import type { EventService } from '../events/event.service.js';
+import type { PublicEvent } from '../events/event.types.js';
 import type { MembershipLifecycleService } from '../memberships/membership-lifecycle.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import { toPublicUser } from '../users/user.mapper.js';
@@ -32,6 +34,24 @@ function qrDeniedMessage(reason: QrDeniedReason): string {
     case 'no_membership':
     default:
       return 'Your membership does not include a check-in QR for this event. Purchase a pass or contact support.';
+  }
+}
+
+/** Check-in is only allowed while the edition is live (on/after start date, before end). */
+function assertCheckInWindowOpen(event: PublicEvent): void {
+  const status = editionStatus({
+    startDate: new Date(event.startDate),
+    endDate: new Date(event.endDate),
+    paused: Boolean(event.paused),
+  });
+  if (status === 'upcoming') {
+    throw new BadRequestError('Check-in will be available when the event starts.');
+  }
+  if (status === 'ended') {
+    throw new BadRequestError('Check-in is closed for this past event.');
+  }
+  if (status === 'paused') {
+    throw new BadRequestError('Check-in is paused for this event.');
   }
 }
 
@@ -145,6 +165,7 @@ export class CheckInService {
 
     const event = await this.events.getById(eventId);
     if (!event) throw new NotFoundError('Event');
+    assertCheckInWindowOpen(event);
 
     const user = await this.users.findById(userId);
     if (!user) throw new NotFoundError('Attendee');
@@ -199,6 +220,7 @@ export class CheckInService {
 
     const event = await this.events.getById(eventId);
     if (!event) throw new NotFoundError('Event');
+    assertCheckInWindowOpen(event);
 
     const user = await this.users.findById(userId);
     if (!user) throw new NotFoundError('Attendee');

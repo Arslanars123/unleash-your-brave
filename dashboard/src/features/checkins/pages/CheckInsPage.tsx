@@ -157,12 +157,36 @@ export function CheckInsPage() {
   const checkedIn = stats?.checkedInCount ?? 0;
   const attendees = stats?.attendeeCount ?? 0;
   const membership = scanDetail?.membership;
+  const editionStatus = selectedEdition?.status;
+  const checkInOpen = editionStatus === 'live';
+  const isUpcomingEdition = editionStatus === 'upcoming';
+  const isPausedEdition = editionStatus === 'paused';
   const editionLabel = isPastEdition
     ? 'Past edition'
-    : isNonCurrentEdition
-      ? 'Other edition'
-      : 'Current edition';
+    : isUpcomingEdition
+      ? 'Upcoming edition'
+      : isPausedEdition
+        ? 'Paused edition'
+        : isNonCurrentEdition
+          ? 'Other edition'
+          : 'Current edition';
 
+  const handleTokenScanGated = useCallback(
+    (raw: string) => {
+      if (!checkInOpen) {
+        const message = isUpcomingEdition
+          ? 'Check-in will be available when the event starts.'
+          : isPastEdition
+            ? 'Check-in is closed for this past event.'
+            : 'Check-in is not available for this event.';
+        setLastResult(message);
+        toast.error(message);
+        return;
+      }
+      handleTokenScan(raw);
+    },
+    [checkInOpen, handleTokenScan, isUpcomingEdition, isPastEdition, toast],
+  );
   return (
     <div className="page">
       <header className="page-header">
@@ -225,9 +249,25 @@ export function CheckInsPage() {
                 {selectedEdition ? formatEditionRange(selectedEdition) : 'this event'}
               </h2>
               <span
-                className={`status-pill ${isPastEdition ? 'status-scheduled' : 'status-published'}`}
+                className={`status-pill ${
+                  checkInOpen
+                    ? 'status-published'
+                    : isUpcomingEdition
+                      ? 'status-scheduled'
+                      : 'status-draft'
+                }`}
               >
-                {isPastEdition ? 'Past event' : isNonCurrentEdition ? 'Other edition' : 'Current event'}
+                {isPastEdition
+                  ? 'Past event'
+                  : isUpcomingEdition
+                    ? 'Upcoming'
+                    : isPausedEdition
+                      ? 'Paused'
+                      : checkInOpen
+                        ? 'Check-in open'
+                        : isNonCurrentEdition
+                          ? 'Other edition'
+                          : 'Current event'}
               </span>
             </div>
             <p className="muted" style={{ marginTop: 0 }}>
@@ -235,7 +275,7 @@ export function CheckInsPage() {
             </p>
           </section>
 
-          {!isPastEdition ? (
+          {checkInOpen ? (
             <section className="panel" style={{ marginBottom: 20 }}>
               <h2 style={{ margin: 0, fontSize: '1.05rem' }}>
                 <QrCode size={16} style={{ marginRight: 8, verticalAlign: 'text-bottom' }} />
@@ -247,7 +287,7 @@ export function CheckInsPage() {
                 check-in is recorded.
               </p>
               <CheckInScanner
-                onScan={handleTokenScan}
+                onScan={handleTokenScanGated}
                 disabled={scanMutation.isPending || completeFormMutation.isPending}
               />
               <form
@@ -256,7 +296,7 @@ export function CheckInsPage() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (!token.trim()) return;
-                  handleTokenScan(token);
+                  handleTokenScanGated(token);
                 }}
               >
                 <Input
@@ -328,7 +368,23 @@ export function CheckInsPage() {
                 </div>
               ) : null}
             </section>
-          ) : null}
+          ) : (
+            <section className="panel" style={{ marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: '1.05rem' }}>
+                <QrCode size={16} style={{ marginRight: 8, verticalAlign: 'text-bottom' }} />
+                Scan QR
+              </h2>
+              <p className="form-error" style={{ marginBottom: 0 }}>
+                {isUpcomingEdition
+                  ? 'Check-in will be available when the event starts.'
+                  : isPastEdition
+                    ? 'Check-in is closed for this past event.'
+                    : isPausedEdition
+                      ? 'Check-in is paused for this event.'
+                      : 'Check-in is not available for this event.'}
+              </p>
+            </section>
+          )}
 
           <div className="toolbar">
             <SearchSuggest
