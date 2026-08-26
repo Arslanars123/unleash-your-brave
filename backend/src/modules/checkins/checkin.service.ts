@@ -165,7 +165,6 @@ export class CheckInService {
 
     const event = await this.events.getById(eventId);
     if (!event) throw new NotFoundError('Event');
-    assertCheckInWindowOpen(event);
 
     const user = await this.users.findById(userId);
     if (!user) throw new NotFoundError('Attendee');
@@ -178,8 +177,11 @@ export class CheckInService {
 
     const existing = await this.checkIns.findByEventAndUser(eventId, userId);
     if (existing) {
+      // Allow viewing an existing check-in even outside the open window.
       return this.toScanResult(existing, user, true, eventId);
     }
+
+    assertCheckInWindowOpen(event);
 
     if (this.checkInForms) {
       const activeForm = await this.checkInForms.findActiveForm(eventId);
@@ -220,7 +222,6 @@ export class CheckInService {
 
     const event = await this.events.getById(eventId);
     if (!event) throw new NotFoundError('Event');
-    assertCheckInWindowOpen(event);
 
     const user = await this.users.findById(userId);
     if (!user) throw new NotFoundError('Attendee');
@@ -235,6 +236,8 @@ export class CheckInService {
     if (existing) {
       return this.toScanResult(existing, user, true, eventId);
     }
+
+    assertCheckInWindowOpen(event);
 
     const activeForm = await this.checkInForms.findActiveForm(eventId);
     if (!activeForm) {

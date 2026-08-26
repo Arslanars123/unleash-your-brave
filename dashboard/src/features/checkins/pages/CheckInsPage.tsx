@@ -501,14 +501,32 @@ export function CheckInsPage() {
                             <Button
                               variant="secondary"
                               disabled={
-                                scanMutation.isPending || completeFormMutation.isPending
+                                scanMutation.isPending ||
+                                completeFormMutation.isPending ||
+                                (!row.checkedIn && !checkInOpen)
                               }
-                              onClick={() =>
+                              title={
+                                !row.checkedIn && !checkInOpen
+                                  ? isUpcomingEdition
+                                    ? 'Check-in will be available when the event starts.'
+                                    : 'Check-in is not available for this event.'
+                                  : undefined
+                              }
+                              onClick={() => {
+                                if (!row.checkedIn && !checkInOpen) {
+                                  const message = isUpcomingEdition
+                                    ? 'Check-in will be available when the event starts.'
+                                    : isPastEdition
+                                      ? 'Check-in is closed for this past event.'
+                                      : 'Check-in is not available for this event.';
+                                  toast.error(message);
+                                  return;
+                                }
                                 void scanMutation.mutateAsync({
                                   eventId: eventId,
                                   userId: row.userId,
-                                })
-                              }
+                                });
+                              }}
                             >
                               <UserCheck size={14} />
                               {row.checkedIn ? 'View details' : 'Check in'}
