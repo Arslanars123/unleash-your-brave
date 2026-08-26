@@ -12,6 +12,12 @@ interface EditionSwitcherProps {
   pastBannerTitle?: string;
   pastBannerBody?: string;
   tipText?: string;
+  /**
+   * When true, includes an “All events” option and does not auto-select the current edition.
+   * Used on Attendees so filtering is opt-in.
+   */
+  allowAll?: boolean;
+  allLabel?: string;
 }
 
 function editionSuffix(
@@ -30,6 +36,8 @@ export function EditionSwitcher({
   pastBannerTitle = 'Editing past edition',
   pastBannerBody,
   tipText,
+  allowAll = false,
+  allLabel = 'All events',
 }: EditionSwitcherProps) {
   const {
     editions,
@@ -40,7 +48,7 @@ export function EditionSwitcher({
     selectEdition,
     clearEditionFilter,
     workspaceQuery,
-  } = useEditionScope();
+  } = useEditionScope(allowAll ? { optional: true } : undefined);
 
   if (workspaceQuery.isLoading || editions.length === 0) return null;
 
@@ -61,9 +69,14 @@ export function EditionSwitcher({
         <select
           className="field-input edition-select"
           value={selectedEdition?.id ?? ''}
-          onChange={(e) => selectEdition(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (!value) clearEditionFilter();
+            else selectEdition(value);
+          }}
           aria-label={`Select ${label.toLowerCase()}`}
         >
+          {allowAll ? <option value="">{allLabel}</option> : null}
           {editions.map((edition) => {
             const isCurrent = edition.id === currentEdition?.id;
             return (
@@ -84,19 +97,22 @@ export function EditionSwitcher({
             <p className="muted">{resolvedPastBody}</p>
           </div>
           <Button variant="secondary" onClick={clearEditionFilter}>
-            Back to current
+            {allowAll ? 'Clear filter' : 'Back to current'}
           </Button>
         </div>
       ) : null}
 
       {editions.length > 1 && !isNonCurrentEdition ? (
         <p className="hint edition-switcher-hint">
-          {tipText ?? (
-            <>
-              Tip: pick another edition above, or open one from the{' '}
-              <Link to="/events">Event</Link> page.
-            </>
-          )}
+          {tipText ??
+            (allowAll ? (
+              <>Tip: select an edition to show only that event’s attendees.</>
+            ) : (
+              <>
+                Tip: pick another edition above, or open one from the{' '}
+                <Link to="/events">Event</Link> page.
+              </>
+            ))}
         </p>
       ) : null}
     </div>

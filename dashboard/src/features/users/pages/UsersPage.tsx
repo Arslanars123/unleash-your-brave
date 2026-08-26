@@ -28,7 +28,7 @@ export function UsersPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
-  const { eventId, selectedEdition } = useEditionScope();
+  const { eventId, selectedEdition, clearEditionFilter } = useEditionScope({ optional: true });
 
   useAttendeeRealtime(true);
 
@@ -37,25 +37,26 @@ export function UsersPage() {
   }, [eventId]);
 
   const membershipsQuery = useQuery({
-    queryKey: ['memberships', 'list', eventId, 'all'],
-    queryFn: () => membershipsApi.list({ perPage: 100, eventId }),
-    enabled: Boolean(eventId),
+    queryKey: ['memberships', 'list', eventId ?? 'library', 'attendee-form'],
+    queryFn: () =>
+      membershipsApi.list({
+        perPage: 100,
+        ...(eventId ? { eventId } : {}),
+      }),
   });
 
   const usersQuery = useQuery({
-    queryKey: ['users', 'list', 'attendees', eventId, search, page],
+    queryKey: ['users', 'list', 'attendees', eventId ?? 'all', search, page],
     queryFn: () =>
       usersApi.list({
         search: search || undefined,
         page,
         perPage: PER_PAGE,
         attendeesOnly: true,
-        eventId,
+        ...(eventId ? { eventId } : {}),
       }),
-    enabled: Boolean(eventId),
     refetchInterval: 15_000,
   });
-
   function applySearch(next: string) {
     setSearch(next);
     setPage(1);
@@ -189,17 +190,21 @@ export function UsersPage() {
           <span className="page-kicker">People</span>
           <h1>Attendees</h1>
           <p className="muted">
-            People who purchased a membership or ticket for the selected event. Switch editions to
-            see that edition’s attendees.
+            All attendees by default. Optionally filter by edition to see only people who purchased
+            for that event.
           </p>
         </div>
-        <Button onClick={openCreate} disabled={!eventId}>
+        <Button onClick={openCreate}>
           <Plus size={16} />
           Create attendee
         </Button>
       </header>
 
-      <EditionSwitcher />
+      <EditionSwitcher
+        allowAll
+        allLabel="All events"
+        tipText="Select an edition to filter attendees for that event only."
+      />
 
       <div className="toolbar">
         <SearchSuggest
@@ -207,14 +212,12 @@ export function UsersPage() {
           placeholder="Name, email, title, business…"
           value={search}
           onChange={applySearch}
-          disabled={!eventId}
           loadSuggestions={async (draft) => {
-            if (!eventId) return [];
             const result = await usersApi.list({
               search: draft,
               perPage: 6,
               attendeesOnly: true,
-              eventId,
+              ...(eventId ? { eventId } : {}),
             });
             return result.items.map((user) => ({
               id: user.id,
@@ -237,22 +240,29 @@ export function UsersPage() {
           </button>
         </div>
       ) : null}
-
-      {!eventId ? (
-        <p className="form-error">Select an event edition to view its attendees.</p>
+      {eventId ? (
+        <div className="active-filter-chip">
+          Filtered by selected edition
+          <button type="button" aria-label="Clear edition filter" onClick={clearEditionFilter}>
+            <X size={14} />
+          </button>
+        </div>
       ) : null}
-      {eventId && usersQuery.isLoading ? <Spinner /> : null}
+
+      {usersQuery.isLoading ? <Spinner /> : null}
       {usersQuery.isError ? (
         <p className="form-error">{getApiErrorMessage(usersQuery.error)}</p>
       ) : null}
 
-      {eventId && usersQuery.data ? (
+      {usersQuery.data ? (
         usersQuery.data.items.length === 0 ? (
           <div className="empty-state">
             <Users size={28} />
-            <h2>No attendees for this edition</h2>
+            <h2>{eventId ? 'No attendees for this edition' : 'No attendees yet'}</h2>
             <p className="muted">
-              Only people with a purchase, ticket, or membership for this event appear here.
+              {eventId
+                ? 'Only people with a purchase, ticket, or membership for this event appear here.'
+                : 'Add member profiles, or filter by edition to see purchasers for a specific event.'}
             </p>
             <Button onClick={openCreate}>
               <Plus size={16} />

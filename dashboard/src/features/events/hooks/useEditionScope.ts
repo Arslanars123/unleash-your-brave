@@ -24,8 +24,12 @@ function formatUtcDate(iso: string): string {
 /**
  * Shared edition scope for Speakers / Sessions / Sponsors / Check-ins / Store.
  * Use `?edition=<id>` to browse a non-current edition. Admins can still edit any edition.
+ *
+ * When `optional` is true (Attendees), no edition is selected until the admin picks one —
+ * the list is unfiltered by default.
  */
-export function useEditionScope() {
+export function useEditionScope(options?: { optional?: boolean }) {
+  const optional = Boolean(options?.optional);
   const [params, setParams] = useSearchParams();
   const workspaceQuery = useQuery({
     queryKey: ['events', 'workspace'],
@@ -49,8 +53,9 @@ export function useEditionScope() {
   }, [workspaceEditions, currentEdition, upcomingEditions, pastEditions]);
 
   const editionIdFromUrl = params.get('edition');
-  const selectedEdition =
-    editions.find((edition) => edition.id === editionIdFromUrl) ?? currentEdition;
+  const selectedEdition = optional
+    ? editions.find((edition) => edition.id === editionIdFromUrl) ?? null
+    : editions.find((edition) => edition.id === editionIdFromUrl) ?? currentEdition;
 
   const isNonCurrentEdition = Boolean(
     selectedEdition && currentEdition && selectedEdition.id !== currentEdition.id,
@@ -62,7 +67,12 @@ export function useEditionScope() {
 
   function selectEdition(editionId: string) {
     const next = new URLSearchParams(params);
-    if (!currentEdition || editionId === currentEdition.id) {
+    if (!editionId) {
+      next.delete('edition');
+    } else if (optional) {
+      // Keep the chosen edition in the URL even when it is the current one.
+      next.set('edition', editionId);
+    } else if (!currentEdition || editionId === currentEdition.id) {
       next.delete('edition');
     } else {
       next.set('edition', editionId);
@@ -83,10 +93,11 @@ export function useEditionScope() {
     pastEditions,
     upcomingEditions,
     selectedEdition,
-    eventId: selectedEdition?.id,
+    eventId: selectedEdition?.id as string | undefined,
     isPastEdition,
     isNonCurrentEdition,
     isReadOnly,
+    optional,
     selectEdition,
     clearEditionFilter,
   };
