@@ -17,7 +17,6 @@ import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dar
 import 'package:unleash_your_brave/features/checkin/domain/entities/event_booking_entity.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
-import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
 import 'package:unleash_your_brave/features/memberships/domain/entities/membership_entity.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -109,20 +108,6 @@ class _EventDetailPageState extends State<EventDetailPage> {
 
   bool get _qrEntitled =>
       _booking?.qrEntitled == true || _access?.qrEntitled == true;
-
-  Future<void> _setActive() async {
-    final event = _event;
-    if (event == null) return;
-    setState(() => _busy = true);
-    try {
-      await context.read<SelectedEventCubit>().selectEventEntity(event);
-      if (!mounted) return;
-      AppToast.success('${event.name} is now your active event');
-      context.go('/');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
 
   Future<void> _purchase() async {
     final event = _event;
@@ -231,9 +216,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedId = context.watch<SelectedEventCubit>().state.eventId;
     final event = _event;
-    final isActive = event != null && event.id == selectedId;
 
     return Scaffold(
       backgroundColor: AppColors.bgBase,
@@ -316,22 +299,10 @@ class _EventDetailPageState extends State<EventDetailPage> {
                                 ),
                               ),
                             if (_entitled) ...[
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: _busy || isActive ? null : _setActive,
-                                  child: Text(
-                                    isActive
-                                        ? 'Active event'
-                                        : 'Use as active event',
-                                  ),
-                                ),
-                              ),
-                              if (_qrEntitled) ...[
-                                const SizedBox(height: 12),
+                              if (_qrEntitled)
                                 SizedBox(
                                   width: double.infinity,
-                                  child: OutlinedButton.icon(
+                                  child: ElevatedButton.icon(
                                     onPressed: _busy
                                         ? null
                                         : () => context.push(
@@ -339,15 +310,8 @@ class _EventDetailPageState extends State<EventDetailPage> {
                                             ),
                                     icon: const Icon(Icons.qr_code_2),
                                     label: const Text('Check-in QR'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: AppColors.textPrimary,
-                                      side: const BorderSide(
-                                        color: AppColors.borderSubtle,
-                                      ),
-                                    ),
                                   ),
                                 ),
-                              ],
                             ] else ...[
                               SizedBox(
                                 width: double.infinity,

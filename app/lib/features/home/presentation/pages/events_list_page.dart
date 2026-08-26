@@ -95,10 +95,8 @@ class _EventsListPageState extends State<EventsListPage> {
     }
   }
 
-  Future<void> _selectActive(EventEntity event) async {
+  Future<void> _selectEvent(EventEntity event) async {
     await context.read<SelectedEventCubit>().selectEventEntity(event);
-    if (!mounted) return;
-    AppToast.success('${event.name} is now your active event');
   }
 
   Future<void> _openPurchase(EventEntity event) async {
@@ -255,8 +253,6 @@ class _EventsListPageState extends State<EventsListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedId = context.watch<SelectedEventCubit>().state.eventId;
-
     return Scaffold(
       backgroundColor: AppColors.bgBase,
       appBar: buildSubpageAppBar(
@@ -281,7 +277,7 @@ class _EventsListPageState extends State<EventsListPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Switch the active event to scope agenda, store, and sponsors. Each booking has its own check-in QR when entitled.',
+                          'Your passes and check-in QR for each edition. Open an event to view its agenda, store, and sponsors.',
                           style: AppTypography.caption.copyWith(height: 1.45),
                         ),
                         SizedBox(height: context.sectionGap),
@@ -305,16 +301,22 @@ class _EventsListPageState extends State<EventsListPage> {
                             for (final booking in _currentBookings) ...[
                               _BookingCard(
                                 booking: booking,
-                                isActive: booking.event.id == selectedId,
-                                onOpen: () => context.push(
-                                  '/events/${booking.event.id}',
-                                  extra: booking,
-                                ),
-                                onSelect: () => _selectActive(booking.event),
+                                onOpen: () async {
+                                  await _selectEvent(booking.event);
+                                  if (!context.mounted) return;
+                                  context.push(
+                                    '/events/${booking.event.id}',
+                                    extra: booking,
+                                  );
+                                },
                                 onQr: booking.qrEntitled
-                                    ? () => context.push(
+                                    ? () async {
+                                        await _selectEvent(booking.event);
+                                        if (!context.mounted) return;
+                                        context.push(
                                           '/check-in?eventId=${booking.event.id}',
-                                        )
+                                        );
+                                      }
                                     : null,
                               ),
                               const SizedBox(height: 12),
@@ -327,16 +329,22 @@ class _EventsListPageState extends State<EventsListPage> {
                             for (final booking in _pastBookings) ...[
                               _BookingCard(
                                 booking: booking,
-                                isActive: booking.event.id == selectedId,
-                                onOpen: () => context.push(
-                                  '/events/${booking.event.id}',
-                                  extra: booking,
-                                ),
-                                onSelect: () => _selectActive(booking.event),
+                                onOpen: () async {
+                                  await _selectEvent(booking.event);
+                                  if (!context.mounted) return;
+                                  context.push(
+                                    '/events/${booking.event.id}',
+                                    extra: booking,
+                                  );
+                                },
                                 onQr: booking.qrEntitled
-                                    ? () => context.push(
+                                    ? () async {
+                                        await _selectEvent(booking.event);
+                                        if (!context.mounted) return;
+                                        context.push(
                                           '/check-in?eventId=${booking.event.id}',
-                                        )
+                                        );
+                                      }
                                     : null,
                               ),
                               const SizedBox(height: 12),
@@ -412,16 +420,12 @@ class _EmptyHint extends StatelessWidget {
 class _BookingCard extends StatelessWidget {
   const _BookingCard({
     required this.booking,
-    required this.isActive,
     required this.onOpen,
-    required this.onSelect,
     this.onQr,
   });
 
   final EventBookingEntity booking;
-  final bool isActive;
   final VoidCallback onOpen;
-  final VoidCallback onSelect;
   final VoidCallback? onQr;
 
   @override
@@ -438,11 +442,7 @@ class _BookingCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-            border: Border.all(
-              color: isActive
-                  ? AppColors.accentPink.withValues(alpha: 0.45)
-                  : AppColors.borderSubtle,
-            ),
+            border: Border.all(color: AppColors.borderSubtle),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -489,42 +489,17 @@ class _BookingCard extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  if (!isActive)
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: onSelect,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textPrimary,
-                          side: const BorderSide(color: AppColors.borderSubtle),
-                        ),
-                        child: const Text('Set active'),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: Text(
-                        'Active event',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.accentPink,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  if (onQr != null) ...[
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: onQr,
-                        icon: const Icon(Icons.qr_code_2, size: 18),
-                        label: const Text('QR'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              if (onQr != null) ...[
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: onQr,
+                    icon: const Icon(Icons.qr_code_2, size: 18),
+                    label: const Text('QR'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
