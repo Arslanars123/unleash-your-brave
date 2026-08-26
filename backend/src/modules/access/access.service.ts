@@ -347,18 +347,9 @@ export class EffectiveAccessService {
       hasMembership: true,
     });
 
-    // Same-edition membership — content when they hold the tier; QR gated by payment rule.
-    if (source.eventId === event.id) {
-      return this.buildSameEditionAccess({
-        eventId: event.id,
-        allowPrevious,
-        blockUnpaid,
-        source,
-        catalog,
-        payment,
-        carriedFromPrevious: false,
-      });
-    }
+    // No paid purchase for THIS edition. Membership.eventId is not authoritative for
+    // multi-edition catalogs (shared tiers are stamped with one edition id) — only a
+    // purchase grants same-edition access. Otherwise apply carry-forward rules only.
 
     const contentCarry = validForFutureEvents || allowPrevious;
     const qrCarryBase = validForFutureQr;
