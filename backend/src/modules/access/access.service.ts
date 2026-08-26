@@ -195,8 +195,11 @@ function attachFeatureAccess(
   access: EffectiveEventAccess,
   event: Event,
 ): EffectiveEventAccess {
+  // Member feature pack = paid purchase for THIS edition only.
+  // Content carry / previous-edition holders use the guest pack so admin
+  // "without membership for this edition" permissions actually apply.
   const features = resolveEffectiveFeatureAccess({
-    entitled: access.entitled,
+    entitled: access.entitled && !access.carriedFromPrevious,
     event,
   });
   return {

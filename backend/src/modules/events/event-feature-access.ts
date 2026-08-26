@@ -60,6 +60,10 @@ export function eventStartDateReached(
 }
 
 export function resolveEffectiveFeatureAccess(input: {
+  /**
+   * True when the attendee should receive the member feature pack
+   * (paid purchase / linked membership for this edition — not content carry).
+   */
   entitled: boolean;
   event: Pick<Event, 'memberFeatureAccess' | 'guestFeatureAccess' | 'startDate'>;
   now?: Date;
