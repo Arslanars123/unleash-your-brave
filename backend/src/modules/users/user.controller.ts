@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import { UnauthorizedError } from '../../core/errors/app-error.js';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
-import type { MembershipService } from '../memberships/membership.service.js';
 import type { StoreCheckoutService } from '../store/store-checkout.service.js';
 import type { UserService } from './user.service.js';
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from './user.types.js';
@@ -12,7 +11,6 @@ export class UserController {
     private readonly service: UserService,
     private readonly checkout: CheckoutService,
     private readonly storeCheckout: StoreCheckoutService,
-    private readonly memberships: MembershipService,
   ) {}
 
   list = async (req: Request, res: Response): Promise<void> => {
@@ -72,17 +70,15 @@ export class UserController {
 
   /**
    * Attendees for an edition = paid membership purchasers + paid store buyers
-   * + users whose current plan is linked to that edition.
+   * for that edition only. Do not include “current plan holders” — shared
+   * membership tiers are linked to multiple editions, so that incorrectly
+   * pulls in purchasers from other events.
    */
   private async resolveAttendeeIdsForEvent(eventId: string): Promise<string[]> {
-    const [purchasers, buyers, membershipPage] = await Promise.all([
+    const [purchasers, buyers] = await Promise.all([
       this.checkout.listPaidPurchaserIdsForEvent(eventId),
       this.storeCheckout.listPaidBuyerIdsForEvent(eventId),
-      this.memberships.list({ page: 1, perPage: 500, eventId }),
     ]);
-    const holders = await this.service.listIdsByMembershipIds(
-      membershipPage.items.map((item) => item.id),
-    );
-    return [...new Set([...purchasers, ...buyers, ...holders])];
+    return [...new Set([...purchasers, ...buyers])];
   }
 }

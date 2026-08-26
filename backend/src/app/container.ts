@@ -256,7 +256,6 @@ export async function createContainer() {
     userService,
     checkoutService,
     storeCheckoutService,
-    membershipService,
   );
   const authController = new AuthController(authService);
   const eventController = new EventController(eventService, eventAssociationService);
