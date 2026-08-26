@@ -27,13 +27,12 @@ function qrDeniedMessage(reason: QrDeniedReason): string {
   switch (reason) {
     case 'renewal_payment_required':
       return 'Your check-in QR will become valid once your membership renewal payment is completed.';
-    case 'membership_not_valid_for_qr':
-      return 'Your membership does not include a check-in QR for this event. Purchase a pass or contact support.';
     case 'account_inactive':
       return 'Your account is not eligible for a check-in QR.';
+    case 'membership_not_valid_for_qr':
     case 'no_membership':
     default:
-      return 'Your membership does not include a check-in QR for this event. Purchase a pass or contact support.';
+      return 'You do not have a membership for this event. Please purchase a membership to receive your check-in QR code.';
   }
 }
 
