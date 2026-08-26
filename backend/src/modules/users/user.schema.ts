@@ -36,8 +36,8 @@ export const listUsersQuerySchema = z.object({
       if (typeof value === 'boolean') return value;
       return value === 'true' || value === '1';
     }),
+  eventId: z.string().uuid().optional(),
 });
-
 const profileFields = {
   photoUrl: optionalUrl,
   title: z.string().trim().max(160).optional().default(''),

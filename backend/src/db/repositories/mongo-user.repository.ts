@@ -38,6 +38,12 @@ export class MongoUserRepository implements UserRepository {
 
   async list(query: ListUsersQuery): Promise<PaginatedResult<User>> {
     const filter: Filter<MongoDoc<User>> = {};
+    if (query.userIds) {
+      if (query.userIds.length === 0) {
+        return { items: [], total: 0 };
+      }
+      filter._id = { $in: query.userIds };
+    }
     if (query.attendeesOnly) {
       filter.$or = [{ role: 'member' }, { membershipId: { $ne: null } }];
     } else if (query.role) {
@@ -90,6 +96,15 @@ export class MongoUserRepository implements UserRepository {
       .project({ _id: 1 })
       .toArray();
     return [...new Set(docs.map((doc) => String(doc._id)))];
+  }
+
+  async listIdsByMembershipIds(membershipIds: string[]): Promise<string[]> {
+    if (membershipIds.length === 0) return [];
+    const docs = await this.collection
+      .find({ membershipId: { $in: membershipIds } })
+      .project({ _id: 1 })
+      .toArray();
+    return docs.map((doc) => String(doc._id));
   }
 
   async listDueForMembershipExpiry(now: Date): Promise<User[]> {

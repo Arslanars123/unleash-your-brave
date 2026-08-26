@@ -251,7 +251,12 @@ export async function createContainer() {
   );
   const ghlWebhookService = new GhlWebhookService(userService, realtimeHub, mailService);
 
-  const userController = new UserController(userService, checkoutService);
+  const userController = new UserController(
+    userService,
+    checkoutService,
+    storeCheckoutService,
+    membershipService,
+  );
   const authController = new AuthController(authService);
   const eventController = new EventController(eventService, eventAssociationService);
   const speakerController = new SpeakerController(speakerService);

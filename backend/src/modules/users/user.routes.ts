@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { asyncHandler } from '../../core/http/async-handler.js';
 import { authenticate, authorize } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
@@ -42,7 +43,10 @@ export function createUserRouter(controller: UserController): Router {
 
   router.get(
     '/:id/purchases',
-    validate({ params: userIdParamSchema }),
+    validate({
+      params: userIdParamSchema,
+      query: z.object({ eventId: z.string().uuid().optional() }),
+    }),
     asyncHandler(controller.listPurchases),
   );
 

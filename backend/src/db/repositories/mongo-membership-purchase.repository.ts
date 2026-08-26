@@ -51,6 +51,14 @@ export class MongoMembershipPurchaseRepository implements MembershipPurchaseRepo
     return fromDocs<MembershipPurchase>(docs);
   }
 
+  async listPaidUserIdsByEvent(eventId: string): Promise<string[]> {
+    const docs = await this.collection
+      .find({ eventId, paymentStatus: 'paid', userId: { $type: 'string' } })
+      .project({ userId: 1 })
+      .toArray();
+    return [...new Set(docs.map((doc) => String(doc.userId)).filter(Boolean))];
+  }
+
   async create(data: CreateMembershipPurchaseInput): Promise<MembershipPurchase> {
     const now = new Date();
     const purchase: MembershipPurchase = {

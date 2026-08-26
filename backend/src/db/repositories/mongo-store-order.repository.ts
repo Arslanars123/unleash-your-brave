@@ -81,6 +81,14 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
     return fromDocs<StoreOrder>(docs);
   }
 
+  async listPaidUserIdsByEvent(eventId: string): Promise<string[]> {
+    const docs = await this.collection
+      .find({ eventId, paymentStatus: 'paid', userId: { $type: 'string' } })
+      .project({ userId: 1 })
+      .toArray();
+    return [...new Set(docs.map((doc) => String(doc.userId)).filter(Boolean))];
+  }
+
   async create(data: CreateStoreOrderInput): Promise<StoreOrder> {
     const now = new Date();
     const order: StoreOrder = {

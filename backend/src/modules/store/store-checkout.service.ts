@@ -221,6 +221,10 @@ export class StoreCheckoutService {
     return items.map(toPublicStoreOrder);
   }
 
+  async listPaidBuyerIdsForEvent(eventId: string): Promise<string[]> {
+    return this.orders.listPaidUserIdsByEvent(eventId);
+  }
+
   async fulfillCheckoutSession(session: Stripe.Checkout.Session): Promise<void> {
     const existing = await this.orders.findByStripeCheckoutSessionId(session.id);
     if (existing) {

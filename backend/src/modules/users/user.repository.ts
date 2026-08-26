@@ -64,6 +64,8 @@ export interface UserRepository {
   list(query: ListUsersQuery): Promise<PaginatedResult<User>>;
   /** Active users matching any of the given roles (for announcement audiences). */
   listActiveIdsByRoles(roles: UserRole[]): Promise<string[]>;
+  /** User ids whose current membershipId is one of the given ids. */
+  listIdsByMembershipIds(membershipIds: string[]): Promise<string[]>;
   /** Members whose renewable period has ended but status is still active. */
   listDueForMembershipExpiry(now: Date): Promise<User[]>;
   /** Active renewable members expiring within the reminder window who need a reminder. */
@@ -105,9 +107,11 @@ export class InMemoryUserRepository implements UserRepository {
 
   async list(query: ListUsersQuery): Promise<PaginatedResult<User>> {
     const search = query.search?.toLowerCase();
+    const idSet = query.userIds ? new Set(query.userIds) : null;
 
     const filtered = [...this.users.values()]
       .filter((user) => {
+        if (idSet && !idSet.has(user.id)) return false;
         if (query.attendeesOnly) {
           if (user.role !== 'member' && !user.membershipId) return false;
         } else if (query.role && user.role !== query.role) {
@@ -146,6 +150,14 @@ export class InMemoryUserRepository implements UserRepository {
         if (roles.includes('member') && user.membershipId) return true;
         return false;
       })
+      .map((user) => user.id);
+  }
+
+  async listIdsByMembershipIds(membershipIds: string[]): Promise<string[]> {
+    if (membershipIds.length === 0) return [];
+    const set = new Set(membershipIds);
+    return [...this.users.values()]
+      .filter((user) => user.membershipId && set.has(user.membershipId))
       .map((user) => user.id);
   }
 

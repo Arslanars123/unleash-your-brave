@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import { UnauthorizedError } from '../../core/errors/app-error.js';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
+import type { MembershipService } from '../memberships/membership.service.js';
+import type { StoreCheckoutService } from '../store/store-checkout.service.js';
 import type { UserService } from './user.service.js';
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from './user.types.js';
 
@@ -9,10 +11,15 @@ export class UserController {
   constructor(
     private readonly service: UserService,
     private readonly checkout: CheckoutService,
+    private readonly storeCheckout: StoreCheckoutService,
+    private readonly memberships: MembershipService,
   ) {}
 
   list = async (req: Request, res: Response): Promise<void> => {
-    const query = req.query as unknown as ListUsersQuery;
+    const query = { ...(req.query as unknown as ListUsersQuery) };
+    if (query.eventId) {
+      query.userIds = await this.resolveAttendeeIdsForEvent(query.eventId);
+    }
     const { items, total } = await this.service.list(query);
     sendPaginated(res, items, buildPaginationMeta(query.page, query.perPage, total));
   };
@@ -24,7 +31,11 @@ export class UserController {
   listPurchases = async (req: Request, res: Response): Promise<void> => {
     const userId = req.params.id as string;
     await this.service.getById(userId);
-    sendSuccess(res, await this.checkout.getAttendeePurchaseSummary(userId));
+    const eventId =
+      typeof req.query.eventId === 'string' && req.query.eventId.trim()
+        ? req.query.eventId.trim()
+        : undefined;
+    sendSuccess(res, await this.checkout.getAttendeePurchaseSummary(userId, eventId));
   };
 
   create = async (req: Request, res: Response): Promise<void> => {
@@ -58,4 +69,20 @@ export class UserController {
   stats = async (_req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.getStats());
   };
+
+  /**
+   * Attendees for an edition = paid membership purchasers + paid store buyers
+   * + users whose current plan is linked to that edition.
+   */
+  private async resolveAttendeeIdsForEvent(eventId: string): Promise<string[]> {
+    const [purchasers, buyers, membershipPage] = await Promise.all([
+      this.checkout.listPaidPurchaserIdsForEvent(eventId),
+      this.storeCheckout.listPaidBuyerIdsForEvent(eventId),
+      this.memberships.list({ page: 1, perPage: 500, eventId }),
+    ]);
+    const holders = await this.service.listIdsByMembershipIds(
+      membershipPage.items.map((item) => item.id),
+    );
+    return [...new Set([...purchasers, ...buyers, ...holders])];
+  }
 }

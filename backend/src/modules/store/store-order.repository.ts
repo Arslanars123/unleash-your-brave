@@ -11,6 +11,8 @@ export interface StoreOrderRepository {
   findByStripeCheckoutSessionId(stripeCheckoutSessionId: string): Promise<StoreOrder | null>;
   list(query: ListStoreOrdersQuery): Promise<PaginatedResult<StoreOrder>>;
   listByUserId(userId: string): Promise<StoreOrder[]>;
+  /** Distinct user ids with a paid store order for the event. */
+  listPaidUserIdsByEvent(eventId: string): Promise<string[]>;
   create(data: CreateStoreOrderInput): Promise<StoreOrder>;
   update(
     id: string,
@@ -55,6 +57,16 @@ export class InMemoryStoreOrderRepository implements StoreOrderRepository {
     return [...this.items.values()]
       .filter((item) => item.userId === userId)
       .sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime());
+  }
+
+  async listPaidUserIdsByEvent(eventId: string): Promise<string[]> {
+    return [
+      ...new Set(
+        [...this.items.values()]
+          .filter((item) => item.eventId === eventId && item.paymentStatus === 'paid')
+          .map((item) => item.userId),
+      ),
+    ];
   }
 
   async create(data: CreateStoreOrderInput): Promise<StoreOrder> {

@@ -108,6 +108,7 @@ interface MembershipRecordPanelProps {
   };
   sourceLabel: string;
   productTitle?: string | null;
+  preferredEventId?: string;
 }
 
 /** Clean membership summary + purchase history for attendee detail / check-in. */
@@ -115,10 +116,20 @@ export function MembershipRecordPanel({
   summary,
   sourceLabel,
   productTitle,
+  preferredEventId,
 }: MembershipRecordPanelProps) {
-  const history = [...summary.purchases].sort(
-    (a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime(),
-  );
+  const history = [...summary.purchases].sort((a, b) => {
+    if (preferredEventId) {
+      const aMatch = a.eventId === preferredEventId ? 0 : 1;
+      const bMatch = b.eventId === preferredEventId ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+    }
+    return new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime();
+  });
+
+  const preferredCount = preferredEventId
+    ? history.filter((item) => item.eventId === preferredEventId).length
+    : 0;
 
   const isRecurring =
     summary.isRecurring ?? summary.currentBillingKind === 'renewable';
@@ -236,6 +247,9 @@ export function MembershipRecordPanel({
           <h4>Payment history</h4>
           <span className="muted">
             {history.length} record{history.length === 1 ? '' : 's'}
+            {preferredEventId && preferredCount > 0
+              ? ` · ${preferredCount} for selected event first`
+              : ''}
             {summary.renewals?.length
               ? ` · ${summary.renewals.length} renewal${summary.renewals.length === 1 ? '' : 's'}`
               : ''}

@@ -219,4 +219,8 @@ export interface ListUsersQuery {
   status?: UserStatus;
   /** When true: members + any role that holds a membership (speaker/sponsor attendees). */
   attendeesOnly?: boolean;
+  /** Limit to attendees with a purchase / ticket / membership for this edition. */
+  eventId?: string;
+  /** Internal: precomputed user ids for event-scoped attendee lists. */
+  userIds?: string[];
 }

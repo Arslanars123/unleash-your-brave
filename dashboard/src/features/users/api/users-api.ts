@@ -18,6 +18,7 @@ export interface ListUsersParams {
   role?: UserRole;
   status?: UserStatus;
   attendeesOnly?: boolean;
+  eventId?: string;
 }
 
 export interface ListUsersResult {
@@ -39,9 +40,10 @@ export const usersApi = {
     return data.data;
   },
 
-  async getPurchases(id: string): Promise<AttendeePurchaseSummary> {
+  async getPurchases(id: string, params: { eventId?: string } = {}): Promise<AttendeePurchaseSummary> {
     const { data } = await apiClient.get<SuccessEnvelope<AttendeePurchaseSummary>>(
       `/users/${id}/purchases`,
+      { params },
     );
     return data.data;
   },

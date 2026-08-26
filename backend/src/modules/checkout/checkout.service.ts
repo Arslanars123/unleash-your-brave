@@ -582,6 +582,10 @@ export class CheckoutService {
     return items.map(toPublicMembershipPurchase);
   }
 
+  async listPaidPurchaserIdsForEvent(eventId: string): Promise<string[]> {
+    return this.purchases.listPaidUserIdsByEvent(eventId);
+  }
+
   async getAttendeePurchaseSummary(
     userId: string,
     eventId?: string,
@@ -590,21 +594,45 @@ export class CheckoutService {
     if (!user) throw new NotFoundError('User');
 
     const all = await this.purchases.listByUserId(userId);
-    const scoped = eventId ? all.filter((p) => p.eventId === eventId) : all;
-    const paid = scoped.filter((p) => p.paymentStatus === 'paid');
+    const paidAll = all.filter((p) => p.paymentStatus === 'paid');
+    const preferred = eventId
+      ? paidAll.filter((p) => p.eventId === eventId)
+      : [];
+    // When an event filter is applied, put that edition's purchases first, then the rest.
+    const paid = eventId
+      ? [
+          ...preferred,
+          ...paidAll.filter((p) => p.eventId !== eventId),
+        ]
+      : paidAll;
 
-    const original = paid[0] ?? null;
-    const latest = paid.length > 0 ? paid[paid.length - 1]! : null;
+    const eventPaid = eventId ? preferred : paid;
+    const original = (eventId ? eventPaid : paid)[0] ?? paid[0] ?? null;
+    const latest =
+      (eventId ? eventPaid : paid).length > 0
+        ? (eventId ? eventPaid : paid)[(eventId ? eventPaid : paid).length - 1]!
+        : paid.length > 0
+          ? paid[paid.length - 1]!
+          : null;
     const upgrades = paid.filter((p) => p.kind === 'upgrade');
     const renewals = paid.filter((p) => p.kind === 'renew');
 
+    const focusMembershipId =
+      latest?.membershipId ??
+      (eventId ? null : user.membershipId) ??
+      user.membershipId;
+
     let currentMembershipName: string | null = null;
     let currentBillingKind: 'one_time' | 'renewable' | null = null;
-    if (user.membershipId) {
-      const membership = await this.memberships.findById(user.membershipId);
-      currentMembershipName = membership?.name ?? null;
+    let currentMembershipId: string | null = focusMembershipId;
+    if (focusMembershipId) {
+      const membership = await this.memberships.findById(focusMembershipId);
+      currentMembershipName = membership?.name ?? latest?.membershipName ?? null;
       currentBillingKind =
         membership?.billingKind === 'renewable' ? 'renewable' : membership ? 'one_time' : null;
+    } else if (latest) {
+      currentMembershipId = latest.membershipId;
+      currentMembershipName = latest.membershipName;
     }
 
     const now = Date.now();
@@ -615,19 +643,19 @@ export class CheckoutService {
       currentMembershipStatus !== 'expired'
     ) {
       currentMembershipStatus = 'expired';
-    } else if (user.membershipId && !currentMembershipStatus) {
+    } else if (currentMembershipId && !currentMembershipStatus) {
       currentMembershipStatus = 'active';
     }
 
     return {
-      currentMembershipId: user.membershipId,
+      currentMembershipId,
       currentMembershipName,
       currentMembershipStatus,
       currentMembershipExpiresAt: user.membershipExpiresAt
         ? user.membershipExpiresAt.toISOString()
         : null,
       currentBillingKind,
-      originalMembershipId: original?.membershipId ?? user.membershipId,
+      originalMembershipId: original?.membershipId ?? currentMembershipId,
       originalMembershipName: original?.membershipName ?? currentMembershipName,
       purchases: paid.map(toPublicMembershipPurchase),
       upgrades: upgrades.map(toPublicMembershipPurchase),

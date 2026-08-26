@@ -51,6 +51,10 @@ export class UserService {
     return { items: items.map(toPublicUser), total };
   }
 
+  async listIdsByMembershipIds(membershipIds: string[]): Promise<string[]> {
+    return this.users.listIdsByMembershipIds(membershipIds);
+  }
+
   async getById(id: string): Promise<PublicUser> {
     return toPublicUser(await this.requireUser(id));
   }

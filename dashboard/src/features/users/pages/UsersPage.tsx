@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Eye, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
 import { usersApi } from '@/features/users/api/users-api';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
@@ -28,9 +28,13 @@ export function UsersPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
-  const { eventId } = useEditionScope();
+  const { eventId, selectedEdition } = useEditionScope();
 
   useAttendeeRealtime(true);
+
+  useEffect(() => {
+    setPage(1);
+  }, [eventId]);
 
   const membershipsQuery = useQuery({
     queryKey: ['memberships', 'list', eventId, 'all'],
@@ -39,14 +43,16 @@ export function UsersPage() {
   });
 
   const usersQuery = useQuery({
-    queryKey: ['users', 'list', 'attendees', search, page],
+    queryKey: ['users', 'list', 'attendees', eventId, search, page],
     queryFn: () =>
       usersApi.list({
         search: search || undefined,
         page,
         perPage: PER_PAGE,
         attendeesOnly: true,
+        eventId,
       }),
+    enabled: Boolean(eventId),
     refetchInterval: 15_000,
   });
 
@@ -182,9 +188,12 @@ export function UsersPage() {
         <div>
           <span className="page-kicker">People</span>
           <h1>Attendees</h1>
-          <p className="muted">Create and manage member profiles for the event.</p>
+          <p className="muted">
+            People who purchased a membership or ticket for the selected event. Switch editions to
+            see that edition’s attendees.
+          </p>
         </div>
-        <Button onClick={openCreate}>
+        <Button onClick={openCreate} disabled={!eventId}>
           <Plus size={16} />
           Create attendee
         </Button>
@@ -198,11 +207,14 @@ export function UsersPage() {
           placeholder="Name, email, title, business…"
           value={search}
           onChange={applySearch}
+          disabled={!eventId}
           loadSuggestions={async (draft) => {
+            if (!eventId) return [];
             const result = await usersApi.list({
               search: draft,
               perPage: 6,
-              role: 'member',
+              attendeesOnly: true,
+              eventId,
             });
             return result.items.map((user) => ({
               id: user.id,
@@ -226,17 +238,22 @@ export function UsersPage() {
         </div>
       ) : null}
 
-      {usersQuery.isLoading ? <Spinner /> : null}
+      {!eventId ? (
+        <p className="form-error">Select an event edition to view its attendees.</p>
+      ) : null}
+      {eventId && usersQuery.isLoading ? <Spinner /> : null}
       {usersQuery.isError ? (
         <p className="form-error">{getApiErrorMessage(usersQuery.error)}</p>
       ) : null}
 
-      {usersQuery.data ? (
+      {eventId && usersQuery.data ? (
         usersQuery.data.items.length === 0 ? (
           <div className="empty-state">
             <Users size={28} />
-            <h2>No attendees yet</h2>
-            <p className="muted">Add member profiles with VIP status, points, and networking prefs.</p>
+            <h2>No attendees for this edition</h2>
+            <p className="muted">
+              Only people with a purchase, ticket, or membership for this event appear here.
+            </p>
             <Button onClick={openCreate}>
               <Plus size={16} />
               Create attendee
@@ -333,6 +350,8 @@ export function UsersPage() {
       <AttendeeDetailModal
         open={Boolean(viewing)}
         user={viewing}
+        preferredEventId={eventId}
+        preferredEventLabel={selectedEdition?.name}
         onClose={() => setViewing(null)}
         onEdit={openEdit}
       />

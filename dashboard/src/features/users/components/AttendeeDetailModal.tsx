@@ -31,6 +31,9 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 interface AttendeeDetailModalProps {
   open: boolean;
   user: PublicUser | null;
+  /** When set, membership summary / history prioritizes this edition. */
+  preferredEventId?: string;
+  preferredEventLabel?: string;
   onClose: () => void;
   onEdit: (user: PublicUser) => void;
 }
@@ -38,6 +41,8 @@ interface AttendeeDetailModalProps {
 export function AttendeeDetailModal({
   open,
   user,
+  preferredEventId,
+  preferredEventLabel,
   onClose,
   onEdit,
 }: AttendeeDetailModalProps) {
@@ -51,9 +56,10 @@ export function AttendeeDetailModal({
   }, [open, onClose]);
 
   const purchasesQuery = useQuery({
-    queryKey: ['users', 'purchases', user?.id],
+    queryKey: ['users', 'purchases', user?.id, preferredEventId ?? 'all'],
     enabled: open && Boolean(user?.id),
-    queryFn: () => usersApi.getPurchases(user!.id),
+    queryFn: () =>
+      usersApi.getPurchases(user!.id, preferredEventId ? { eventId: preferredEventId } : {}),
   });
 
   if (!open || !user) return null;
@@ -102,6 +108,29 @@ export function AttendeeDetailModal({
 
         <div className="modal-body">
           <section className="attendee-detail-section">
+            <h3>
+              Membership
+              {preferredEventLabel ? (
+                <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>
+                  · {preferredEventLabel} first
+                </span>
+              ) : null}
+            </h3>
+            {purchasesQuery.isLoading ? <Spinner /> : null}
+            {purchasesQuery.isError ? (
+              <p className="form-error">Could not load purchase history.</p>
+            ) : null}
+            {summary ? (
+              <MembershipRecordPanel
+                summary={summary}
+                sourceLabel={sourceLabel}
+                productTitle={user.title}
+                preferredEventId={preferredEventId}
+              />
+            ) : null}
+          </section>
+
+          <section className="attendee-detail-section">
             <h3>Account</h3>
             <dl className="attendee-detail-grid">
               <DetailRow label="Status" value={user.status} />
@@ -119,21 +148,6 @@ export function AttendeeDetailModal({
               <DetailRow label="Created" value={formatDate(user.createdAt)} />
               <DetailRow label="Updated" value={formatDate(user.updatedAt)} />
             </dl>
-          </section>
-
-          <section className="attendee-detail-section">
-            <h3>Membership</h3>
-            {purchasesQuery.isLoading ? <Spinner /> : null}
-            {purchasesQuery.isError ? (
-              <p className="form-error">Could not load purchase history.</p>
-            ) : null}
-            {summary ? (
-              <MembershipRecordPanel
-                summary={summary}
-                sourceLabel={sourceLabel}
-                productTitle={user.title}
-              />
-            ) : null}
           </section>
 
           <section className="attendee-detail-section">

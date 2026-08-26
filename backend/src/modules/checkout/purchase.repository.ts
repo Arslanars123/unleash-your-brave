@@ -10,6 +10,8 @@ export interface MembershipPurchaseRepository {
   ): Promise<MembershipPurchase | null>;
   listByUserId(userId: string): Promise<MembershipPurchase[]>;
   listByEmailAndEvent(email: string, eventId: string): Promise<MembershipPurchase[]>;
+  /** Distinct user ids with a paid membership purchase for the event. */
+  listPaidUserIdsByEvent(eventId: string): Promise<string[]>;
   create(data: CreateMembershipPurchaseInput): Promise<MembershipPurchase>;
   updatePaymentStatus(
     id: string,
