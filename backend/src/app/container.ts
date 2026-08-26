@@ -179,6 +179,7 @@ export async function createContainer() {
     sessionFeedbackRepository,
     sessionRepository,
     userRepository,
+    effectiveAccessService,
   );
   const storeService = new StoreService(
     storeCategoryRepository,

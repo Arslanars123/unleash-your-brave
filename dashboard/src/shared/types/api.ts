@@ -304,6 +304,12 @@ export interface EventDayPayload {
 
 export type EventEditionStatus = 'upcoming' | 'live' | 'ended' | 'paused';
 
+export interface EventFeatureAccess {
+  viewAgenda: boolean;
+  viewMaterials: boolean;
+  submitReviews: boolean;
+}
+
 export interface PublicEvent {
   id: string;
   name: string;
@@ -323,6 +329,8 @@ export interface PublicEvent {
   coverImage: string;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  memberFeatureAccess?: EventFeatureAccess;
+  guestFeatureAccess?: EventFeatureAccess;
   /** When false, draft — hidden from public/app discovery. Defaults true. */
   published?: boolean;
   createdAt: string;
@@ -357,6 +365,8 @@ export interface EventPayload {
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  memberFeatureAccess?: EventFeatureAccess;
+  guestFeatureAccess?: EventFeatureAccess;
   paused?: boolean;
   published?: boolean;
   notifyAttendees?: boolean;
@@ -378,6 +388,8 @@ export interface ScheduleEventPayload {
   copyDetailsFromPrevious?: boolean;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  memberFeatureAccess?: EventFeatureAccess;
+  guestFeatureAccess?: EventFeatureAccess;
   /** Draft until published (default true when omitted). */
   published?: boolean;
   notifyAttendees?: boolean;
@@ -475,6 +487,12 @@ export interface EffectiveEventAccess {
   paymentPeriodActive?: boolean;
   qrDeniedReason?: string | null;
   upgradeMembershipIds: string[];
+  viewAgenda?: boolean;
+  viewMaterials?: boolean;
+  submitReviews?: boolean;
+  eventStarted?: boolean;
+  memberFeatureAccess?: EventFeatureAccess;
+  guestFeatureAccess?: EventFeatureAccess;
 }
 
 export interface CouponMembershipDiscount {

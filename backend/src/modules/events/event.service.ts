@@ -24,6 +24,13 @@ import type {
   ScheduleEventInput,
   UpdateEventInput,
 } from './event.types.js';
+import {
+  DEFAULT_GUEST_FEATURE_ACCESS,
+  DEFAULT_MEMBER_FEATURE_ACCESS,
+  guestFeatureAccessFor,
+  memberFeatureAccessFor,
+  normalizeFeatureAccess,
+} from './event-feature-access.js';
 
 function eachUtcDayInclusive(start: Date, end: Date): Date[] {
   const days: Date[] = [];
@@ -284,6 +291,16 @@ export class EventService {
       blockQrWhenRenewalUnpaid:
         input.blockQrWhenRenewalUnpaid ??
         (copy ? previous?.blockQrWhenRenewalUnpaid !== false : true),
+      memberFeatureAccess: input.memberFeatureAccess
+        ? normalizeFeatureAccess(input.memberFeatureAccess, DEFAULT_MEMBER_FEATURE_ACCESS)
+        : copy
+          ? memberFeatureAccessFor(previous!)
+          : { ...DEFAULT_MEMBER_FEATURE_ACCESS },
+      guestFeatureAccess: input.guestFeatureAccess
+        ? normalizeFeatureAccess(input.guestFeatureAccess, DEFAULT_GUEST_FEATURE_ACCESS)
+        : copy
+          ? guestFeatureAccessFor(previous!)
+          : { ...DEFAULT_GUEST_FEATURE_ACCESS },
       published: input.published !== false,
       paused: false,
     });
@@ -356,6 +373,22 @@ export class EventService {
       ...(input.blockQrWhenRenewalUnpaid !== undefined
         ? { blockQrWhenRenewalUnpaid: input.blockQrWhenRenewalUnpaid }
         : {}),
+      ...(input.memberFeatureAccess !== undefined
+        ? {
+            memberFeatureAccess: normalizeFeatureAccess(
+              input.memberFeatureAccess,
+              memberFeatureAccessFor(existing),
+            ),
+          }
+        : {}),
+      ...(input.guestFeatureAccess !== undefined
+        ? {
+            guestFeatureAccess: normalizeFeatureAccess(
+              input.guestFeatureAccess,
+              guestFeatureAccessFor(existing),
+            ),
+          }
+        : {}),
       ...(input.paused !== undefined ? { paused: nextPaused } : {}),
       ...(input.published !== undefined ? { published: Boolean(input.published) } : {}),
     });
@@ -418,6 +451,12 @@ export class EventService {
       coverImage: input.coverImage ?? '',
       allowPreviousAttendeesAccess: Boolean(input.allowPreviousAttendeesAccess),
       blockQrWhenRenewalUnpaid: input.blockQrWhenRenewalUnpaid !== false,
+      memberFeatureAccess: input.memberFeatureAccess
+        ? normalizeFeatureAccess(input.memberFeatureAccess, DEFAULT_MEMBER_FEATURE_ACCESS)
+        : { ...DEFAULT_MEMBER_FEATURE_ACCESS },
+      guestFeatureAccess: input.guestFeatureAccess
+        ? normalizeFeatureAccess(input.guestFeatureAccess, DEFAULT_GUEST_FEATURE_ACCESS)
+        : { ...DEFAULT_GUEST_FEATURE_ACCESS },
       paused: Boolean(input.paused),
       published: input.published !== false,
     });

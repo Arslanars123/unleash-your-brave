@@ -54,6 +54,12 @@ function assertDaysUnique(days: Array<{ date: string }>, ctx: z.RefinementCtx): 
 
 const optionalCoord = z.union([z.number().finite(), z.null()]).optional();
 
+const featureAccessSchema = z.object({
+  viewAgenda: z.boolean(),
+  viewMaterials: z.boolean(),
+  submitReviews: z.boolean(),
+});
+
 export const createEventSchema = z
   .object({
     name: z.string().trim().min(2, 'Name is required').max(160),
@@ -70,6 +76,8 @@ export const createEventSchema = z
     coverImage: coverImageSchema,
     allowPreviousAttendeesAccess: z.boolean().optional().default(false),
     blockQrWhenRenewalUnpaid: z.boolean().optional().default(true),
+    memberFeatureAccess: featureAccessSchema.optional(),
+    guestFeatureAccess: featureAccessSchema.optional(),
     paused: z.boolean().optional().default(false),
     published: z.boolean().optional().default(true),
   })
@@ -153,6 +161,8 @@ export const updateEventSchema = z
       }),
     allowPreviousAttendeesAccess: z.boolean().optional(),
     blockQrWhenRenewalUnpaid: z.boolean().optional(),
+    memberFeatureAccess: featureAccessSchema.optional(),
+    guestFeatureAccess: featureAccessSchema.optional(),
     paused: z.boolean().optional(),
     published: z.boolean().optional(),
     notifyAttendees: z.boolean().optional().default(true),
@@ -203,6 +213,8 @@ export const scheduleEventSchema = z
     copyDetailsFromPrevious: z.boolean().optional().default(true),
     allowPreviousAttendeesAccess: z.boolean().optional().default(false),
     blockQrWhenRenewalUnpaid: z.boolean().optional().default(true),
+    memberFeatureAccess: featureAccessSchema.optional(),
+    guestFeatureAccess: featureAccessSchema.optional(),
     published: z.boolean().optional().default(true),
     notifyAttendees: z.boolean().optional().default(true),
     speakerIds: z.array(z.string().uuid()).optional().default([]),

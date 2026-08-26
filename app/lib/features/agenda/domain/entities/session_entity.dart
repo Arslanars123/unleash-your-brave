@@ -55,6 +55,9 @@ class SessionEntity {
     this.feedbackEnabled = true,
     this.feedbackSummary,
     this.accessRestricted = false,
+    this.materialsLocked = false,
+    this.reviewsLocked = false,
+    this.agendaLocked = false,
   });
 
   final String id;
@@ -78,6 +81,9 @@ class SessionEntity {
   final bool feedbackEnabled;
   final SessionFeedbackSummaryEntity? feedbackSummary;
   final bool accessRestricted;
+  final bool materialsLocked;
+  final bool reviewsLocked;
+  final bool agendaLocked;
 
   bool get isExtraActivity => kind == 'event';
 

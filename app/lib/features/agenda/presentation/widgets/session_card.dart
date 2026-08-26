@@ -52,10 +52,16 @@ class SessionCard extends StatelessWidget {
                         color: AppColors.accentPink,
                       ),
                     ),
-                    if (session.accessRestricted) ...[
+                    if (session.accessRestricted || session.agendaLocked) ...[
                       const SizedBox(width: 8),
+                      Icon(
+                        Icons.lock_outline,
+                        size: 12,
+                        color: AppColors.textTertiary,
+                      ),
+                      const SizedBox(width: 4),
                       Text(
-                        'PASS REQUIRED',
+                        session.agendaLocked ? 'LOCKED' : 'PASS REQUIRED',
                         style: AppTypography.microLabel.copyWith(
                           letterSpacing: 1.0,
                           color: AppColors.textTertiary,
@@ -65,13 +71,23 @@ class SessionCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
-              ] else if (session.accessRestricted) ...[
-                Text(
-                  'PASS REQUIRED',
-                  style: AppTypography.microLabel.copyWith(
-                    letterSpacing: 1.0,
-                    color: AppColors.textTertiary,
-                  ),
+              ] else if (session.accessRestricted || session.agendaLocked) ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.lock_outline,
+                      size: 12,
+                      color: AppColors.textTertiary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      session.agendaLocked ? 'LOCKED' : 'PASS REQUIRED',
+                      style: AppTypography.microLabel.copyWith(
+                        letterSpacing: 1.0,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
               ],

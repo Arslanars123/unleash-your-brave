@@ -1,4 +1,5 @@
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../../core/errors/app-error.js';
+import type { EffectiveAccessService } from '../../access/access.service.js';
 import type { UserRepository } from '../../users/user.repository.js';
 import type { SessionRepository } from '../session.repository.js';
 import {
@@ -19,6 +20,7 @@ export class SessionFeedbackService {
     private readonly feedback: SessionFeedbackRepository,
     private readonly sessions: SessionRepository,
     private readonly users: UserRepository,
+    private readonly access?: EffectiveAccessService,
   ) {}
 
   async getSummary(sessionId: string): Promise<SessionFeedbackSummary> {
@@ -62,6 +64,17 @@ export class SessionFeedbackService {
     const session = await this.requireSession(sessionId);
     if (session.feedbackEnabled === false) {
       throw new ForbiddenError('Feedback is disabled for this session');
+    }
+
+    if (this.access) {
+      const access = await this.access.resolveForUser(userId, session.eventId);
+      if (!access.submitReviews) {
+        throw new ForbiddenError(
+          access.eventStarted
+            ? 'You do not have permission to submit reviews for this event'
+            : 'Reviews open when the event starts',
+        );
+      }
     }
 
     const rating = input.rating;

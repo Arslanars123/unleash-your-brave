@@ -73,6 +73,10 @@ class EffectiveEventAccess {
     this.sourceMembershipName,
     this.validForFutureEvents = false,
     this.validForFutureQr = false,
+    this.viewAgenda = true,
+    this.viewMaterials = true,
+    this.submitReviews = true,
+    this.eventStarted = false,
   });
 
   final String eventId;
@@ -88,6 +92,10 @@ class EffectiveEventAccess {
   final bool validForFutureEvents;
   final bool validForFutureQr;
   final List<String> upgradeMembershipIds;
+  final bool viewAgenda;
+  final bool viewMaterials;
+  final bool submitReviews;
+  final bool eventStarted;
 }
 
 class CheckoutEligibility {

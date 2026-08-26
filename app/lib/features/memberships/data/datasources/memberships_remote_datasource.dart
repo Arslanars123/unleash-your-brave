@@ -199,6 +199,10 @@ class MembershipsRemoteDataSource {
         upgradeMembershipIds: upgradeIds is List
             ? upgradeIds.map((e) => e.toString()).toList()
             : const [],
+        viewAgenda: data['viewAgenda'] as bool? ?? true,
+        viewMaterials: data['viewMaterials'] as bool? ?? true,
+        submitReviews: data['submitReviews'] as bool? ?? true,
+        eventStarted: data['eventStarted'] as bool? ?? false,
       );
     } on DioException catch (error) {
       throwMappedDioError(error);

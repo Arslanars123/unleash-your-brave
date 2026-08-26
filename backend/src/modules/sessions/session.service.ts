@@ -64,16 +64,25 @@ export class SessionService {
     query: ListSessionsQuery,
     viewer?: SessionViewerContext,
   ): Promise<PaginatedResult<PublicSession>> {
-    const accessibleIds = viewer
-      ? await this.resolveAccessibleMembershipIds(viewer.userId, query.eventId)
-      : [];
+    const featureAccess = viewer
+      ? await this.resolveFeatureAccess(viewer.userId, query.eventId)
+      : null;
+    const accessibleIds = featureAccess?.accessibleMembershipIds
+      ?? (viewer
+        ? await this.resolveAccessibleMembershipIds(viewer.userId, query.eventId)
+        : []);
 
     const { items, total } = await this.sessions.list(query);
     const mapped = await Promise.all(
       items.map((session) =>
         this.toPublic(
           session,
-          this.isAccessRestricted(session, accessibleIds, viewer),
+          this.buildLocks(
+            session,
+            accessibleIds,
+            viewer,
+            featureAccess,
+          ),
         ),
       ),
     );
@@ -82,11 +91,17 @@ export class SessionService {
 
   async getById(id: string, viewer?: SessionViewerContext): Promise<PublicSession> {
     const session = await this.requireSession(id);
-    const accessibleIds = viewer
-      ? await this.resolveAccessibleMembershipIds(viewer.userId, session.eventId)
-      : [];
-    const accessRestricted = this.isAccessRestricted(session, accessibleIds, viewer);
-    return this.toPublic(session, accessRestricted);
+    const featureAccess = viewer
+      ? await this.resolveFeatureAccess(viewer.userId, session.eventId)
+      : null;
+    const accessibleIds = featureAccess?.accessibleMembershipIds
+      ?? (viewer
+        ? await this.resolveAccessibleMembershipIds(viewer.userId, session.eventId)
+        : []);
+    return this.toPublic(
+      session,
+      this.buildLocks(session, accessibleIds, viewer, featureAccess),
+    );
   }
 
   async create(input: CreateSessionInput): Promise<PublicSession> {
@@ -202,6 +217,27 @@ export class SessionService {
     await this.feedback.deleteBySession(id);
   }
 
+  private async resolveFeatureAccess(userId: string, eventId?: string) {
+    if (!this.access) return null;
+    return this.access.resolveForUser(userId, eventId);
+  }
+
+  private buildLocks(
+    session: Session,
+    accessibleIds: string[],
+    viewer: SessionViewerContext | undefined,
+    featureAccess: Awaited<ReturnType<EffectiveAccessService['resolveForUser']>> | null,
+  ) {
+    const accessRestricted = this.isAccessRestricted(session, accessibleIds, viewer);
+    const isAdmin = viewer?.role === 'admin';
+    return {
+      accessRestricted,
+      agendaLocked: !isAdmin && featureAccess ? !featureAccess.viewAgenda : false,
+      materialsLocked: !isAdmin && featureAccess ? !featureAccess.viewMaterials : false,
+      reviewsLocked: !isAdmin && featureAccess ? !featureAccess.submitReviews : false,
+    };
+  }
+
   private async resolveAccessibleMembershipIds(
     userId: string,
     eventId?: string,
@@ -221,7 +257,15 @@ export class SessionService {
     return user?.membershipId ?? null;
   }
 
-  private async toPublic(session: Session, accessRestricted = false): Promise<PublicSession> {
+  private async toPublic(
+    session: Session,
+    locks: boolean | {
+      accessRestricted?: boolean;
+      materialsLocked?: boolean;
+      reviewsLocked?: boolean;
+      agendaLocked?: boolean;
+    } = false,
+  ): Promise<PublicSession> {
     const speaker = session.speakerId
       ? await this.speakers.findById(session.speakerId)
       : null;
@@ -240,7 +284,7 @@ export class SessionService {
     return toPublicSession(session, summary, {
       averageRating: feedbackSummary.averageRating,
       ratingsCount: feedbackSummary.ratingsCount,
-    }, accessRestricted);
+    }, locks);
   }
 
   private isAccessRestricted(

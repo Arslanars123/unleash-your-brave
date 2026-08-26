@@ -82,6 +82,12 @@ export interface PublicSession {
   feedbackSummary: SessionFeedbackSummary;
   /** True when the viewer’s membership does not include this item (agenda still lists it). */
   accessRestricted: boolean;
+  /** True when materials are hidden by membership or feature policy. */
+  materialsLocked?: boolean;
+  /** True when reviews are blocked by membership, feature policy, or event not started. */
+  reviewsLocked?: boolean;
+  /** True when agenda/session details are locked by feature policy. */
+  agendaLocked?: boolean;
   createdAt: string;
   updatedAt: string;
 }

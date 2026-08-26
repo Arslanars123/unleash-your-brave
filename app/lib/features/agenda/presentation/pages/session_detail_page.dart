@@ -453,44 +453,86 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                       _SpeakerBlock(speaker: speaker),
                     ],
                     const SizedBox(height: 28),
-                    Text(
-                      'ABOUT',
-                      style: AppTypography.microLabel.copyWith(
-                        letterSpacing: 1.4,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          'ABOUT',
+                          style: AppTypography.microLabel.copyWith(
+                            letterSpacing: 1.4,
+                          ),
+                        ),
+                        if (session.agendaLocked) ...[
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.lock_outline,
+                            size: 14,
+                            color: AppColors.textTertiary,
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 10),
-                    Text(
-                      description.isEmpty
-                          ? isExtraActivity
-                              ? 'No description available for this extra activity.'
-                              : 'No description available for this session.'
-                          : description,
-                      style: AppTypography.body.copyWith(
-                        fontSize: 15,
-                        height: 1.55,
-                        color: description.isEmpty
-                            ? AppColors.textSecondary
-                            : AppColors.textPrimary,
+                    if (session.agendaLocked)
+                      const _LockedSection(
+                        message:
+                            'Session details are locked. Ask an admin for access or purchase a pass.',
+                      )
+                    else
+                      Text(
+                        description.isEmpty
+                            ? isExtraActivity
+                                ? 'No description available for this extra activity.'
+                                : 'No description available for this session.'
+                            : description,
+                        style: AppTypography.body.copyWith(
+                          fontSize: 15,
+                          height: 1.55,
+                          color: description.isEmpty
+                              ? AppColors.textSecondary
+                              : AppColors.textPrimary,
+                        ),
                       ),
-                    ),
                     if (!isExtraActivity) ...[
                       const SizedBox(height: 32),
-                      Text(
-                        'RESOURCES',
-                        style: AppTypography.microLabel.copyWith(
-                          letterSpacing: 1.4,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'RESOURCES',
+                            style: AppTypography.microLabel.copyWith(
+                              letterSpacing: 1.4,
+                            ),
+                          ),
+                          if (session.materialsLocked ||
+                              session.accessRestricted ||
+                              session.agendaLocked) ...[
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.lock_outline,
+                              size: 14,
+                              color: AppColors.textTertiary,
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        materials.isEmpty
-                            ? 'No materials for this session yet.'
-                            : '${materials.length} ${materials.length == 1 ? 'item' : 'items'} available',
+                        (session.materialsLocked ||
+                                session.accessRestricted ||
+                                session.agendaLocked)
+                            ? 'Materials are locked for your access level.'
+                            : materials.isEmpty
+                                ? 'No materials for this session yet.'
+                                : '${materials.length} ${materials.length == 1 ? 'item' : 'items'} available',
                         style: AppTypography.caption,
                       ),
                       const SizedBox(height: 14),
-                      if (materials.isEmpty)
+                      if (session.materialsLocked ||
+                          session.accessRestricted ||
+                          session.agendaLocked)
+                        const _LockedSection(
+                          message: 'Unlock materials with the required event access.',
+                        )
+                      else if (materials.isEmpty)
                         const _EmptyMaterials()
                       else
                         ...materials.map(
@@ -502,7 +544,9 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                             ),
                           ),
                         ),
-                      if (session.feedbackEnabled) ...[
+                      if (session.feedbackEnabled &&
+                          !session.reviewsLocked &&
+                          !session.agendaLocked) ...[
                         const SizedBox(height: 32),
                         KeyedSubtree(
                           key: _reviewSectionKey,
@@ -512,6 +556,29 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                             hasMyReview: _myFeedback != null,
                             onAddOrEdit: _openReviewForm,
                           ),
+                        ),
+                      ] else if (!isExtraActivity) ...[
+                        const SizedBox(height: 32),
+                        Row(
+                          children: [
+                            Text(
+                              'REVIEWS',
+                              style: AppTypography.microLabel.copyWith(
+                                letterSpacing: 1.4,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.lock_outline,
+                              size: 14,
+                              color: AppColors.textTertiary,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        const _LockedSection(
+                          message:
+                              'Reviews unlock when the event starts and your access allows them.',
                         ),
                       ],
                     ],
@@ -723,6 +790,40 @@ class _EmptyMaterials extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Materials and links will appear here when they’re added.',
+            textAlign: TextAlign.center,
+            style: AppTypography.caption.copyWith(fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LockedSection extends StatelessWidget {
+  const _LockedSection({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.lock_outline,
+            size: 28,
+            color: AppColors.textTertiary,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
             textAlign: TextAlign.center,
             style: AppTypography.caption.copyWith(fontSize: 13),
           ),

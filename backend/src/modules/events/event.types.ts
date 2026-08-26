@@ -1,3 +1,7 @@
+import type { EventFeatureAccess } from './event-feature-access.js';
+
+export type { EventFeatureAccess } from './event-feature-access.js';
+
 export interface EventDay {
   /** 1-based day index within the event (Day 1, Day 2, …). */
   dayNumber: number;
@@ -51,6 +55,16 @@ export interface Event {
    */
   blockQrWhenRenewalUnpaid: boolean;
   /**
+   * Feature permissions for attendees entitled to this edition
+   * (paid purchase, same-edition membership, or previous-attendee content carry).
+   */
+  memberFeatureAccess?: EventFeatureAccess;
+  /**
+   * Feature permissions for everyone else (no purchase / membership for this edition).
+   * Defaults all locked.
+   */
+  guestFeatureAccess?: EventFeatureAccess;
+  /**
    * Admin pause — event is temporarily on hold. Status surfaces as `paused`
    * and attendees are notified when this toggles or when dates change.
    */
@@ -83,6 +97,8 @@ export interface PublicEvent {
   coverImage: string;
   allowPreviousAttendeesAccess: boolean;
   blockQrWhenRenewalUnpaid: boolean;
+  memberFeatureAccess: EventFeatureAccess;
+  guestFeatureAccess: EventFeatureAccess;
   published: boolean;
   createdAt: string;
   updatedAt: string;
@@ -121,6 +137,8 @@ export interface CreateEventInput {
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  memberFeatureAccess?: EventFeatureAccess;
+  guestFeatureAccess?: EventFeatureAccess;
   paused?: boolean;
   published?: boolean;
 }
@@ -140,6 +158,8 @@ export interface ScheduleEventInput {
   copyDetailsFromPrevious?: boolean;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  memberFeatureAccess?: EventFeatureAccess;
+  guestFeatureAccess?: EventFeatureAccess;
   /** Draft until published (default true when omitted). */
   published?: boolean;
   /** When false, skip the “new dates announced” push. Default true. */
@@ -164,6 +184,8 @@ export interface UpdateEventInput {
   coverImage?: string;
   allowPreviousAttendeesAccess?: boolean;
   blockQrWhenRenewalUnpaid?: boolean;
+  memberFeatureAccess?: EventFeatureAccess;
+  guestFeatureAccess?: EventFeatureAccess;
   paused?: boolean;
   published?: boolean;
   /** When false, skip pause/date-change push. Default true. */

@@ -5,6 +5,10 @@ import type {
   PublicEvent,
   PublicEventDay,
 } from './event.types.js';
+import {
+  guestFeatureAccessFor,
+  memberFeatureAccessFor,
+} from './event-feature-access.js';
 
 export function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -59,6 +63,8 @@ export function toPublicEvent(event: Event): PublicEvent {
     coverImage: event.coverImage,
     allowPreviousAttendeesAccess: Boolean(event.allowPreviousAttendeesAccess),
     blockQrWhenRenewalUnpaid: event.blockQrWhenRenewalUnpaid !== false,
+    memberFeatureAccess: memberFeatureAccessFor(event),
+    guestFeatureAccess: guestFeatureAccessFor(event),
     published: event.published !== false,
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),

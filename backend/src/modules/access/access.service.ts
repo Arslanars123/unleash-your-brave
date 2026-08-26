@@ -1,6 +1,11 @@
 import { isMembershipPaymentActive } from '../memberships/membership-entitlement.js';
 import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
+import {
+  resolveEffectiveFeatureAccess,
+  type EventFeatureAccess,
+} from '../events/event-feature-access.js';
 import type { EventService } from '../events/event.service.js';
+import type { Event } from '../events/event.types.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { Membership } from '../memberships/membership.types.js';
 import type { UserRepository } from '../users/user.repository.js';
@@ -47,6 +52,18 @@ export interface EffectiveEventAccess {
    * One id = only that next level.
    */
   upgradeMembershipIds: string[];
+  /** Effective: session list + session details. */
+  viewAgenda: boolean;
+  /** Effective: session materials (requires viewAgenda). */
+  viewMaterials: boolean;
+  /** Effective: submit reviews (requires viewAgenda + event started). */
+  submitReviews: boolean;
+  /** True once the edition start date (UTC day) has arrived. */
+  eventStarted: boolean;
+  /** Admin-configured pack for entitled attendees. */
+  memberFeatureAccess: EventFeatureAccess;
+  /** Admin-configured pack for non-entitled attendees. */
+  guestFeatureAccess: EventFeatureAccess;
 }
 
 /** Default true when the field is missing on older event documents. */
@@ -156,7 +173,35 @@ function emptyAccess(
     paymentPeriodActive: false,
     qrDeniedReason: 'no_membership',
     upgradeMembershipIds: [],
+    viewAgenda: false,
+    viewMaterials: false,
+    submitReviews: false,
+    eventStarted: false,
+    memberFeatureAccess: {
+      viewAgenda: true,
+      viewMaterials: true,
+      submitReviews: true,
+    },
+    guestFeatureAccess: {
+      viewAgenda: false,
+      viewMaterials: false,
+      submitReviews: false,
+    },
     ...extras,
+  };
+}
+
+function attachFeatureAccess(
+  access: EffectiveEventAccess,
+  event: Event,
+): EffectiveEventAccess {
+  const features = resolveEffectiveFeatureAccess({
+    entitled: access.entitled,
+    event,
+  });
+  return {
+    ...access,
+    ...features,
   };
 }
 
@@ -208,6 +253,13 @@ export class EffectiveAccessService {
       return emptyAccess(eventId ?? '');
     }
 
+    return attachFeatureAccess(await this.resolveEntitlement(userId, event), event);
+  }
+
+  private async resolveEntitlement(
+    userId: string,
+    event: Event,
+  ): Promise<EffectiveEventAccess> {
     const allowPrevious = Boolean(event.allowPreviousAttendeesAccess);
     const blockUnpaid = isBlockQrWhenRenewalUnpaid(event);
     const { items: catalog } = await this.memberships.list({
@@ -337,6 +389,7 @@ export class EffectiveAccessService {
     const mapped = mapPastToCurrent(source, catalog);
     if (mapped) {
       return {
+        ...emptyAccess(event.id),
         eventId: event.id,
         allowPreviousAttendeesAccess: allowPrevious,
         blockQrWhenRenewalUnpaid: blockUnpaid,
@@ -371,6 +424,7 @@ export class EffectiveAccessService {
     // Carry-eligible but no matching tier on the new edition:
     // open sessions when content carry is on; QR only when membership QR flag + payment rule allow.
     return {
+      ...emptyAccess(event.id),
       eventId: event.id,
       allowPreviousAttendeesAccess: allowPrevious,
       blockQrWhenRenewalUnpaid: blockUnpaid,
@@ -436,6 +490,7 @@ export class EffectiveAccessService {
     });
     const qrEntitled = paymentOk;
     return {
+      ...emptyAccess(input.eventId),
       eventId: input.eventId,
       allowPreviousAttendeesAccess: allowPrevious,
       blockQrWhenRenewalUnpaid: blockUnpaid,
