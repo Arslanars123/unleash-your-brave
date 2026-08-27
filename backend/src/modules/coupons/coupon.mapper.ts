@@ -3,6 +3,7 @@ import type { Coupon, PublicCoupon } from './coupon.types.js';
 export function toPublicCoupon(coupon: Coupon): PublicCoupon {
   return {
     id: coupon.id,
+    eventId: coupon.eventId ?? '',
     code: coupon.code,
     name: coupon.name,
     description: coupon.description ?? '',

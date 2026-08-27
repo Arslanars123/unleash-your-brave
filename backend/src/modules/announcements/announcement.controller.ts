@@ -23,7 +23,12 @@ export class AnnouncementController {
     if (!req.auth) throw new UnauthorizedError();
     const query = req.query as unknown as ListFeedQuery;
     const result = await this.service.getFeed(
-      { id: req.auth.userId, role: req.auth.role },
+      {
+        id: req.auth.userId,
+        role: req.auth.role,
+        speakerId: req.auth.speakerId,
+        sponsorId: req.auth.sponsorId,
+      },
       query,
     );
     sendPaginated(res, result.items, {
@@ -38,6 +43,8 @@ export class AnnouncementController {
       count: await this.service.getUnreadCount({
         id: req.auth.userId,
         role: req.auth.role,
+        speakerId: req.auth.speakerId,
+        sponsorId: req.auth.sponsorId,
       }),
     });
   };
@@ -49,6 +56,8 @@ export class AnnouncementController {
       await this.service.markRead(req.params.id as string, {
         id: req.auth.userId,
         role: req.auth.role,
+        speakerId: req.auth.speakerId,
+        sponsorId: req.auth.sponsorId,
       }),
     );
   };

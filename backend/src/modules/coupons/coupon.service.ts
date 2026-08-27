@@ -1,5 +1,7 @@
 import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
 import type { AnnouncementService } from '../announcements/announcement.service.js';
+import { editionStatus } from '../events/event.mapper.js';
+import type { EventService } from '../events/event.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import { generateCouponCode, normalizeCouponCode, toPublicCoupon } from './coupon.mapper.js';
 import type { CouponRepository, PaginatedResult } from './coupon.repository.js';
@@ -16,6 +18,7 @@ export class CouponService {
   constructor(
     private readonly coupons: CouponRepository,
     private readonly memberships: MembershipRepository,
+    private readonly events: EventService,
     private readonly announcements?: AnnouncementService,
   ) {}
 
@@ -29,7 +32,8 @@ export class CouponService {
   }
 
   async create(input: CreateCouponInput): Promise<PublicCoupon> {
-    const discounts = await this.normalizeDiscounts(input.membershipDiscounts);
+    const eventId = await this.requireNonEndedEventId(input.eventId);
+    const discounts = await this.normalizeDiscounts(input.membershipDiscounts, eventId);
     let code = normalizeCouponCode(input.code?.trim() || generateCouponCode());
     if (await this.coupons.findByCode(code)) {
       if (input.code?.trim()) {
@@ -42,6 +46,7 @@ export class CouponService {
     }
 
     const created = await this.coupons.create({
+      eventId,
       code,
       name: input.name.trim(),
       description: input.description?.trim() ?? '',
@@ -55,18 +60,31 @@ export class CouponService {
   }
 
   async update(id: string, input: UpdateCouponInput): Promise<PublicCoupon> {
-    await this.requireCoupon(id);
+    const existing = await this.requireCoupon(id);
 
     let code: string | undefined;
     if (input.code !== undefined) {
       code = normalizeCouponCode(input.code);
-      const existing = await this.coupons.findByCode(code);
-      if (existing && existing.id !== id) {
+      const existingByCode = await this.coupons.findByCode(code);
+      if (existingByCode && existingByCode.id !== id) {
         throw new ConflictError('A coupon with this code already exists');
       }
     }
 
+    const eventId =
+      input.eventId !== undefined
+        ? await this.requireNonEndedEventId(input.eventId)
+        : await this.requireNonEndedEventId(existing.eventId);
+
+    const membershipDiscounts =
+      input.membershipDiscounts !== undefined
+        ? await this.normalizeDiscounts(input.membershipDiscounts, eventId)
+        : input.eventId !== undefined
+          ? await this.normalizeDiscounts(existing.membershipDiscounts ?? [], eventId)
+          : undefined;
+
     const updated = await this.coupons.update(id, {
+      ...(input.eventId !== undefined ? { eventId } : {}),
       ...(code !== undefined ? { code } : {}),
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.description !== undefined ? { description: input.description.trim() } : {}),
@@ -75,9 +93,7 @@ export class CouponService {
         ? { expiresAt: input.expiresAt ? new Date(input.expiresAt) : null }
         : {}),
       ...(input.maxRedemptions !== undefined ? { maxRedemptions: input.maxRedemptions } : {}),
-      ...(input.membershipDiscounts !== undefined
-        ? { membershipDiscounts: await this.normalizeDiscounts(input.membershipDiscounts) }
-        : {}),
+      ...(membershipDiscounts !== undefined ? { membershipDiscounts } : {}),
     });
     if (!updated) throw new NotFoundError('Coupon');
     return toPublicCoupon(updated);
@@ -163,6 +179,14 @@ export class CouponService {
       throw new BadRequestError('This coupon code has reached its redemption limit');
     }
 
+    const membership = await this.memberships.findById(membershipId);
+    if (!membership) {
+      throw new BadRequestError('Membership not found');
+    }
+    if (coupon.eventId && coupon.eventId !== membership.eventId) {
+      throw new BadRequestError('This coupon is not valid for the selected membership');
+    }
+
     const discount = (coupon.membershipDiscounts ?? []).find(
       (item) => item.membershipId === membershipId,
     );
@@ -227,8 +251,21 @@ export class CouponService {
     return { announcementId: announcement.id, code: coupon.code };
   }
 
+  private async requireNonEndedEventId(eventId: string | undefined): Promise<string> {
+    const id = eventId?.trim() ?? '';
+    if (!id) {
+      throw new BadRequestError('Event is required');
+    }
+    const event = await this.events.requireEvent(id);
+    if (editionStatus(event) === 'ended') {
+      throw new BadRequestError('Coupons cannot be created or updated for past events');
+    }
+    return event.id;
+  }
+
   private async normalizeDiscounts(
     discounts: Array<{ membershipId: string; percentOff: number }>,
+    eventId: string,
   ) {
     if (!discounts.length) {
       throw new BadRequestError('Add at least one membership discount');
@@ -243,6 +280,9 @@ export class CouponService {
       const membership = await this.memberships.findById(item.membershipId);
       if (!membership) {
         throw new BadRequestError('Selected membership was not found');
+      }
+      if (membership.eventId !== eventId) {
+        throw new BadRequestError('Membership does not belong to the selected event');
       }
       const percentOff = Math.round(item.percentOff);
       if (percentOff < 1 || percentOff > 100) {

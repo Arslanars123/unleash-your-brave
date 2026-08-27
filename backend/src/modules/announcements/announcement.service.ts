@@ -2,6 +2,8 @@ import { NotFoundError } from '../../core/errors/app-error.js';
 import { logger } from '../../core/logger.js';
 import type { PushNotificationService } from '../chat/push.service.js';
 import type { EventService } from '../events/event.service.js';
+import type { MailService } from '../mail/mail.service.js';
+import type { RealtimeHub } from '../realtime/realtime.hub.js';
 import type { UserRepository } from '../users/user.repository.js';
 import type { User, UserRole } from '../users/user.types.js';
 import type { AnnouncementReadRepository } from '../../db/repositories/mongo-announcement-read.repository.js';
@@ -39,6 +41,26 @@ function applyTemplate(
     .replaceAll('{{eventDate}}', vars.eventDate);
 }
 
+function effectiveFeedRoles(
+  user: Pick<User, 'role'> & { speakerId?: string | null; sponsorId?: string | null },
+): UserRole[] {
+  const roles = new Set<UserRole>([user.role]);
+  if (user.speakerId) roles.add('speaker');
+  if (user.sponsorId) roles.add('sponsor');
+  return [...roles];
+}
+
+function isSpeakerOrSponsorPortalUser(
+  user: Pick<User, 'role' | 'speakerId' | 'sponsorId'>,
+): boolean {
+  return (
+    user.role === 'speaker' ||
+    user.role === 'sponsor' ||
+    Boolean(user.speakerId) ||
+    Boolean(user.sponsorId)
+  );
+}
+
 export class AnnouncementService {
   constructor(
     private readonly announcements: AnnouncementRepository,
@@ -47,6 +69,8 @@ export class AnnouncementService {
     private readonly users: UserRepository,
     private readonly events: EventService,
     private readonly push: PushNotificationService,
+    private readonly mail?: MailService,
+    private readonly realtime?: RealtimeHub,
   ) {}
 
   async list(query: ListAnnouncementsQuery): Promise<PaginatedResult<PublicAnnouncement>> {
@@ -59,12 +83,13 @@ export class AnnouncementService {
   }
 
   async getFeed(
-    user: Pick<User, 'id' | 'role'>,
+    user: Pick<User, 'id' | 'role'> & { speakerId?: string | null; sponsorId?: string | null },
     query: ListFeedQuery,
   ): Promise<PaginatedResult<PublicAnnouncement> & { unreadCount: number }> {
+    const roles = effectiveFeedRoles(user);
     const { items, total } = await this.announcements.listPublishedForUser({
       userId: user.id,
-      roles: [user.role],
+      roles,
       page: 1,
       perPage: 500,
     });
@@ -86,10 +111,13 @@ export class AnnouncementService {
     };
   }
 
-  async getUnreadCount(user: Pick<User, 'id' | 'role'>): Promise<number> {
+  async getUnreadCount(
+    user: Pick<User, 'id' | 'role'> & { speakerId?: string | null; sponsorId?: string | null },
+  ): Promise<number> {
+    const roles = effectiveFeedRoles(user);
     const { items } = await this.announcements.listPublishedForUser({
       userId: user.id,
-      roles: [user.role],
+      roles,
       page: 1,
       perPage: 500,
     });
@@ -100,7 +128,10 @@ export class AnnouncementService {
     return items.filter((item) => !readIds.has(item.id)).length;
   }
 
-  async markRead(announcementId: string, user: Pick<User, 'id' | 'role'>): Promise<PublicAnnouncement> {
+  async markRead(
+    announcementId: string,
+    user: Pick<User, 'id' | 'role'> & { speakerId?: string | null; sponsorId?: string | null },
+  ): Promise<PublicAnnouncement> {
     const announcement = await this.requireAnnouncement(announcementId);
     if (announcement.status !== 'published') {
       throw new NotFoundError('Announcement');
@@ -354,6 +385,18 @@ export class AnnouncementService {
   private async dispatchPush(announcement: Announcement): Promise<void> {
     try {
       const userIds = await this.resolveAudienceUserIds(announcement);
+      await Promise.all([
+        this.sendPush(announcement, userIds),
+        this.sendSpeakerSponsorEmails(announcement, userIds),
+        this.publishRealtime(announcement, userIds),
+      ]);
+    } catch (error) {
+      logger.error({ err: error, announcementId: announcement.id }, 'Announcement dispatch failed');
+    }
+  }
+
+  private async sendPush(announcement: Announcement, userIds: string[]): Promise<void> {
+    try {
       const result = await this.push.notifyUsers({
         userIds,
         title: announcement.title,
@@ -377,11 +420,81 @@ export class AnnouncementService {
     }
   }
 
+  /** Speakers/sponsors in the audience get the full announcement text by email. */
+  private async sendSpeakerSponsorEmails(
+    announcement: Announcement,
+    userIds: string[],
+  ): Promise<void> {
+    if (!this.mail || userIds.length === 0) return;
+    let sent = 0;
+    for (const userId of userIds) {
+      try {
+        const user = await this.users.findById(userId);
+        if (!user || user.status !== 'active' || !user.email) continue;
+        if (!isSpeakerOrSponsorPortalUser(user)) continue;
+
+        const body = (announcement.description || '').trim() || announcement.title;
+        const text = [
+          `Hi ${user.name || 'there'},`,
+          '',
+          announcement.title,
+          '',
+          body,
+          '',
+          '— Unleash Your Brave',
+        ].join('\n');
+        const html = `
+          <p>Hi ${escapeHtml(user.name || 'there')},</p>
+          <h2 style="margin:16px 0 8px">${escapeHtml(announcement.title)}</h2>
+          <div style="white-space:pre-wrap;line-height:1.5">${escapeHtml(body)}</div>
+          <p style="margin-top:24px;color:#666">— Unleash Your Brave</p>
+        `;
+        await this.mail.send({
+          to: user.email,
+          subject: announcement.title,
+          text,
+          html,
+        });
+        sent += 1;
+      } catch (error) {
+        logger.error(
+          { err: error, announcementId: announcement.id, userId },
+          'Announcement email failed',
+        );
+      }
+    }
+    if (sent > 0) {
+      logger.info({ announcementId: announcement.id, sent }, 'Announcement emails sent');
+    }
+  }
+
+  private publishRealtime(announcement: Announcement, userIds: string[]): void {
+    if (!this.realtime || userIds.length === 0) return;
+    this.realtime.publish({
+      type: 'announcement.published',
+      payload: {
+        announcementId: announcement.id,
+        title: announcement.title,
+        description: announcement.description ?? '',
+        kind: announcement.kind,
+        userIds,
+      },
+    });
+  }
+
   private async requireAnnouncement(id: string): Promise<Announcement> {
     const announcement = await this.announcements.findById(id);
     if (!announcement) throw new NotFoundError('Announcement');
     return normalizeAnnouncement(announcement);
   }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }
 
 function isoWeekKey(date: Date): string {

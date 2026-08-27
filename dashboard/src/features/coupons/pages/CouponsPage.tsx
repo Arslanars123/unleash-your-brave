@@ -1,12 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Bell, Copy, Pencil, Plus, TicketPercent, Trash2 } from 'lucide-react';
 import { couponsApi } from '@/features/coupons/api/coupons-api';
 import { CouponFormModal } from '@/features/coupons/components/CouponFormModal';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { eventsApi } from '@/features/events/api/events-api';
 import { getApiErrorMessage } from '@/shared/api/client';
-import type { CouponPayload, PublicCoupon } from '@/shared/types/api';
+import type { CouponPayload, PublicCoupon, PublicEvent } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { ListPagination } from '@/shared/ui/ListPagination';
@@ -16,11 +16,28 @@ import { useToast } from '@/shared/ui/toast';
 
 const PER_PAGE = 20;
 
+function collectNonEndedEvents(workspace: {
+  current: PublicEvent | null;
+  upcomingEditions: PublicEvent[];
+  editions?: PublicEvent[];
+} | undefined): PublicEvent[] {
+  if (!workspace) return [];
+  const seen = new Set<string>();
+  const out: PublicEvent[] = [];
+  for (const event of [workspace.current, ...workspace.upcomingEditions]) {
+    if (!event || event.status === 'ended' || seen.has(event.id)) continue;
+    seen.add(event.id);
+    out.push(event);
+  }
+  return out;
+}
+
 export function CouponsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicCoupon | null>(null);
+  const [modalEventId, setModalEventId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -30,12 +47,35 @@ export function CouponsPage() {
     queryKey: ['events', 'workspace'],
     queryFn: () => eventsApi.getWorkspace(),
   });
-  const eventId = workspaceQuery.data?.current?.id;
+
+  const couponEvents = useMemo(
+    () => collectNonEndedEvents(workspaceQuery.data),
+    [workspaceQuery.data],
+  );
+
+  const eventNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    const workspace = workspaceQuery.data;
+    if (!workspace) return map;
+    for (const event of [
+      workspace.current,
+      ...(workspace.upcomingEditions ?? []),
+      ...(workspace.pastEditions ?? []),
+      ...(workspace.editions ?? []),
+    ]) {
+      if (event) map.set(event.id, event.name);
+    }
+    return map;
+  }, [workspaceQuery.data]);
+
+  const handleModalEventChange = useCallback((eventId: string) => {
+    setModalEventId(eventId || undefined);
+  }, []);
 
   const membershipsQuery = useQuery({
-    queryKey: ['memberships', 'coupons', eventId],
-    queryFn: () => membershipsApi.list({ eventId, page: 1, perPage: 100 }),
-    enabled: Boolean(eventId),
+    queryKey: ['memberships', 'coupons', modalEventId],
+    queryFn: () => membershipsApi.list({ eventId: modalEventId, page: 1, perPage: 100 }),
+    enabled: Boolean(modalEventId) && modalOpen,
   });
 
   const couponsQuery = useQuery({
@@ -58,18 +98,32 @@ export function CouponsPage() {
   }
 
   function openCreate() {
+    if (couponEvents.length === 0) {
+      toast.error('Coupons can only be created for current or upcoming events');
+      return;
+    }
     setEditing(null);
+    setModalEventId(couponEvents[0]?.id);
     setModalOpen(true);
   }
 
   function openEdit(coupon: PublicCoupon) {
+    if (
+      coupon.eventId &&
+      !couponEvents.some((event) => event.id === coupon.eventId)
+    ) {
+      toast.error('Coupons for past events cannot be edited');
+      return;
+    }
     setEditing(coupon);
+    setModalEventId(coupon.eventId || couponEvents[0]?.id);
     setModalOpen(true);
   }
 
   function closeModal() {
     setModalOpen(false);
     setEditing(null);
+    setModalEventId(undefined);
   }
 
   async function handleSubmit(payload: CouponPayload) {
@@ -146,12 +200,12 @@ export function CouponsPage() {
         <div>
           <h1>Coupons</h1>
           <p className="muted">
-            Generate discount codes with per-membership percentages. Send by push notification or
-            copy and share manually.
+            Generate discount codes with per-membership percentages for a current or upcoming
+            event. Send by push notification or copy and share manually.
           </p>
         </div>
         <div className="page-header-actions">
-          <Button type="button" onClick={openCreate}>
+          <Button type="button" onClick={openCreate} disabled={couponEvents.length === 0}>
             <Plus size={16} /> Create coupon
           </Button>
         </div>
@@ -185,7 +239,7 @@ export function CouponsPage() {
         <div className="empty-state">
           <TicketPercent size={28} />
           <p>No coupons yet. Create one to offer membership discounts.</p>
-          <Button type="button" onClick={openCreate}>
+          <Button type="button" onClick={openCreate} disabled={couponEvents.length === 0}>
             Create coupon
           </Button>
         </div>
@@ -195,6 +249,7 @@ export function CouponsPage() {
             <thead>
               <tr>
                 <th>Code</th>
+                <th>Event</th>
                 <th>Name</th>
                 <th>Discounts</th>
                 <th>Uses</th>
@@ -208,6 +263,7 @@ export function CouponsPage() {
                   <td>
                     <strong>{coupon.code}</strong>
                   </td>
+                  <td>{eventNameById.get(coupon.eventId) ?? (coupon.eventId ? 'Event' : '—')}</td>
                   <td>{coupon.name}</td>
                   <td>
                     <div style={{ display: 'grid', gap: 4 }}>
@@ -290,8 +346,10 @@ export function CouponsPage() {
         open={modalOpen}
         mode={editing ? 'edit' : 'create'}
         initialCoupon={editing}
+        events={couponEvents}
         memberships={membershipsQuery.data?.items ?? []}
         loading={saving}
+        onEventChange={handleModalEventChange}
         onClose={closeModal}
         onSubmit={handleSubmit}
       />

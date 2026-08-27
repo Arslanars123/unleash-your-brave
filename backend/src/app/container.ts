@@ -212,6 +212,7 @@ export async function createContainer() {
     pushNotificationService,
     eventService,
   );
+  const realtimeHub = new RealtimeHub();
   const announcementService = new AnnouncementService(
     announcementRepository,
     announcementReadRepository,
@@ -219,6 +220,8 @@ export async function createContainer() {
     userRepository,
     eventService,
     pushNotificationService,
+    mailService,
+    realtimeHub,
   );
   eventService.setAnnouncementService(announcementService);
   const couponRepository = new MongoCouponRepository();
@@ -226,9 +229,9 @@ export async function createContainer() {
   const couponService = new CouponService(
     couponRepository,
     membershipRepository,
+    eventService,
     announcementService,
   );
-  const realtimeHub = new RealtimeHub();
   const checkoutService = new CheckoutService(
     membershipPurchaseRepository,
     membershipRepository,

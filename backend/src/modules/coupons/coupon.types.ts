@@ -6,6 +6,8 @@ export interface CouponMembershipDiscount {
 
 export interface Coupon {
   id: string;
+  /** Edition this coupon applies to. */
+  eventId: string;
   /** Unique uppercase code attendees enter at checkout. */
   code: string;
   name: string;
@@ -26,6 +28,7 @@ export interface Coupon {
 
 export interface PublicCoupon {
   id: string;
+  eventId: string;
   code: string;
   name: string;
   description: string;
@@ -39,6 +42,7 @@ export interface PublicCoupon {
 }
 
 export interface CreateCouponInput {
+  eventId: string;
   code?: string;
   name: string;
   description?: string;
@@ -49,6 +53,7 @@ export interface CreateCouponInput {
 }
 
 export interface UpdateCouponInput {
+  eventId?: string;
   code?: string;
   name?: string;
   description?: string;

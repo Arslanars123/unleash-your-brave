@@ -325,6 +325,7 @@ class _MembershipSectionState extends State<_MembershipSection>
   List<MembershipEntity> _memberships = const [];
   EffectiveEventAccess? _access;
   String? _catalogEventId;
+  String? _catalogEventName;
   Timer? _catalogPoll;
 
   @override
@@ -372,13 +373,33 @@ class _MembershipSectionState extends State<_MembershipSection>
     }
     try {
       String? eventId;
+      String? eventName;
       try {
         final cubit = sl<SelectedEventCubit>();
-        await cubit.ensureReady();
+        await cubit.ensureReady(force: true);
         eventId = cubit.state.eventId;
+        eventName = cubit.state.event?.name;
+        var selectedStatus = cubit.state.event?.status;
+
         if (eventId == null || eventId.isEmpty) {
           final event = await sl<EventsRemoteDataSource>().getCurrent();
           eventId = event.id;
+          eventName = event.name;
+          selectedStatus = event.status;
+        }
+
+        // After an edition ends, prefer the next live/upcoming catalog for purchases.
+        if (selectedStatus == 'ended') {
+          try {
+            final available = await sl<EventsRemoteDataSource>().listAvailable();
+            final next = available.where((e) => e.isLive || e.isUpcoming).toList();
+            if (next.isNotEmpty) {
+              eventId = next.first.id;
+              eventName = next.first.name;
+            }
+          } catch (_) {
+            // Keep ended event catalog if available list fails.
+          }
         }
       } catch (_) {
         // Fall back to all memberships if event lookup fails.
@@ -398,6 +419,7 @@ class _MembershipSectionState extends State<_MembershipSection>
       if (!mounted) return;
       setState(() {
         _catalogEventId = eventId;
+        _catalogEventName = eventName;
         _memberships = [...items]
           ..sort((a, b) {
             final bySort = a.sortOrder.compareTo(b.sortOrder);
@@ -879,7 +901,24 @@ class _MembershipSectionState extends State<_MembershipSection>
                                   ),
                                 ),
                               ),
-                              const Spacer(),
+                              if (_catalogEventName != null &&
+                                  _catalogEventName!.trim().isNotEmpty) ...[
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _catalogEventName!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTypography.microLabel.copyWith(
+                                      color: AppColors.textSecondary,
+                                      letterSpacing: 0.4,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              ] else
+                                const Spacer(),
                               if (_upgrading)
                                 const SizedBox(
                                   width: 18,

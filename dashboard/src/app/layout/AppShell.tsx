@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
+  Bell,
   CalendarDays,
   Clapperboard,
   Handshake,
@@ -18,12 +20,25 @@ import {
   Users,
   ShoppingBag,
 } from 'lucide-react';
+import { announcementsApi } from '@/features/announcements/api/announcements-api';
+import { usePortalAnnouncementRealtime } from '@/features/announcements/hooks/usePortalAnnouncementRealtime';
 import { useAuth } from '@/features/auth/context/AuthProvider';
 import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
 
 export function AppShell() {
   const { user, logout, isAdmin, isSpeaker, isSponsor } = useAuth();
+  const portalNotifications = (isSpeaker || isSponsor) && !isAdmin;
+
+  usePortalAnnouncementRealtime(portalNotifications);
+
+  const unreadQuery = useQuery({
+    queryKey: ['announcements', 'unread-count'],
+    queryFn: () => announcementsApi.unreadCount(),
+    enabled: portalNotifications,
+    refetchInterval: 30_000,
+  });
+  const unreadCount = unreadQuery.data ?? 0;
 
   const portalLabel = isAdmin
     ? 'Admin'
@@ -129,6 +144,23 @@ export function AppShell() {
             <NavLink to="/my-sponsor-profile">
               <Handshake size={18} />
               Sponsor profile
+            </NavLink>
+          ) : null}
+
+          {portalNotifications ? (
+            <NavLink to="/notifications" className="sidebar-nav-notifications">
+              <Bell size={18} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                Notifications
+                {unreadCount > 0 ? (
+                  <span
+                    className="status-pill status-published"
+                    style={{ fontSize: 11, padding: '2px 7px', minWidth: 22, textAlign: 'center' }}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                ) : null}
+              </span>
             </NavLink>
           ) : null}
         </nav>

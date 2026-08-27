@@ -24,6 +24,7 @@ export const listCouponsQuerySchema = z.object({
 });
 
 export const createCouponSchema = z.object({
+  eventId: z.string().uuid(),
   code: z
     .string()
     .trim()
@@ -44,6 +45,7 @@ export const createCouponSchema = z.object({
 
 export const updateCouponSchema = z
   .object({
+    eventId: z.string().uuid().optional(),
     code: z
       .string()
       .trim()

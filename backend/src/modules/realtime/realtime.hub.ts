@@ -1,6 +1,9 @@
 import { EventEmitter } from 'node:events';
 
-export type RealtimeEventType = 'attendee.upserted' | 'attendee.deleted';
+export type RealtimeEventType =
+  | 'attendee.upserted'
+  | 'attendee.deleted'
+  | 'announcement.published';
 
 export interface RealtimeEvent {
   type: RealtimeEventType;

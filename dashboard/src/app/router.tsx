@@ -9,6 +9,7 @@ import { AppBrandingPage } from '@/features/branding/pages/AppBrandingPage';
 import { OverviewPage } from '@/features/dashboard/pages/OverviewPage';
 import { AnnouncementsPage } from '@/features/announcements/pages/AnnouncementsPage';
 import { CountdownSettingsPage } from '@/features/announcements/pages/CountdownSettingsPage';
+import { PortalNotificationsPage } from '@/features/announcements/pages/PortalNotificationsPage';
 import { CheckInsPage } from '@/features/checkins/pages/CheckInsPage';
 import { EventsPage } from '@/features/events/pages/EventsPage';
 import { SpeakerProfilePage } from '@/features/portal/pages/SpeakerProfilePage';
@@ -69,6 +70,7 @@ export function AppRouter() {
 
             <Route element={<ProtectedRoute roles={['speaker', 'sponsor']} />}>
               <Route path="my-profile" element={<PortalProfileRedirect />} />
+              <Route path="notifications" element={<PortalNotificationsPage />} />
             </Route>
 
             <Route element={<ProtectedRoute roles={['speaker']} />}>

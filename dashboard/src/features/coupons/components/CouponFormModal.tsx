@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
-import type { CouponPayload, PublicCoupon, PublicMembership } from '@/shared/types/api';
+import type {
+  CouponPayload,
+  PublicCoupon,
+  PublicEvent,
+  PublicMembership,
+} from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { TextArea } from '@/shared/ui/TextArea';
@@ -11,6 +16,7 @@ interface DiscountRow {
 }
 
 export interface CouponFormValues {
+  eventId: string;
   code: string;
   name: string;
   description: string;
@@ -23,6 +29,7 @@ export interface CouponFormValues {
 type FieldErrors = Partial<Record<keyof CouponFormValues | 'discounts', string>>;
 
 const emptyForm: CouponFormValues = {
+  eventId: '',
   code: '',
   name: '',
   description: '',
@@ -34,6 +41,7 @@ const emptyForm: CouponFormValues = {
 
 function couponToForm(coupon: PublicCoupon): CouponFormValues {
   return {
+    eventId: coupon.eventId ?? '',
     code: coupon.code,
     name: coupon.name,
     description: coupon.description ?? '',
@@ -52,6 +60,7 @@ function couponToForm(coupon: PublicCoupon): CouponFormValues {
 
 function validate(values: CouponFormValues): FieldErrors {
   const errors: FieldErrors = {};
+  if (!values.eventId.trim()) errors.eventId = 'Event is required';
   if (!values.name.trim()) errors.name = 'Name is required';
   if (values.code.trim() && !/^[A-Za-z0-9_-]+$/.test(values.code.trim())) {
     errors.code = 'Use letters, numbers, - or _ only';
@@ -84,6 +93,7 @@ function validate(values: CouponFormValues): FieldErrors {
 
 export function toCouponPayload(values: CouponFormValues): CouponPayload {
   return {
+    eventId: values.eventId,
     ...(values.code.trim() ? { code: values.code.trim().toUpperCase() } : {}),
     name: values.name.trim(),
     description: values.description.trim(),
@@ -103,8 +113,10 @@ interface CouponFormModalProps {
   open: boolean;
   mode: 'create' | 'edit';
   initialCoupon?: PublicCoupon | null;
+  events: PublicEvent[];
   memberships: PublicMembership[];
   loading?: boolean;
+  onEventChange?: (eventId: string) => void;
   onClose: () => void;
   onSubmit: (payload: CouponPayload) => Promise<void> | void;
 }
@@ -113,8 +125,10 @@ export function CouponFormModal({
   open,
   mode,
   initialCoupon,
+  events,
   memberships,
   loading = false,
+  onEventChange,
   onClose,
   onSubmit,
 }: CouponFormModalProps) {
@@ -137,7 +151,13 @@ export function CouponFormModal({
     if (!open) return;
     setSubmitted(false);
     setErrors({});
-    setValues(initialCoupon ? couponToForm(initialCoupon) : emptyForm);
+    if (initialCoupon) {
+      setValues(couponToForm(initialCoupon));
+      return;
+    }
+    const defaultEventId = events[0]?.id ?? '';
+    setValues({ ...emptyForm, eventId: defaultEventId });
+    if (defaultEventId) onEventChange?.(defaultEventId);
   }, [open, initialCoupon]);
 
   if (!open) return null;
@@ -148,6 +168,19 @@ export function CouponFormModal({
       if (submitted) setErrors(validate(next));
       return next;
     });
+  }
+
+  function handleEventChange(eventId: string) {
+    setValues((current) => {
+      const next: CouponFormValues = {
+        ...current,
+        eventId,
+        discounts: [{ membershipId: '', percentOff: '20' }],
+      };
+      if (submitted) setErrors(validate(next));
+      return next;
+    });
+    onEventChange?.(eventId);
   }
 
   function updateDiscount(index: number, patch: Partial<DiscountRow>) {
@@ -214,6 +247,28 @@ export function CouponFormModal({
         </header>
 
         <form className="modal-body event-form" onSubmit={handleSubmit} noValidate>
+          <label className="field">
+            <span>
+              Event <span className="required-mark">*</span>
+            </span>
+            <select
+              value={values.eventId}
+              onChange={(e) => handleEventChange(e.target.value)}
+              required
+            >
+              <option value="">Select event</option>
+              {events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name}
+                  {event.status === 'live' ? ' (live)' : event.status === 'upcoming' ? ' (upcoming)' : ''}
+                </option>
+              ))}
+            </select>
+            {errors.eventId ? <p className="form-error">{errors.eventId}</p> : null}
+            {events.length === 0 ? (
+              <p className="hint">No current or upcoming events available for coupons.</p>
+            ) : null}
+          </label>
           <Input
             label="Name"
             requiredMark
@@ -267,7 +322,12 @@ export function CouponFormModal({
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <span>Membership discounts</span>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button type="button" variant="secondary" onClick={fillAllMemberships}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={fillAllMemberships}
+                  disabled={!values.eventId || membershipOptions.length === 0}
+                >
                   Add all memberships
                 </Button>
                 <Button type="button" variant="secondary" onClick={addDiscountRow}>
@@ -289,6 +349,7 @@ export function CouponFormModal({
                   <select
                     value={row.membershipId}
                     onChange={(e) => updateDiscount(index, { membershipId: e.target.value })}
+                    disabled={!values.eventId}
                   >
                     <option value="">Select membership</option>
                     {membershipOptions.map((item) => (
@@ -325,7 +386,7 @@ export function CouponFormModal({
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || events.length === 0}>
               {mode === 'create' ? 'Create coupon' : 'Save changes'}
             </Button>
           </footer>

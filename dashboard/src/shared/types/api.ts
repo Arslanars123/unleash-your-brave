@@ -534,6 +534,7 @@ export interface CouponMembershipDiscount {
 
 export interface PublicCoupon {
   id: string;
+  eventId: string;
   code: string;
   name: string;
   description: string;
@@ -547,6 +548,7 @@ export interface PublicCoupon {
 }
 
 export interface CouponPayload {
+  eventId: string;
   code?: string;
   name: string;
   description?: string;
