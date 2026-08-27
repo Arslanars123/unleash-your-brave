@@ -11,6 +11,7 @@ import { AnnouncementsPage } from '@/features/announcements/pages/AnnouncementsP
 import { CountdownSettingsPage } from '@/features/announcements/pages/CountdownSettingsPage';
 import { PortalNotificationsPage } from '@/features/announcements/pages/PortalNotificationsPage';
 import { CheckInsPage } from '@/features/checkins/pages/CheckInsPage';
+import { ClientTestingPage } from '@/features/client-testing/pages/ClientTestingPage';
 import { EventsPage } from '@/features/events/pages/EventsPage';
 import { SpeakerProfilePage } from '@/features/portal/pages/SpeakerProfilePage';
 import { SpeakerSessionsPage } from '@/features/portal/pages/SpeakerSessionsPage';
@@ -66,6 +67,8 @@ export function AppRouter() {
               <Route path="chat" element={<ChatPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="checkins" element={<CheckInsPage />} />
+              {/* CLIENT_TESTING_MODE — remove route when deleting feature. */}
+              <Route path="client-testing" element={<ClientTestingPage />} />
             </Route>
 
             <Route element={<ProtectedRoute roles={['speaker', 'sponsor']} />}>

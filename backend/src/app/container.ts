@@ -20,6 +20,10 @@ import { createCheckInRouter } from '../modules/checkins/checkin.routes.js';
 import { CheckInQrTokenRepository } from '../modules/checkins/checkin-qr-token.repository.js';
 import { MongoCheckInPendingScanRepository } from '../modules/checkins/checkin-pending-scan.repository.js';
 import { CheckInService } from '../modules/checkins/checkin.service.js';
+import { ClientTestingController } from '../modules/client-testing/client-testing.controller.js';
+import { createClientTestingRouter } from '../modules/client-testing/client-testing.routes.js';
+import { ClientTestingService } from '../modules/client-testing/client-testing.service.js';
+import { MongoClientTestingRepository } from '../db/repositories/mongo-client-testing.repository.js';
 import { CheckInFormController } from '../modules/checkin-forms/checkin-form.controller.js';
 import { createCheckInFormRouter } from '../modules/checkin-forms/checkin-form.routes.js';
 import { CheckInFormService } from '../modules/checkin-forms/checkin-form.service.js';
@@ -159,11 +163,15 @@ export async function createContainer() {
     logger.warn({ err: error }, 'Event association backfill skipped');
   }
   const membershipService = new MembershipService(membershipRepository, eventService);
+  // CLIENT_TESTING_MODE — remove repository + service + injections when deleting feature.
+  const clientTestingRepository = new MongoClientTestingRepository();
+  const clientTestingService = new ClientTestingService(clientTestingRepository);
   const effectiveAccessService = new EffectiveAccessService(
     userRepository,
     membershipRepository,
     eventService,
     membershipPurchaseRepository,
+    clientTestingService,
   );
   const speakerService = new SpeakerService(speakerRepository, eventService, userService, mailService);
   const sponsorService = new SponsorService(sponsorRepository, eventService, userService, mailService);
@@ -257,6 +265,7 @@ export async function createContainer() {
     checkInQrTokenRepository,
     checkInPendingScanRepository,
     pushNotificationService,
+    clientTestingService,
   );
   const postService = new PostService(postRepository, userRepository);
   const chatHub = new ChatHub();
@@ -290,6 +299,8 @@ export async function createContainer() {
   const announcementController = new AnnouncementController(announcementService);
   const appBrandingService = new AppBrandingService(appBrandingRepository);
   const appBrandingController = new AppBrandingController(appBrandingService);
+  // CLIENT_TESTING_MODE — remove with feature.
+  const clientTestingController = new ClientTestingController(clientTestingService);
   const checkInFormController = new CheckInFormController(checkInFormService);
   const checkInController = new CheckInController(checkInService);
   const postController = new PostController(postService);
@@ -331,6 +342,8 @@ export async function createContainer() {
       checkout: createCheckoutRouter(checkoutController),
       announcements: createAnnouncementRouter(announcementController),
       appBranding: createAppBrandingRouter(appBrandingController),
+      // CLIENT_TESTING_MODE — remove with feature.
+      clientTesting: createClientTestingRouter(clientTestingController),
       checkinForms: createCheckInFormRouter(checkInFormController),
       checkins: createCheckInRouter(checkInController),
       posts: createPostRouter(postController),

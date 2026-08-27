@@ -1,5 +1,6 @@
 import { isMembershipPaymentActive } from '../memberships/membership-entitlement.js';
 import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
+import type { ClientTestingService } from '../client-testing/client-testing.service.js';
 import {
   resolveEffectiveFeatureAccess,
   type EventFeatureAccess,
@@ -243,6 +244,8 @@ export class EffectiveAccessService {
     private readonly memberships: MembershipRepository,
     private readonly events: EventService,
     private readonly purchases?: MembershipPurchaseRepository,
+    /** CLIENT_TESTING_MODE — remove when deleting client-testing module. */
+    private readonly clientTesting?: ClientTestingService,
   ) {}
 
   async resolveForUser(
@@ -256,7 +259,32 @@ export class EffectiveAccessService {
       return emptyAccess(eventId ?? '');
     }
 
-    return attachFeatureAccess(await this.resolveEntitlement(userId, event), event);
+    const access = attachFeatureAccess(
+      await this.resolveEntitlement(userId, event),
+      event,
+    );
+    return this.applyClientTestingOverrides(access);
+  }
+
+  /**
+   * CLIENT_TESTING_MODE — remove this method when deleting client-testing.
+   * Treats the event as started so reviews unlock for upcoming editions.
+   */
+  private async applyClientTestingOverrides(
+    access: EffectiveEventAccess,
+  ): Promise<EffectiveEventAccess> {
+    if (!this.clientTesting || !(await this.clientTesting.isEnabled())) {
+      return access;
+    }
+    if (access.eventStarted) return access;
+    const policy = access.entitled && !access.carriedFromPrevious
+      ? access.memberFeatureAccess
+      : access.guestFeatureAccess;
+    return {
+      ...access,
+      eventStarted: true,
+      submitReviews: access.viewAgenda && Boolean(policy.submitReviews),
+    };
   }
 
   private async resolveEntitlement(

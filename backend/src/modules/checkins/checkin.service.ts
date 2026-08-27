@@ -4,6 +4,7 @@ import type { CheckInFormService } from '../checkin-forms/checkin-form.service.j
 import type { SubmitCheckInFormInput } from '../checkin-forms/checkin-form.types.js';
 import { toPublicCheckInForm, toPublicCheckInFormSubmission } from '../checkin-forms/checkin-form.mapper.js';
 import type { EffectiveAccessService, QrDeniedReason } from '../access/access.service.js';
+import type { ClientTestingService } from '../client-testing/client-testing.service.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
 import { editionStatus } from '../events/event.mapper.js';
 import type { EventService } from '../events/event.service.js';
@@ -43,13 +44,25 @@ function qrDeniedMessage(reason: QrDeniedReason): string {
   }
 }
 
-/** Check-in is only allowed while the edition is live (on/after start date, before end). */
-function assertCheckInWindowOpen(event: PublicEvent): void {
+/**
+ * Check-in is only allowed while the edition is live (on/after start date, before end).
+ * CLIENT_TESTING_MODE: when enabled, upcoming editions are also allowed (ended/paused still blocked).
+ */
+async function assertCheckInWindowOpen(
+  event: PublicEvent,
+  clientTesting?: ClientTestingService,
+): Promise<void> {
   const status = editionStatus({
     startDate: new Date(event.startDate),
     endDate: new Date(event.endDate),
     paused: Boolean(event.paused),
   });
+
+  // CLIENT_TESTING_MODE — remove this branch when deleting client-testing module.
+  if (status === 'upcoming' && clientTesting && (await clientTesting.isEnabled())) {
+    return;
+  }
+
   if (status === 'upcoming') {
     throw new BadRequestError('Check-in will be available when the event starts.');
   }
@@ -74,6 +87,8 @@ export class CheckInService {
     private readonly qrTokens?: CheckInQrTokenRepository,
     private readonly pendingScans?: CheckInPendingScanRepository,
     private readonly push?: PushNotificationService,
+    /** CLIENT_TESTING_MODE — remove this constructor arg when deleting client-testing. */
+    private readonly clientTesting?: ClientTestingService,
   ) {}
 
   async getMyQr(userId: string, eventId?: string): Promise<MyCheckInQr> {
@@ -196,7 +211,7 @@ export class CheckInService {
       return this.toScanResult(existing, user, true, eventId);
     }
 
-    assertCheckInWindowOpen(event);
+    await assertCheckInWindowOpen(event, this.clientTesting);
 
     if (this.checkInForms) {
       const activeForm = await this.checkInForms.findActiveForm(eventId);
@@ -357,7 +372,7 @@ export class CheckInService {
       return this.getMyQr(input.userId, input.eventId);
     }
 
-    assertCheckInWindowOpen(event);
+    await assertCheckInWindowOpen(event, this.clientTesting);
 
     const activeForm = await this.checkInForms.findActiveForm(input.eventId);
     if (!activeForm || activeForm.id !== pending.formId) {
@@ -431,7 +446,7 @@ export class CheckInService {
       return this.toScanResult(existing, user, true, eventId);
     }
 
-    assertCheckInWindowOpen(event);
+    await assertCheckInWindowOpen(event, this.clientTesting);
 
     const activeForm = await this.checkInForms.findActiveForm(eventId);
     if (!activeForm) {

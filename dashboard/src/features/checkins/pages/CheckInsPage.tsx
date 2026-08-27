@@ -9,6 +9,7 @@ import {
 import { checkInsApi } from '@/features/checkins/api/checkins-api';
 import { CheckInScanner } from '@/features/checkins/components/CheckInScanner';
 import { CheckInFormSubmissionPanel } from '@/features/checkins/components/CheckInFormSubmissionPanel';
+import { clientTestingApi } from '@/features/client-testing/api/client-testing-api';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
 import {
   formatEditionRange,
@@ -77,6 +78,13 @@ export function CheckInsPage() {
         perPage: PER_PAGE,
       }),
   });
+
+  // CLIENT_TESTING_MODE — remove this query when deleting client-testing.
+  const testingQuery = useQuery({
+    queryKey: ['client-testing'],
+    queryFn: () => clientTestingApi.get(),
+  });
+  const clientTestingEnabled = Boolean(testingQuery.data?.enabled);
 
   function applySearch(next: string) {
     setSearch(next);
@@ -305,13 +313,18 @@ export function CheckInsPage() {
   const attendees = stats?.attendeeCount ?? 0;
   const membership = scanDetail?.membership;
   const editionStatus = selectedEdition?.status;
-  const checkInOpen = editionStatus === 'live';
+  // CLIENT_TESTING_MODE — remove `|| (clientTestingEnabled && …)` when deleting feature.
+  const checkInOpen =
+    editionStatus === 'live' ||
+    (clientTestingEnabled && editionStatus === 'upcoming');
   const isUpcomingEdition = editionStatus === 'upcoming';
   const isPausedEdition = editionStatus === 'paused';
   const editionLabel = isPastEdition
     ? 'Past edition'
     : isUpcomingEdition
-      ? 'Upcoming edition'
+      ? clientTestingEnabled
+        ? 'Upcoming · testing open'
+        : 'Upcoming edition'
       : isPausedEdition
         ? 'Paused edition'
         : isNonCurrentEdition
@@ -428,6 +441,13 @@ export function CheckInsPage() {
                 <QrCode size={16} style={{ marginRight: 8, verticalAlign: 'text-bottom' }} />
                 Scan QR
               </h2>
+              {/* CLIENT_TESTING_MODE — remove this banner with the feature. */}
+              {clientTestingEnabled && isUpcomingEdition ? (
+                <p className="hint" style={{ marginTop: 8 }}>
+                  Client testing mode is ON — check-in is unlocked for this upcoming edition.
+                  Turn it off under Testing mode when demos are done.
+                </p>
+              ) : null}
               <p className="muted" style={{ marginTop: 6 }}>
                 Attendees show their QR in the app. Scan it here — the waiver opens on their phone.
                 This screen waits until they submit. For manual check-in from the list, the form

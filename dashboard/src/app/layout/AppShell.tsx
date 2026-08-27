@@ -4,6 +4,7 @@ import {
   Bell,
   CalendarDays,
   Clapperboard,
+  FlaskConical,
   Handshake,
   BadgeCheck,
   Images,
@@ -123,6 +124,11 @@ export function AppShell() {
               <NavLink to="/checkins">
                 <QrCode size={18} />
                 Check-in
+              </NavLink>
+              {/* CLIENT_TESTING_MODE — remove nav item when deleting feature. */}
+              <NavLink to="/client-testing">
+                <FlaskConical size={18} />
+                Testing mode
               </NavLink>
             </>
           ) : null}
