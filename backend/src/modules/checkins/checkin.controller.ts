@@ -19,6 +19,33 @@ export class CheckInController {
     sendSuccess(res, await this.service.listMyBookings(req.auth.userId));
   };
 
+  myPendingForm = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth) throw new UnauthorizedError();
+    const eventId =
+      typeof req.query.eventId === 'string' ? req.query.eventId : undefined;
+    sendSuccess(res, await this.service.getMyPendingForm(req.auth.userId, eventId));
+  };
+
+  completeMyForm = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth) throw new UnauthorizedError();
+    const body = req.body as {
+      eventId: string;
+      answers: Record<string, string | boolean>;
+      signatureDataUrl?: string;
+      signedName: string;
+    };
+    sendSuccess(
+      res,
+      await this.service.completeMyForm({
+        userId: req.auth.userId,
+        eventId: body.eventId,
+        answers: body.answers,
+        signatureDataUrl: body.signatureDataUrl,
+        signedName: body.signedName,
+      }),
+    );
+  };
+
   scan = async (req: Request, res: Response): Promise<void> => {
     if (!req.auth) throw new UnauthorizedError();
     const body = req.body as {
@@ -26,6 +53,7 @@ export class CheckInController {
       eventId?: string;
       userId?: string;
       expectedEventId?: string;
+      source?: 'qr' | 'manual';
     };
     sendSuccess(
       res,
@@ -34,6 +62,7 @@ export class CheckInController {
         eventId: body.eventId,
         userId: body.userId,
         expectedEventId: body.expectedEventId,
+        source: body.source,
         adminUserId: req.auth.userId,
       }),
     );

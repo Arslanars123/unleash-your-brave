@@ -70,8 +70,15 @@ export interface CheckInScanMembershipSummary {
 }
 
 export interface CheckInScanResult {
+  /** Event edition this scan applies to. */
+  eventId: string;
   /** True when an active form must be completed before check-in is created. */
   requiresForm: boolean;
+  /**
+   * When true (QR scan path), the attendee completes the form in the mobile app.
+   * When false (manual check-in), the admin completes it on the dashboard.
+   */
+  awaitingAttendeeForm: boolean;
   form: PublicCheckInForm | null;
   /** Saved waiver answers after (or during) check-in; null if none. */
   formSubmission: PublicCheckInFormSubmission | null;
@@ -80,6 +87,14 @@ export interface CheckInScanResult {
   alreadyCheckedIn: boolean;
   user: PublicUser;
   membership: CheckInScanMembershipSummary;
+}
+
+/** Poll response for the attendee QR page. */
+export interface MyPendingCheckInForm {
+  pending: boolean;
+  eventId: string | null;
+  expiresAt: string | null;
+  form: PublicCheckInForm | null;
 }
 
 export interface ListCheckInsQuery {

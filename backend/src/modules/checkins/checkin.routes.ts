@@ -6,7 +6,9 @@ import type { CheckInController } from './checkin.controller.js';
 import {
   checkInStatsQuerySchema,
   completeCheckInWithFormSchema,
+  completeMyCheckInFormSchema,
   listCheckInsQuerySchema,
+  myPendingFormQuerySchema,
   myQrQuerySchema,
   scanCheckInSchema,
 } from './checkin.schema.js';
@@ -27,6 +29,22 @@ export function createCheckInRouter(controller: CheckInController): Router {
     '/my-bookings',
     authenticate,
     asyncHandler(controller.myBookings),
+  );
+
+  // Attendee: after staff QR scan, poll for door waiver prompt
+  router.get(
+    '/my-pending-form',
+    authenticate,
+    validate({ query: myPendingFormQuerySchema }),
+    asyncHandler(controller.myPendingForm),
+  );
+
+  // Attendee: submit waiver on phone → creates check-in
+  router.post(
+    '/complete-my-form',
+    authenticate,
+    validate({ body: completeMyCheckInFormSchema }),
+    asyncHandler(controller.completeMyForm),
   );
 
   // Admin: scan QR or manual check-in

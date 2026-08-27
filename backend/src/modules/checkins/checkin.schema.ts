@@ -15,6 +15,12 @@ export const scanCheckInSchema = z
     userId: z.string().uuid().optional(),
     /** When set, QR must belong to this edition (prevents past QR checking into current). */
     expectedEventId: z.string().uuid().optional(),
+    /**
+     * qr = camera/token scan → form opens on attendee app.
+     * manual = list "Check in" → form opens on dashboard.
+     * Defaults from whether a token was provided.
+     */
+    source: z.enum(['qr', 'manual']).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.token) return;
@@ -25,6 +31,17 @@ export const scanCheckInSchema = z
       });
     }
   });
+
+export const myPendingFormQuerySchema = z.object({
+  eventId: z.string().uuid().optional(),
+});
+
+export const completeMyCheckInFormSchema = z.object({
+  eventId: z.string().uuid(),
+  answers: z.record(z.string(), z.union([z.string(), z.boolean()])),
+  signatureDataUrl: z.string().max(2_000_000).optional().default(''),
+  signedName: z.string().trim().min(1).max(200),
+});
 
 export const completeCheckInWithFormSchema = z
   .object({

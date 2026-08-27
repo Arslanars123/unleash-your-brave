@@ -263,8 +263,14 @@ export interface CompleteCheckInWithFormPayload {
 }
 
 export interface CheckInScanResult {
+  eventId?: string;
   /** True when an active form must be completed before check-in is created. */
   requiresForm?: boolean;
+  /**
+   * QR scan path: attendee fills the form in the mobile app.
+   * Manual check-in: admin fills the form on the dashboard.
+   */
+  awaitingAttendeeForm?: boolean;
   form?: PublicCheckInForm | null;
   /** Saved waiver answers for this attendee/event when available. */
   formSubmission?: PublicCheckInFormSubmission | null;

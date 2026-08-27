@@ -50,6 +50,7 @@ export const checkInsApi = {
     eventId?: string;
     userId?: string;
     expectedEventId?: string;
+    source?: 'qr' | 'manual';
   }): Promise<CheckInScanResult> {
     const { data } = await apiClient.post<SuccessEnvelope<CheckInScanResult>>(
       '/checkins/scan',

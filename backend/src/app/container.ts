@@ -18,6 +18,7 @@ import { PushNotificationService } from '../modules/chat/push.service.js';
 import { CheckInController } from '../modules/checkins/checkin.controller.js';
 import { createCheckInRouter } from '../modules/checkins/checkin.routes.js';
 import { CheckInQrTokenRepository } from '../modules/checkins/checkin-qr-token.repository.js';
+import { MongoCheckInPendingScanRepository } from '../modules/checkins/checkin-pending-scan.repository.js';
 import { CheckInService } from '../modules/checkins/checkin.service.js';
 import { CheckInFormController } from '../modules/checkin-forms/checkin-form.controller.js';
 import { createCheckInFormRouter } from '../modules/checkin-forms/checkin-form.routes.js';
@@ -127,6 +128,8 @@ export async function createContainer() {
   await checkInFormRepository.ensureIndexes();
   const checkInQrTokenRepository = new CheckInQrTokenRepository();
   await checkInQrTokenRepository.ensureIndexes();
+  const checkInPendingScanRepository = new MongoCheckInPendingScanRepository();
+  await checkInPendingScanRepository.ensureIndexes();
   const postRepository = new MongoPostRepository();
   const chatGroupRepository = new MongoChatGroupRepository();
   const chatMessageRepository = new MongoChatMessageRepository();
@@ -249,6 +252,8 @@ export async function createContainer() {
     effectiveAccessService,
     membershipLifecycleService,
     checkInQrTokenRepository,
+    checkInPendingScanRepository,
+    pushNotificationService,
   );
   const postService = new PostService(postRepository, userRepository);
   const chatHub = new ChatHub();

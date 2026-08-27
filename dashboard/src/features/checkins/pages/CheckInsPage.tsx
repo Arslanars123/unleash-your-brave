@@ -37,6 +37,13 @@ interface PendingFormScan {
   };
 }
 
+interface AwaitingAttendeeForm {
+  userId: string;
+  userName: string;
+  eventId: string;
+  token?: string;
+}
+
 export function CheckInsPage() {
   const { eventId, selectedEdition, isPastEdition, isNonCurrentEdition } = useEditionScope();
   const [search, setSearch] = useState('');
@@ -53,6 +60,7 @@ export function CheckInsPage() {
   );
   const [formEditorOpen, setFormEditorOpen] = useState(false);
   const [pendingFormScan, setPendingFormScan] = useState<PendingFormScan | null>(null);
+  const [awaitingAttendee, setAwaitingAttendee] = useState<AwaitingAttendeeForm | null>(null);
   const pendingPayloadRef = useRef<PendingFormScan['scanPayload'] | null>(null);
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -80,10 +88,14 @@ export function CheckInsPage() {
     setSearch('');
     setScanHold(false);
     setAlreadyCheckedInDialog(null);
+    setAwaitingAttendee(null);
+    setPendingFormScan(null);
+    pendingPayloadRef.current = null;
   }, [eventId]);
 
   function resumeScanning() {
     setAlreadyCheckedInDialog(null);
+    setAwaitingAttendee(null);
     setScanHold(false);
     setScannerResetKey((value) => value + 1);
   }
@@ -91,6 +103,7 @@ export function CheckInsPage() {
   function applyScanSuccess(result: CheckInScanResult) {
     setScanDetail(result);
     setPendingFormScan(null);
+    setAwaitingAttendee(null);
     pendingPayloadRef.current = null;
     const name = result.user.name;
     if (result.alreadyCheckedIn) {
@@ -114,23 +127,78 @@ export function CheckInsPage() {
       token?: string;
       userId?: string;
       eventId?: string;
+      source?: 'qr' | 'manual';
+      /** Silent poll while waiting for the attendee phone form. */
+      poll?: boolean;
     }) =>
       checkInsApi.scan({
-        ...payload,
+        token: payload.token,
+        userId: payload.userId,
+        eventId: payload.eventId,
+        source: payload.source,
         expectedEventId: eventId ?? undefined,
       }),
     onSuccess: (result, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['checkins'] });
-      if (result.requiresForm && result.form) {
+
+      // Poll while waiting for the phone waiver: attendee just finished.
+      if (
+        variables.poll &&
+        !result.requiresForm &&
+        (result.checkIn || result.alreadyCheckedIn)
+      ) {
+        setScanDetail(result);
+        setPendingFormScan(null);
+        setAwaitingAttendee(null);
+        pendingPayloadRef.current = null;
+        const message = `Checked in ${result.user.name}`;
+        setLastResult(message);
+        toast.success(message);
+        setToken('');
+        setScanHold(false);
+        setScannerResetKey((value) => value + 1);
+        return;
+      }
+
+      if (result.requiresForm && result.form && result.awaitingAttendeeForm) {
+        const waitEventId =
+          result.eventId || result.checkIn?.eventId || variables.eventId || eventId || '';
+        setAwaitingAttendee((current) => {
+          if (
+            current &&
+            current.userId === result.user.id &&
+            current.eventId === waitEventId
+          ) {
+            return current;
+          }
+          return {
+            userId: result.user.id,
+            userName: result.user.name,
+            eventId: waitEventId,
+            token: variables.token,
+          };
+        });
+        setScanDetail(result);
+        setPendingFormScan(null);
+        pendingPayloadRef.current = null;
+        setScanHold(true);
+        if (!variables.poll) {
+          setLastResult(`Waiting for ${result.user.name} to complete the waiver on their phone`);
+          toast.success(`Scan received — ask ${result.user.name} to complete the form in the app`);
+        }
+        setToken('');
+        return;
+      }
+
+      if (result.requiresForm && result.form && !result.awaitingAttendeeForm) {
+        setAwaitingAttendee(null);
         const pending = {
           form: result.form,
           userName: result.user.name,
           scanPayload: {
-            ...variables,
-            // Prefer ids from the scan result so complete-with-form still works
-            // even if the original request only had a QR token.
+            token: variables.token,
             userId: result.user.id || variables.userId,
-            eventId: result.checkIn?.eventId || variables.eventId,
+            eventId: result.eventId || result.checkIn?.eventId || variables.eventId || eventId || undefined,
           },
         };
         pendingPayloadRef.current = pending.scanPayload;
@@ -140,9 +208,11 @@ export function CheckInsPage() {
         setToken('');
         return;
       }
+
       applyScanSuccess(result);
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      if (variables.poll) return;
       const message = getApiErrorMessage(error, 'Check-in failed');
       setLastResult(message);
       toast.error(message);
@@ -173,6 +243,28 @@ export function CheckInsPage() {
     },
   });
 
+  // While waiting for the attendee app waiver, poll until checked in.
+  useEffect(() => {
+    if (!awaitingAttendee) return;
+    const handle = window.setInterval(() => {
+      if (scanMutation.isPending || completeFormMutation.isPending) return;
+      scanMutation.mutate({
+        userId: awaitingAttendee.userId,
+        eventId: awaitingAttendee.eventId || eventId || undefined,
+        token: awaitingAttendee.token,
+        source: 'qr',
+        poll: true,
+      });
+    }, 2000);
+    return () => window.clearInterval(handle);
+  }, [
+    awaitingAttendee,
+    eventId,
+    scanMutation.isPending,
+    completeFormMutation.isPending,
+    scanMutation.mutate,
+  ]);
+
   const handleTokenScan = useCallback(
     (raw: string) => {
       const token = raw.trim();
@@ -184,7 +276,7 @@ export function CheckInsPage() {
       ) {
         return;
       }
-      scanMutation.mutate({ token });
+      scanMutation.mutate({ token, source: 'qr' });
     },
     [scanHold, scanMutation.isPending, scanMutation.mutate, completeFormMutation.isPending],
   );
@@ -230,8 +322,8 @@ export function CheckInsPage() {
           <span className="page-kicker">Door</span>
           <h1>Check-in</h1>
           <p className="muted">
-            Scan an attendee QR to check them in. If a check-in form is active, it opens
-            immediately after the scan — status updates only after the form is submitted.
+            Scan an attendee QR — the waiver opens on their phone. Use Check in on a row to fill the
+            form here yourself. Status updates only after the form is submitted.
           </p>
         </div>
         {eventId ? (
@@ -318,9 +410,9 @@ export function CheckInsPage() {
                 Scan QR
               </h2>
               <p className="muted" style={{ marginTop: 6 }}>
-                Attendees show their QR in the app first. Scan it here — the waiver form opens only
-                after a successful scan. Check-in status updates after the form is submitted, and
-                you can review the saved answers in Last scan details.
+                Attendees show their QR in the app. Scan it here — the waiver opens on their phone.
+                This screen waits until they submit. For manual check-in from the list, the form
+                opens here for you to complete.
               </p>
               <CheckInScanner
                 onScan={handleTokenScanGated}
@@ -330,6 +422,31 @@ export function CheckInsPage() {
                 paused={scanHold || scanMutation.isPending || completeFormMutation.isPending}
                 resetKey={scannerResetKey}
               />
+              {awaitingAttendee ? (
+                <div
+                  className="panel"
+                  style={{
+                    marginTop: 12,
+                    background: 'var(--surface-2, #f6f4f1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <strong>Waiting on {awaitingAttendee.userName}</strong>
+                    <p className="muted" style={{ margin: '4px 0 0' }}>
+                      Ask them to complete the waiver in the app Check-in screen. This updates
+                      automatically when they submit.
+                    </p>
+                  </div>
+                  <Button variant="secondary" type="button" onClick={resumeScanning}>
+                    Cancel wait
+                  </Button>
+                </div>
+              ) : null}
               <form
                 className="toolbar"
                 style={{ marginTop: 12 }}
@@ -573,6 +690,7 @@ export function CheckInsPage() {
                                 void scanMutation.mutateAsync({
                                   eventId: eventId,
                                   userId: row.userId,
+                                  source: 'manual',
                                 });
                               }}
                             >

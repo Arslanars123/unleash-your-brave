@@ -27,6 +27,8 @@ class ApiConstants {
   static const announcementsUnreadCount = '/announcements/unread-count';
   static const checkInMyQr = '/checkins/my-qr';
   static const checkInMyBookings = '/checkins/my-bookings';
+  static const checkInMyPendingForm = '/checkins/my-pending-form';
+  static const checkInCompleteMyForm = '/checkins/complete-my-form';
   static const checkInFormsByEvent = '/checkin-forms/by-event';
   static const checkInFormSubmissions = '/checkin-forms/submissions';
   static const checkInFormMySubmission = '/checkin-forms/submissions/me';

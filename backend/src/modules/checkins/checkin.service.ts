@@ -10,8 +10,10 @@ import type { EventService } from '../events/event.service.js';
 import type { PublicEvent } from '../events/event.types.js';
 import type { MembershipLifecycleService } from '../memberships/membership-lifecycle.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
+import type { PushNotificationService } from '../chat/push.service.js';
 import { toPublicUser } from '../users/user.mapper.js';
 import type { UserRepository } from '../users/user.repository.js';
+import type { CheckInPendingScanRepository } from './checkin-pending-scan.repository.js';
 import { toPublicCheckIn } from './checkin.mapper.js';
 import type { CheckInQrTokenRepository } from './checkin-qr-token.repository.js';
 import { issueCheckInToken, verifyCheckInToken } from './checkin.token.js';
@@ -21,8 +23,12 @@ import type {
   CheckInStats,
   ListCheckInsQuery,
   MyCheckInQr,
+  MyPendingCheckInForm,
   PublicCheckIn,
 } from './checkin.types.js';
+
+/** How long a QR scan waits for the attendee to finish the waiver on their phone. */
+const PENDING_SCAN_TTL_MS = 15 * 60 * 1000;
 
 function qrDeniedMessage(reason: QrDeniedReason): string {
   switch (reason) {
@@ -66,6 +72,8 @@ export class CheckInService {
     private readonly access?: EffectiveAccessService,
     private readonly membershipLifecycle?: MembershipLifecycleService,
     private readonly qrTokens?: CheckInQrTokenRepository,
+    private readonly pendingScans?: CheckInPendingScanRepository,
+    private readonly push?: PushNotificationService,
   ) {}
 
   async getMyQr(userId: string, eventId?: string): Promise<MyCheckInQr> {
@@ -160,9 +168,12 @@ export class CheckInService {
     eventId?: string;
     userId?: string;
     expectedEventId?: string;
+    source?: 'qr' | 'manual';
     adminUserId: string;
   }): Promise<CheckInScanResult> {
     const { eventId, userId } = await this.resolveAttendeeIds(input);
+    const source: 'qr' | 'manual' =
+      input.source ?? (input.token ? 'qr' : 'manual');
 
     const event = await this.events.getById(eventId);
     if (!event) throw new NotFoundError('Event');
@@ -178,6 +189,7 @@ export class CheckInService {
 
     const existing = await this.checkIns.findByEventAndUser(eventId, userId);
     if (existing) {
+      await this.pendingScans?.deleteByEventAndUser(eventId, userId);
       // Allow viewing an existing check-in even outside the open window.
       return this.toScanResult(existing, user, true, eventId);
     }
@@ -187,13 +199,139 @@ export class CheckInService {
     if (this.checkInForms) {
       const activeForm = await this.checkInForms.findActiveForm(eventId);
       if (activeForm) {
-        // First check-in always goes through the door form. Check-in is created
-        // only after completeWithForm — never from a prior app-side draft alone.
-        return this.toFormRequiredScanResult(user, eventId, activeForm);
+        if (source === 'qr' && this.pendingScans) {
+          await this.pendingScans.upsert({
+            eventId,
+            userId,
+            formId: activeForm.id,
+            scannedBy: input.adminUserId,
+            expiresAt: new Date(Date.now() + PENDING_SCAN_TTL_MS),
+          });
+          void this.notifyAttendeeFormRequired(userId, event.name);
+          return this.toFormRequiredScanResult(user, eventId, activeForm, true);
+        }
+        // Manual check-in: admin completes the form on the dashboard.
+        await this.pendingScans?.deleteByEventAndUser(eventId, userId);
+        return this.toFormRequiredScanResult(user, eventId, activeForm, false);
       }
     }
 
     return this.createCheckInAndResult(eventId, user, input.adminUserId);
+  }
+
+  async getMyPendingForm(
+    userId: string,
+    eventId?: string,
+  ): Promise<MyPendingCheckInForm> {
+    if (!this.pendingScans || !this.checkInForms) {
+      return { pending: false, eventId: null, expiresAt: null, form: null };
+    }
+
+    const pending = await this.pendingScans.findActiveByUser(userId, eventId);
+    if (!pending) {
+      return { pending: false, eventId: null, expiresAt: null, form: null };
+    }
+
+    const existing = await this.checkIns.findByEventAndUser(
+      pending.eventId,
+      userId,
+    );
+    if (existing) {
+      await this.pendingScans.deleteByEventAndUser(pending.eventId, userId);
+      return { pending: false, eventId: null, expiresAt: null, form: null };
+    }
+
+    const form = await this.checkInForms.findActiveForm(pending.eventId);
+    if (!form || form.id !== pending.formId) {
+      await this.pendingScans.deleteById(pending.id);
+      return { pending: false, eventId: null, expiresAt: null, form: null };
+    }
+
+    return {
+      pending: true,
+      eventId: pending.eventId,
+      expiresAt: pending.expiresAt.toISOString(),
+      form: toPublicCheckInForm(form),
+    };
+  }
+
+  async completeMyForm(input: {
+    userId: string;
+    eventId: string;
+    answers: SubmitCheckInFormInput['answers'];
+    signatureDataUrl?: string;
+    signedName: string;
+  }): Promise<MyCheckInQr> {
+    if (!this.checkInForms || !this.pendingScans) {
+      throw new BadRequestError('Check-in forms are not available');
+    }
+
+    const pending = await this.pendingScans.findActiveByEventAndUser(
+      input.eventId,
+      input.userId,
+    );
+    if (!pending) {
+      throw new BadRequestError(
+        'No door scan is waiting for your waiver. Ask staff to scan your QR again.',
+      );
+    }
+
+    const event = await this.events.getById(input.eventId);
+    if (!event) throw new NotFoundError('Event');
+
+    const user = await this.users.findById(input.userId);
+    if (!user) throw new NotFoundError('User');
+    if (user.status !== 'active') {
+      throw new BadRequestError('Attendee account is not active');
+    }
+
+    const existing = await this.checkIns.findByEventAndUser(
+      input.eventId,
+      input.userId,
+    );
+    if (existing) {
+      await this.pendingScans.deleteByEventAndUser(input.eventId, input.userId);
+      return this.getMyQr(input.userId, input.eventId);
+    }
+
+    assertCheckInWindowOpen(event);
+
+    const activeForm = await this.checkInForms.findActiveForm(input.eventId);
+    if (!activeForm || activeForm.id !== pending.formId) {
+      throw new BadRequestError('No active check-in form for this event');
+    }
+
+    const submission = await this.checkInForms.saveSubmission(
+      activeForm,
+      input.userId,
+      {
+        answers: input.answers,
+        signatureDataUrl: input.signatureDataUrl,
+        signedName: input.signedName,
+      },
+    );
+
+    try {
+      const created = await this.createCheckInRecord(
+        input.eventId,
+        user,
+        pending.scannedBy,
+      );
+      await this.checkInForms.linkSubmissionToCheckIn(submission.id, created.id);
+      await this.pendingScans.deleteByEventAndUser(input.eventId, input.userId);
+      return this.getMyQr(input.userId, input.eventId);
+    } catch {
+      const raced = await this.checkIns.findByEventAndUser(
+        input.eventId,
+        input.userId,
+      );
+      if (raced) {
+        await this.checkInForms.linkSubmissionToCheckIn(submission.id, raced.id);
+        await this.pendingScans.deleteByEventAndUser(input.eventId, input.userId);
+        return this.getMyQr(input.userId, input.eventId);
+      }
+      throw new BadRequestError('Unable to complete check-in');
+    }
   }
 
   async completeWithForm(input: {
@@ -226,6 +364,7 @@ export class CheckInService {
 
     const existing = await this.checkIns.findByEventAndUser(eventId, userId);
     if (existing) {
+      await this.pendingScans?.deleteByEventAndUser(eventId, userId);
       return this.toScanResult(existing, user, true, eventId);
     }
 
@@ -245,11 +384,13 @@ export class CheckInService {
     try {
       const created = await this.createCheckInRecord(eventId, user, input.adminUserId);
       await this.checkInForms.linkSubmissionToCheckIn(submission.id, created.id);
+      await this.pendingScans?.deleteByEventAndUser(eventId, userId);
       return this.toScanResult(created, user, false, eventId);
     } catch {
       const raced = await this.checkIns.findByEventAndUser(eventId, userId);
       if (raced) {
         await this.checkInForms.linkSubmissionToCheckIn(submission.id, raced.id);
+        await this.pendingScans?.deleteByEventAndUser(eventId, userId);
         return this.toScanResult(raced, user, true, eventId);
       }
       throw new BadRequestError('Unable to complete check-in');
@@ -408,10 +549,13 @@ export class CheckInService {
     user: NonNullable<Awaited<ReturnType<UserRepository['findById']>>>,
     eventId: string,
     form: Parameters<typeof toPublicCheckInForm>[0],
+    awaitingAttendeeForm: boolean,
   ): Promise<CheckInScanResult> {
     const membership = await this.buildMembershipSummary(user, eventId, null);
     return {
+      eventId,
       requiresForm: true,
+      awaitingAttendeeForm,
       form: toPublicCheckInForm(form),
       formSubmission: null,
       checkIn: null,
@@ -437,7 +581,9 @@ export class CheckInService {
     }
 
     return {
+      eventId,
       requiresForm: false,
+      awaitingAttendeeForm: false,
       form,
       formSubmission,
       checkIn: toPublicCheckIn(checkIn, toPublicUser(user)),
@@ -445,6 +591,26 @@ export class CheckInService {
       user: toPublicUser(user),
       membership: await this.buildMembershipSummary(user, eventId, checkIn),
     };
+  }
+
+  private async notifyAttendeeFormRequired(
+    userId: string,
+    eventName: string,
+  ): Promise<void> {
+    if (!this.push) return;
+    try {
+      await this.push.notifyUsers({
+        userIds: [userId],
+        title: 'Complete your check-in waiver',
+        body: `Staff scanned your QR for ${eventName}. Open Check-in in the app to finish.`,
+        data: {
+          type: 'checkin.form_required',
+          eventName,
+        },
+      });
+    } catch {
+      // Push is best-effort; polling on the QR page is the source of truth.
+    }
   }
 
   private async buildMembershipSummary(
