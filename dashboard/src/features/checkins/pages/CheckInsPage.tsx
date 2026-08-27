@@ -104,6 +104,7 @@ export function CheckInsPage() {
     setLastResult(message);
     toast.success(message);
     setToken('');
+    setScanHold(false);
     setScannerResetKey((value) => value + 1);
   }
 
@@ -123,12 +124,19 @@ export function CheckInsPage() {
         const pending = {
           form: result.form,
           userName: result.user.name,
-          scanPayload: variables,
+          scanPayload: {
+            ...variables,
+            // Prefer ids from the scan result so complete-with-form still works
+            // even if the original request only had a QR token.
+            userId: result.user.id || variables.userId,
+            eventId: result.checkIn?.eventId || variables.eventId,
+          },
         };
-        pendingPayloadRef.current = variables;
+        pendingPayloadRef.current = pending.scanPayload;
         setPendingFormScan(pending);
+        setScanHold(true);
         setLastResult(`Form required for ${result.user.name}`);
-        setScannerResetKey((value) => value + 1);
+        setToken('');
         return;
       }
       applyScanSuccess(result);
@@ -221,8 +229,8 @@ export function CheckInsPage() {
           <span className="page-kicker">Door</span>
           <h1>Check-in</h1>
           <p className="muted">
-            See who checked in for the selected event. Switch editions to review another
-            gathering’s attendance — each event keeps its own record.
+            Scan an attendee QR to check them in. If a check-in form is active, it opens
+            immediately after the scan — status updates only after the form is submitted.
           </p>
         </div>
         {eventId ? (
@@ -601,6 +609,8 @@ export function CheckInsPage() {
           onClose={() => {
             setPendingFormScan(null);
             pendingPayloadRef.current = null;
+            setScanHold(false);
+            setScannerResetKey((value) => value + 1);
           }}
           onSubmit={async (values) => {
             await completeFormMutation.mutateAsync(values);

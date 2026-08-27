@@ -17,11 +17,8 @@ import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/core/widgets/subpage_app_bar.dart';
 import 'package:unleash_your_brave/features/auth/domain/entities/user_entity.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_form_remote_datasource.dart';
 import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
-import 'package:unleash_your_brave/features/checkin/domain/entities/checkin_form_entity.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/checkin_qr_entity.dart';
-import 'package:unleash_your_brave/features/checkin/presentation/widgets/checkin_waiver_form.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
 import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
@@ -57,21 +54,15 @@ class CheckInQrPage extends StatefulWidget {
 class _CheckInQrPageState extends State<CheckInQrPage> {
   bool _loading = true;
   bool _purchasing = false;
-  bool _submittingWaiver = false;
   String? _error;
   bool _needsPurchase = false;
   CheckInQrEntity? _qr;
-  CheckInFormEntity? _waiverForm;
-  CheckInFormSubmissionEntity? _waiverSubmission;
 
   String? get _resolvedEventId {
     final fromWidget = widget.eventId?.trim();
     if (fromWidget != null && fromWidget.isNotEmpty) return fromWidget;
     return context.read<SelectedEventCubit>().selectedEventId;
   }
-
-  bool get _needsWaiver =>
-      _waiverForm != null && _waiverSubmission == null && !_needsPurchase;
 
   @override
   void initState() {
@@ -96,25 +87,9 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
     try {
       final qr =
           await sl<CheckInRemoteDataSource>().getMyQr(eventId: _resolvedEventId);
-      CheckInFormEntity? form;
-      CheckInFormSubmissionEntity? submission;
-      final eventId = qr.eventId.isNotEmpty ? qr.eventId : _resolvedEventId;
-      if (eventId != null && eventId.isNotEmpty) {
-        try {
-          final forms = sl<CheckInFormRemoteDataSource>();
-          form = await forms.getActiveByEvent(eventId);
-          if (form != null) {
-            submission = await forms.getMySubmission(eventId);
-          }
-        } catch (_) {
-          // Waiver is required when configured; surface soft failure via QR path.
-        }
-      }
       if (!mounted) return;
       setState(() {
         _qr = qr;
-        _waiverForm = form;
-        _waiverSubmission = submission;
         _loading = false;
       });
     } on NetworkException catch (error) {
@@ -138,48 +113,6 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
         _error = 'Unable to load your check-in QR';
         _needsPurchase = false;
       });
-    }
-  }
-
-  Future<void> _submitWaiver({
-    required Map<String, dynamic> answers,
-    required String signedName,
-    required String signatureDataUrl,
-  }) async {
-    final eventId = _qr?.eventId.isNotEmpty == true
-        ? _qr!.eventId
-        : _resolvedEventId;
-    if (eventId == null || eventId.isEmpty) {
-      AppToast.error('Missing event for waiver');
-      return;
-    }
-
-    setState(() => _submittingWaiver = true);
-    try {
-      final submission = await sl<CheckInFormRemoteDataSource>().submit(
-        eventId: eventId,
-        answers: answers,
-        signedName: signedName,
-        signatureDataUrl: signatureDataUrl,
-      );
-      if (!mounted) return;
-      setState(() {
-        _waiverSubmission = submission;
-        _submittingWaiver = false;
-      });
-      AppToast.success('Waiver signed. Show your QR at the door.');
-    } on NetworkException catch (error) {
-      if (!mounted) return;
-      setState(() => _submittingWaiver = false);
-      AppToast.error(error.message);
-    } on ServerException catch (error) {
-      if (!mounted) return;
-      setState(() => _submittingWaiver = false);
-      AppToast.error(error.message);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _submittingWaiver = false);
-      AppToast.error('Unable to submit waiver');
     }
   }
 
@@ -346,9 +279,6 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
   @override
   Widget build(BuildContext context) {
     final qr = _qr;
-    final authState = context.read<AuthBloc>().state;
-    final userName =
-        authState is AuthAuthenticated ? authState.user.name : '';
 
     return Scaffold(
       backgroundColor: AppColors.bgBase,
@@ -365,15 +295,13 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _needsWaiver
-                    ? 'Sign the event waiver before your check-in QR is shown.'
-                    : 'Show this QR at the door, or share the code below if staff need to paste it into the admin check-in screen.',
+                'Show this QR at the door. Staff will ask you to complete the check-in form before your check-in is recorded.',
                 style: AppTypography.body.copyWith(
                   color: AppColors.textSecondary,
                 ),
               ),
               SizedBox(height: context.sectionGap),
-              if (_purchasing || _submittingWaiver)
+              if (_purchasing)
                 const Padding(
                   padding: EdgeInsets.only(bottom: 12),
                   child: LinearProgressIndicator(
@@ -396,13 +324,6 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
                 )
               else if (_error != null)
                 LoadErrorView(message: _error, onRetry: _load)
-              else if (_needsWaiver && _waiverForm != null)
-                CheckInWaiverForm(
-                  form: _waiverForm!,
-                  initialSignedName: userName,
-                  submitting: _submittingWaiver,
-                  onSubmit: _submitWaiver,
-                )
               else if (qr == null || qr.token.isEmpty)
                 Text(
                   'No event QR available yet.',
@@ -411,10 +332,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
                   ),
                 )
               else
-                _QrCard(
-                  qr: qr,
-                  waiverSigned: _waiverSubmission != null,
-                ),
+                _QrCard(qr: qr),
             ],
           ),
         ),
@@ -503,13 +421,9 @@ class _PurchaseRequiredView extends StatelessWidget {
 }
 
 class _QrCard extends StatelessWidget {
-  const _QrCard({
-    required this.qr,
-    this.waiverSigned = false,
-  });
+  const _QrCard({required this.qr});
 
   final CheckInQrEntity qr;
-  final bool waiverSigned;
 
   @override
   Widget build(BuildContext context) {
@@ -536,15 +450,6 @@ class _QrCard extends StatelessWidget {
               letterSpacing: 1.2,
             ),
           ),
-          if (waiverSigned) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Waiver signed',
-              style: AppTypography.caption.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(16),

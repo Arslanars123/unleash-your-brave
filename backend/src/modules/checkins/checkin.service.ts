@@ -187,18 +187,9 @@ export class CheckInService {
     if (this.checkInForms) {
       const activeForm = await this.checkInForms.findActiveForm(eventId);
       if (activeForm) {
-        const submission = await this.checkInForms.findSubmission(eventId, userId);
-        if (!submission) {
-          return this.toFormRequiredScanResult(user, eventId, activeForm);
-        }
-        // Submission exists but check-in was never linked (interrupted complete) — finish now.
-        if (!submission.checkInId) {
-          const created = await this.createCheckInAndResult(eventId, user, input.adminUserId);
-          if (created.checkIn) {
-            await this.checkInForms.linkSubmissionToCheckIn(submission.id, created.checkIn.id);
-          }
-          return created;
-        }
+        // First check-in always goes through the door form. Check-in is created
+        // only after completeWithForm — never from a prior app-side draft alone.
+        return this.toFormRequiredScanResult(user, eventId, activeForm);
       }
     }
 
