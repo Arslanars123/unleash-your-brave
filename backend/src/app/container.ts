@@ -236,7 +236,7 @@ export async function createContainer() {
   await couponRepository.ensureIndexes();
   const couponService = new CouponService(
     couponRepository,
-    membershipRepository,
+    membershipService,
     eventService,
     announcementService,
   );
