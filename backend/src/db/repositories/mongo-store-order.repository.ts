@@ -89,6 +89,48 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
     return [...new Set(docs.map((doc) => String(doc.userId)).filter(Boolean))];
   }
 
+  async summarizePaidForEvent(eventId: string) {
+    const [row] = await this.collection
+      .aggregate<{
+        orderCount: number;
+        unitsSold: number;
+        revenue: number;
+        uniqueBuyers: string[];
+        currency: string | null;
+      }>([
+        { $match: { eventId, paymentStatus: 'paid' } },
+        {
+          $group: {
+            _id: null,
+            orderCount: { $sum: 1 },
+            unitsSold: { $sum: '$quantity' },
+            revenue: { $sum: '$totalPrice' },
+            uniqueBuyers: { $addToSet: '$userId' },
+            currency: { $first: '$currency' },
+          },
+        },
+      ])
+      .toArray();
+
+    if (!row) {
+      return {
+        orderCount: 0,
+        unitsSold: 0,
+        revenue: 0,
+        uniqueBuyers: 0,
+        currency: 'usd',
+      };
+    }
+
+    return {
+      orderCount: row.orderCount ?? 0,
+      unitsSold: row.unitsSold ?? 0,
+      revenue: Math.round((row.revenue ?? 0) * 100) / 100,
+      uniqueBuyers: (row.uniqueBuyers ?? []).filter(Boolean).length,
+      currency: (row.currency || 'usd').toLowerCase(),
+    };
+  }
+
   async create(data: CreateStoreOrderInput): Promise<StoreOrder> {
     const now = new Date();
     const order: StoreOrder = {

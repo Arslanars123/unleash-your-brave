@@ -22,6 +22,13 @@ export function createEventRouter(controller: EventController): Router {
   router.get('/previous', asyncHandler(controller.listPrevious));
   router.get('/:id', validate({ params: eventIdParamSchema }), asyncHandler(controller.getById));
   router.get(
+    '/:id/overview',
+    authenticate,
+    authorize('admin'),
+    validate({ params: eventIdParamSchema }),
+    asyncHandler(controller.getOverview),
+  );
+  router.get(
     '/:id/associations',
     authenticate,
     authorize('admin'),

@@ -1,6 +1,7 @@
 import { apiClient } from '@/shared/api/client';
 import type {
   EventAssociations,
+  EventOverviewStats,
   EventPayload,
   EventWorkspace,
   PaginationMeta,
@@ -41,6 +42,13 @@ export const eventsApi = {
 
   async getById(id: string): Promise<PublicEvent> {
     const { data } = await apiClient.get<SuccessEnvelope<PublicEvent>>(`/events/${id}`);
+    return data.data;
+  },
+
+  async getOverview(id: string): Promise<EventOverviewStats> {
+    const { data } = await apiClient.get<SuccessEnvelope<EventOverviewStats>>(
+      `/events/${id}/overview`,
+    );
     return data.data;
   },
 

@@ -8,6 +8,10 @@ import type {
   MembershipPurchase,
 } from '../../modules/checkout/purchase.types.js';
 
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export class MongoMembershipPurchaseRepository implements MembershipPurchaseRepository {
   private get collection(): Collection<MongoDoc<MembershipPurchase>> {
     return getDb().collection<MongoDoc<MembershipPurchase>>('membership_purchases');
@@ -57,6 +61,143 @@ export class MongoMembershipPurchaseRepository implements MembershipPurchaseRepo
       .project({ userId: 1 })
       .toArray();
     return [...new Set(docs.map((doc) => String(doc.userId)).filter(Boolean))];
+  }
+
+  async summarizePaidForEvent(eventId: string) {
+    const empty = {
+      soldCount: 0,
+      uniqueBuyers: 0,
+      revenue: 0,
+      discountTotal: 0,
+      couponRedemptions: 0,
+      currency: 'usd',
+      byMembership: [] as Array<{
+        membershipId: string;
+        membershipName: string;
+        soldCount: number;
+        revenue: number;
+        discountTotal: number;
+      }>,
+      byKind: { purchase: 0, upgrade: 0, renew: 0 },
+    };
+
+    const [row] = await this.collection
+      .aggregate<{
+        totals?: {
+          soldCount: number;
+          uniqueBuyers: string[];
+          revenue: number;
+          discountTotal: number;
+          couponRedemptions: number;
+          currency: string | null;
+        };
+        byMembership: Array<{
+          membershipId: string;
+          membershipName: string;
+          soldCount: number;
+          revenue: number;
+          discountTotal: number;
+        }>;
+        byKind: Array<{ kind: string; count: number }>;
+      }>([
+        { $match: { eventId, paymentStatus: 'paid' } },
+        {
+          $facet: {
+            totals: [
+              {
+                $group: {
+                  _id: null,
+                  soldCount: { $sum: 1 },
+                  uniqueBuyers: { $addToSet: '$userId' },
+                  revenue: { $sum: '$price' },
+                  discountTotal: { $sum: { $ifNull: ['$discountAmount', 0] } },
+                  couponRedemptions: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $ne: [{ $ifNull: ['$couponId', null] }, null] },
+                            { $ne: ['$couponId', ''] },
+                          ],
+                        },
+                        1,
+                        0,
+                      ],
+                    },
+                  },
+                  currency: { $first: '$currency' },
+                },
+              },
+            ],
+            byMembership: [
+              {
+                $group: {
+                  _id: {
+                    membershipId: '$membershipId',
+                    membershipName: '$membershipName',
+                  },
+                  soldCount: { $sum: 1 },
+                  revenue: { $sum: '$price' },
+                  discountTotal: { $sum: { $ifNull: ['$discountAmount', 0] } },
+                },
+              },
+              { $sort: { soldCount: -1, revenue: -1 } },
+              {
+                $project: {
+                  _id: 0,
+                  membershipId: '$_id.membershipId',
+                  membershipName: '$_id.membershipName',
+                  soldCount: 1,
+                  revenue: 1,
+                  discountTotal: 1,
+                },
+              },
+            ],
+            byKind: [
+              {
+                $group: {
+                  _id: '$kind',
+                  count: { $sum: 1 },
+                },
+              },
+            ],
+          },
+        },
+        {
+          $project: {
+            totals: { $arrayElemAt: ['$totals', 0] },
+            byMembership: 1,
+            byKind: 1,
+          },
+        },
+      ])
+      .toArray();
+
+    if (!row?.totals) return empty;
+
+    const byKind = { purchase: 0, upgrade: 0, renew: 0 };
+    for (const item of row.byKind ?? []) {
+      if (item.kind === 'purchase' || item.kind === 'upgrade' || item.kind === 'renew') {
+        byKind[item.kind] = item.count;
+      }
+    }
+
+    return {
+      soldCount: row.totals.soldCount ?? 0,
+      uniqueBuyers: (row.totals.uniqueBuyers ?? []).filter(Boolean).length,
+      revenue: roundMoney(row.totals.revenue ?? 0),
+      discountTotal: roundMoney(row.totals.discountTotal ?? 0),
+      couponRedemptions: row.totals.couponRedemptions ?? 0,
+      currency: (row.totals.currency || 'usd').toLowerCase(),
+      byMembership: (row.byMembership ?? []).map((item) => ({
+        membershipId: item.membershipId,
+        membershipName: item.membershipName || 'Membership',
+        soldCount: item.soldCount,
+        revenue: roundMoney(item.revenue ?? 0),
+        discountTotal: roundMoney(item.discountTotal ?? 0),
+      })),
+      byKind,
+    };
   }
 
   async create(data: CreateMembershipPurchaseInput): Promise<MembershipPurchase> {

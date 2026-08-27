@@ -35,6 +35,7 @@ import { createCheckoutRouter } from '../modules/checkout/checkout.routes.js';
 import { CheckoutService } from '../modules/checkout/checkout.service.js';
 import { EventController } from '../modules/events/event.controller.js';
 import { createEventRouter } from '../modules/events/event.routes.js';
+import { EventOverviewService } from '../modules/events/event-overview.service.js';
 import { EventService } from '../modules/events/event.service.js';
 import { EventAssociationService } from '../modules/event-associations/event-association.service.js';
 import { MailService } from '../modules/mail/mail.service.js';
@@ -286,7 +287,16 @@ export async function createContainer() {
     storeCheckoutService,
   );
   const authController = new AuthController(authService);
-  const eventController = new EventController(eventService, eventAssociationService);
+  const eventController = new EventController(
+    eventService,
+    eventAssociationService,
+    new EventOverviewService(
+      eventService,
+      membershipPurchaseRepository,
+      storeOrderRepository,
+      checkInService,
+    ),
+  );
   const speakerController = new SpeakerController(speakerService);
   const sessionController = new SessionController(sessionService);
   const sessionFeedbackController = new SessionFeedbackController(sessionFeedbackService);

@@ -6,6 +6,14 @@ import type {
 } from './store-order.types.js';
 import type { PaginatedResult } from './store.repository.js';
 
+export interface StoreOrderEventSummary {
+  orderCount: number;
+  unitsSold: number;
+  revenue: number;
+  uniqueBuyers: number;
+  currency: string;
+}
+
 export interface StoreOrderRepository {
   findById(id: string): Promise<StoreOrder | null>;
   findByStripeCheckoutSessionId(stripeCheckoutSessionId: string): Promise<StoreOrder | null>;
@@ -13,6 +21,7 @@ export interface StoreOrderRepository {
   listByUserId(userId: string): Promise<StoreOrder[]>;
   /** Distinct user ids with a paid store order for the event. */
   listPaidUserIdsByEvent(eventId: string): Promise<string[]>;
+  summarizePaidForEvent(eventId: string): Promise<StoreOrderEventSummary>;
   create(data: CreateStoreOrderInput): Promise<StoreOrder>;
   update(
     id: string,
@@ -67,6 +76,19 @@ export class InMemoryStoreOrderRepository implements StoreOrderRepository {
           .map((item) => item.userId),
       ),
     ];
+  }
+
+  async summarizePaidForEvent(eventId: string) {
+    const paid = [...this.items.values()].filter(
+      (item) => item.eventId === eventId && item.paymentStatus === 'paid',
+    );
+    return {
+      orderCount: paid.length,
+      unitsSold: paid.reduce((sum, item) => sum + (item.quantity || 0), 0),
+      revenue: Math.round(paid.reduce((sum, item) => sum + (item.totalPrice || 0), 0) * 100) / 100,
+      uniqueBuyers: new Set(paid.map((item) => item.userId).filter(Boolean)).size,
+      currency: (paid[0]?.currency || 'usd').toLowerCase(),
+    };
   }
 
   async create(data: CreateStoreOrderInput): Promise<StoreOrder> {
