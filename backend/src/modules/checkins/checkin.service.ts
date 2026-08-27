@@ -2,7 +2,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/error
 import type { CheckInRepository } from '../../db/repositories/mongo-checkin.repository.js';
 import type { CheckInFormService } from '../checkin-forms/checkin-form.service.js';
 import type { SubmitCheckInFormInput } from '../checkin-forms/checkin-form.types.js';
-import { toPublicCheckInForm } from '../checkin-forms/checkin-form.mapper.js';
+import { toPublicCheckInForm, toPublicCheckInFormSubmission } from '../checkin-forms/checkin-form.mapper.js';
 import type { EffectiveAccessService, QrDeniedReason } from '../access/access.service.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
 import { editionStatus } from '../events/event.mapper.js';
@@ -413,6 +413,7 @@ export class CheckInService {
     return {
       requiresForm: true,
       form: toPublicCheckInForm(form),
+      formSubmission: null,
       checkIn: null,
       alreadyCheckedIn: false,
       user: toPublicUser(user),
@@ -426,9 +427,19 @@ export class CheckInService {
     alreadyCheckedIn: boolean,
     eventId: string,
   ): Promise<CheckInScanResult> {
+    let form = null;
+    let formSubmission = null;
+    if (this.checkInForms) {
+      const activeForm = await this.checkInForms.findActiveForm(eventId);
+      const submission = await this.checkInForms.findSubmission(eventId, user.id);
+      if (activeForm) form = toPublicCheckInForm(activeForm);
+      if (submission) formSubmission = toPublicCheckInFormSubmission(submission);
+    }
+
     return {
       requiresForm: false,
-      form: null,
+      form,
+      formSubmission,
       checkIn: toPublicCheckIn(checkIn, toPublicUser(user)),
       alreadyCheckedIn,
       user: toPublicUser(user),

@@ -295,7 +295,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Show this QR at the door. Staff will ask you to complete the check-in form before your check-in is recorded.',
+                'Show this QR at the door. Staff will scan it, then you complete the waiver form. You are marked checked in only after the form is submitted.',
                 style: AppTypography.body.copyWith(
                   color: AppColors.textSecondary,
                 ),

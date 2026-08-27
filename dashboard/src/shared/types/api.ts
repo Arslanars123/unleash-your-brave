@@ -224,6 +224,20 @@ export interface PublicCheckInForm {
   updatedAt: string;
 }
 
+export interface PublicCheckInFormSubmission {
+  id: string;
+  formId: string;
+  eventId: string;
+  userId: string;
+  checkInId: string | null;
+  answers: Record<string, string | boolean>;
+  signatureDataUrl: string;
+  signedName: string;
+  submittedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UpsertCheckInFormPayload {
   title: string;
   description?: string;
@@ -252,6 +266,8 @@ export interface CheckInScanResult {
   /** True when an active form must be completed before check-in is created. */
   requiresForm?: boolean;
   form?: PublicCheckInForm | null;
+  /** Saved waiver answers for this attendee/event when available. */
+  formSubmission?: PublicCheckInFormSubmission | null;
   /** Null when requiresForm is true (check-in not created yet). */
   checkIn: PublicCheckInRow | null;
   alreadyCheckedIn: boolean;

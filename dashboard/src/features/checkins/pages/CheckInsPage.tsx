@@ -8,6 +8,7 @@ import {
 } from '@/features/checkin-forms/components/CheckInFormGateModal';
 import { checkInsApi } from '@/features/checkins/api/checkins-api';
 import { CheckInScanner } from '@/features/checkins/components/CheckInScanner';
+import { CheckInFormSubmissionPanel } from '@/features/checkins/components/CheckInFormSubmissionPanel';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
 import {
   formatEditionRange,
@@ -317,9 +318,9 @@ export function CheckInsPage() {
                 Scan QR
               </h2>
               <p className="muted" style={{ marginTop: 6 }}>
-                Attendees open their event QR in the app. Scan it here, or paste the token if the
-                camera is unavailable. If a check-in form is active, you’ll complete it before the
-                check-in is recorded.
+                Attendees show their QR in the app first. Scan it here — the waiver form opens only
+                after a successful scan. Check-in status updates after the form is submitted, and
+                you can review the saved answers in Last scan details.
               </p>
               <CheckInScanner
                 onScan={handleTokenScanGated}
@@ -406,6 +407,12 @@ export function CheckInsPage() {
                     }
                     productTitle={scanDetail.user.title}
                   />
+                  {scanDetail.formSubmission ? (
+                    <CheckInFormSubmissionPanel
+                      form={scanDetail.form}
+                      submission={scanDetail.formSubmission}
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </section>
