@@ -52,6 +52,9 @@ export const couponsApi = {
       title?: string;
       message?: string;
       sendPush?: boolean;
+      audienceType?: 'all' | 'roles' | 'users';
+      audienceRoles?: string[];
+      audienceUserIds?: string[];
     } = {},
   ): Promise<{ announcementId: string; code: string }> {
     const { data } = await apiClient.post<

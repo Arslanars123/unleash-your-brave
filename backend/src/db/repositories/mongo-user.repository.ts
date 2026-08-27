@@ -44,6 +44,18 @@ export class MongoUserRepository implements UserRepository {
       }
       filter._id = { $in: query.userIds };
     }
+    if (query.excludeUserIds?.length) {
+      if (query.userIds?.length) {
+        const excluded = new Set(query.excludeUserIds);
+        const allowed = query.userIds.filter((id) => !excluded.has(id));
+        if (allowed.length === 0) {
+          return { items: [], total: 0 };
+        }
+        filter._id = { $in: allowed };
+      } else {
+        filter._id = { $nin: query.excludeUserIds };
+      }
+    }
     if (query.attendeesOnly) {
       filter.$or = [{ role: 'member' }, { membershipId: { $ne: null } }];
     } else if (query.role) {

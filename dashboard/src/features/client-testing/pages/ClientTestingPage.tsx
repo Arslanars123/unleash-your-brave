@@ -87,14 +87,6 @@ export function ClientTestingPage() {
           </div>
         </div>
       </section>
-
-      <section className="panel" style={{ marginTop: 16, maxWidth: 640 }}>
-        <h2 style={{ marginTop: 0, fontSize: '1rem' }}>After client testing</h2>
-        <p className="muted" style={{ marginBottom: 0 }}>
-          1) Turn this flag OFF here. 2) Later, remove the feature entirely — search the repo for{' '}
-          <code>CLIENT_TESTING_MODE</code> and follow <code>docs/CLIENT_TESTING_MODE_REMOVAL.md</code>.
-        </p>
-      </section>
     </div>
   );
 }

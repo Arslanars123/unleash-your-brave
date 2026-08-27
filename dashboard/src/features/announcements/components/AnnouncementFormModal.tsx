@@ -32,16 +32,10 @@ const emptyForm: AnnouncementFormValues = {
   delivery: 'immediate',
   scheduledAtLocal: '',
   audienceType: 'all',
-  audienceRoles: ['member'],
+  audienceRoles: [],
   audienceUserIds: [],
   sendPush: true,
 };
-
-const GROUP_OPTIONS: Array<{ value: UserRole; label: string }> = [
-  { value: 'member', label: 'Attendees' },
-  { value: 'speaker', label: 'Speakers' },
-  { value: 'sponsor', label: 'Sponsors' },
-];
 
 function toLocalInputValue(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -65,15 +59,16 @@ function toForm(announcement: PublicAnnouncement): AnnouncementFormValues {
       : announcement.status === 'draft'
         ? 'draft'
         : 'immediate';
+  // Selected groups (roles) removed from UI — treat legacy role audiences as all attendees.
+  const audienceType: AudienceType =
+    announcement.audienceType === 'users' ? 'users' : 'all';
   return {
     title: announcement.title,
     description: announcement.description,
     delivery,
     scheduledAtLocal: toLocalInputValue(announcement.scheduledAt),
-    audienceType: announcement.audienceType ?? 'all',
-    audienceRoles: announcement.audienceRoles?.length
-      ? announcement.audienceRoles
-      : ['member'],
+    audienceType,
+    audienceRoles: [],
     audienceUserIds: announcement.audienceUserIds ?? [],
     sendPush: announcement.sendPush ?? true,
   };
@@ -90,9 +85,6 @@ function validate(values: AnnouncementFormValues): FieldErrors {
       errors.scheduledAtLocal = 'Scheduled time must be in the future';
     }
   }
-  if (values.audienceType === 'roles' && values.audienceRoles.length === 0) {
-    errors.audienceRoles = 'Select at least one group';
-  }
   if (values.audienceType === 'users' && values.audienceUserIds.length === 0) {
     errors.audienceUserIds = 'Select at least one attendee';
   }
@@ -105,8 +97,8 @@ export function toAnnouncementPayload(values: AnnouncementFormValues): Announcem
     description: values.description.trim(),
     delivery: values.delivery,
     audienceType: values.audienceType,
-    audienceRoles: values.audienceRoles,
-    audienceUserIds: values.audienceUserIds,
+    audienceRoles: values.audienceType === 'roles' ? values.audienceRoles : [],
+    audienceUserIds: values.audienceType === 'users' ? values.audienceUserIds : [],
     scheduledAt:
       values.delivery === 'scheduled' ? localInputToIso(values.scheduledAtLocal) : null,
     sendPush: values.sendPush,
@@ -168,18 +160,6 @@ export function AnnouncementFormModal({
   ) {
     setValues((current) => {
       const next = { ...current, [key]: value };
-      if (submitted) setErrors(validate(next));
-      return next;
-    });
-  }
-
-  function toggleRole(role: UserRole) {
-    setValues((current) => {
-      const has = current.audienceRoles.includes(role);
-      const audienceRoles = has
-        ? current.audienceRoles.filter((r) => r !== role)
-        : [...current.audienceRoles, role];
-      const next = { ...current, audienceRoles };
       if (submitted) setErrors(validate(next));
       return next;
     });
@@ -287,7 +267,6 @@ export function AnnouncementFormModal({
               {(
                 [
                   ['all', 'All attendees'],
-                  ['roles', 'Selected groups'],
                   ['users', 'Specific people'],
                 ] as const
               ).map(([value, label]) => (
@@ -302,26 +281,6 @@ export function AnnouncementFormModal({
                 </label>
               ))}
             </div>
-
-            {values.audienceType === 'roles' ? (
-              <div>
-                <div className="checkbox-grid">
-                  {GROUP_OPTIONS.map((option) => (
-                    <label key={option.value} className="checkbox-row">
-                      <input
-                        type="checkbox"
-                        checked={values.audienceRoles.includes(option.value)}
-                        onChange={() => toggleRole(option.value)}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-                {errors.audienceRoles ? (
-                  <p className="field-error">{errors.audienceRoles}</p>
-                ) : null}
-              </div>
-            ) : null}
 
             {values.audienceType === 'users' ? (
               <div className="audience-picker">

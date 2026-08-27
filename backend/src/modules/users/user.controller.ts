@@ -16,7 +16,14 @@ export class UserController {
   list = async (req: Request, res: Response): Promise<void> => {
     const query = { ...(req.query as unknown as ListUsersQuery) };
     if (query.eventId) {
-      query.userIds = await this.resolveAttendeeIdsForEvent(query.eventId);
+      const filter = query.eventPurchaseFilter ?? 'purchasers';
+      if (filter === 'purchasers') {
+        query.userIds = await this.resolveAttendeeIdsForEvent(query.eventId);
+      } else if (filter === 'without_purchase') {
+        // Membership purchasers only — coupons target people who have not bought a pass yet.
+        query.excludeUserIds = await this.checkout.listPaidPurchaserIdsForEvent(query.eventId);
+      }
+      // filter === 'all': no purchase-based id filtering
     }
     const { items, total } = await this.service.list(query);
     sendPaginated(res, items, buildPaginationMeta(query.page, query.perPage, total));

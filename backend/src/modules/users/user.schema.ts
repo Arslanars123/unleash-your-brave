@@ -37,6 +37,7 @@ export const listUsersQuerySchema = z.object({
       return value === 'true' || value === '1';
     }),
   eventId: z.string().uuid().optional(),
+  eventPurchaseFilter: z.enum(['purchasers', 'without_purchase', 'all']).optional(),
 });
 const profileFields = {
   photoUrl: optionalUrl,

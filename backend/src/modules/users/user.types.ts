@@ -221,6 +221,15 @@ export interface ListUsersQuery {
   attendeesOnly?: boolean;
   /** Limit to attendees with a purchase / ticket / membership for this edition. */
   eventId?: string;
+  /**
+   * How to apply eventId purchase filtering.
+   * - purchasers (default when eventId set): only paid membership purchasers for the event
+   * - without_purchase: active members who have not purchased membership for the event
+   * - all: ignore purchase status (eventId used only by clients for context)
+   */
+  eventPurchaseFilter?: 'purchasers' | 'without_purchase' | 'all';
   /** Internal: precomputed user ids for event-scoped attendee lists. */
   userIds?: string[];
+  /** Internal: exclude these user ids (e.g. already purchased). */
+  excludeUserIds?: string[];
 }

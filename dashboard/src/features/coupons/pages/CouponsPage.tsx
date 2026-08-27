@@ -3,6 +3,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { Bell, Copy, Pencil, Plus, TicketPercent, Trash2 } from 'lucide-react';
 import { couponsApi } from '@/features/coupons/api/coupons-api';
 import { CouponFormModal } from '@/features/coupons/components/CouponFormModal';
+import {
+  CouponSendModal,
+  type CouponSendPayload,
+} from '@/features/coupons/components/CouponSendModal';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { eventsApi } from '@/features/events/api/events-api';
 import { getApiErrorMessage } from '@/shared/api/client';
@@ -39,6 +43,8 @@ export function CouponsPage() {
   const [editing, setEditing] = useState<PublicCoupon | null>(null);
   const [modalEventId, setModalEventId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [sendCoupon, setSendCoupon] = useState<PublicCoupon | null>(null);
+  const [sending, setSending] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -53,8 +59,8 @@ export function CouponsPage() {
     [workspaceQuery.data],
   );
 
-  const eventNameById = useMemo(() => {
-    const map = new Map<string, string>();
+  const eventById = useMemo(() => {
+    const map = new Map<string, PublicEvent>();
     const workspace = workspaceQuery.data;
     if (!workspace) return map;
     for (const event of [
@@ -63,10 +69,31 @@ export function CouponsPage() {
       ...(workspace.pastEditions ?? []),
       ...(workspace.editions ?? []),
     ]) {
-      if (event) map.set(event.id, event.name);
+      if (event) map.set(event.id, event);
     }
     return map;
   }, [workspaceQuery.data]);
+
+  const eventNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    const formatDate = (iso: string) => {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
+    };
+    for (const event of eventById.values()) {
+      const start = formatDate(event.startDate);
+      const end = formatDate(event.endDate);
+      const range = start && end ? `${start} – ${end}` : start || end;
+      map.set(event.id, range ? `${event.name} (${range})` : event.name);
+    }
+    return map;
+  }, [eventById]);
 
   const handleModalEventChange = useCallback((eventId: string) => {
     setModalEventId(eventId || undefined);
@@ -171,26 +198,25 @@ export function CouponsPage() {
     }
   }
 
-  async function handleSend(coupon: PublicCoupon) {
-    const ok = await confirm({
-      title: 'Send coupon notification?',
-      message: `Send code ${coupon.code} to all attendees as an announcement push notification? You can also copy the code and share it manually.`,
-      confirmLabel: 'Send notification',
-      cancelLabel: 'Cancel',
-      tone: 'primary',
-    });
-    if (!ok) return;
+  async function handleSendSubmit(payload: CouponSendPayload) {
+    if (!sendCoupon) return;
+    setSending(true);
     try {
-      await couponsApi.send(coupon.id, {
-        title: `Coupon: ${coupon.code}`,
+      await couponsApi.send(sendCoupon.id, {
+        title: `Coupon: ${sendCoupon.code}`,
         message:
-          coupon.description?.trim() ||
-          `Use code ${coupon.code} at checkout for a membership discount.`,
-        sendPush: true,
+          payload.message.trim() ||
+          `Use code ${sendCoupon.code} at checkout for a membership discount.`,
+        sendPush: payload.sendPush,
+        audienceType: payload.audienceType,
+        audienceUserIds: payload.audienceUserIds,
       });
       toast.success('Coupon notification sent');
+      setSendCoupon(null);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Unable to send coupon'));
+    } finally {
+      setSending(false);
     }
   }
 
@@ -305,7 +331,7 @@ export function CouponsPage() {
                         type="button"
                         className="icon-button"
                         aria-label="Send notification"
-                        onClick={() => void handleSend(coupon)}
+                        onClick={() => setSendCoupon(coupon)}
                       >
                         <Bell size={16} />
                       </button>
@@ -352,6 +378,17 @@ export function CouponsPage() {
         onEventChange={handleModalEventChange}
         onClose={closeModal}
         onSubmit={handleSubmit}
+      />
+
+      <CouponSendModal
+        open={Boolean(sendCoupon)}
+        coupon={sendCoupon}
+        event={sendCoupon?.eventId ? eventById.get(sendCoupon.eventId) ?? null : null}
+        loading={sending}
+        onClose={() => {
+          if (!sending) setSendCoupon(null);
+        }}
+        onSubmit={handleSendSubmit}
       />
     </div>
   );

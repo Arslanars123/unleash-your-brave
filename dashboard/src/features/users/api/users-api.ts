@@ -19,6 +19,7 @@ export interface ListUsersParams {
   status?: UserStatus;
   attendeesOnly?: boolean;
   eventId?: string;
+  eventPurchaseFilter?: 'purchasers' | 'without_purchase' | 'all';
 }
 
 export interface ListUsersResult {

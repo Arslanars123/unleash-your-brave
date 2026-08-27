@@ -112,6 +112,9 @@ export class InMemoryUserRepository implements UserRepository {
     const filtered = [...this.users.values()]
       .filter((user) => {
         if (idSet && !idSet.has(user.id)) return false;
+        if (query.excludeUserIds?.length && query.excludeUserIds.includes(user.id)) {
+          return false;
+        }
         if (query.attendeesOnly) {
           if (user.role !== 'member' && !user.membershipId) return false;
         } else if (query.role && user.role !== query.role) {

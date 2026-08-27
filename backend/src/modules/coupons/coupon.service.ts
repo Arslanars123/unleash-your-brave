@@ -231,6 +231,39 @@ export class CouponService {
       throw new BadRequestError('Activate the coupon before sending it');
     }
 
+    const remaining =
+      coupon.maxRedemptions > 0
+        ? Math.max(0, coupon.maxRedemptions - (coupon.redemptionCount ?? 0))
+        : null;
+    if (remaining === 0) {
+      throw new BadRequestError('This coupon has no redemptions left');
+    }
+
+    const audienceType = input.audienceType ?? 'all';
+    const audienceUserIds = input.audienceUserIds ?? [];
+
+    if (remaining !== null) {
+      if (audienceType === 'all') {
+        throw new BadRequestError(
+          remaining === 1
+            ? 'This coupon is for one-time use — select 1 attendee instead of all'
+            : `This coupon has ${remaining} uses left — select specific attendees (max ${remaining})`,
+        );
+      }
+      if (audienceType === 'users') {
+        if (audienceUserIds.length === 0) {
+          throw new BadRequestError('Select at least one attendee');
+        }
+        if (audienceUserIds.length > remaining) {
+          throw new BadRequestError(
+            remaining === 1
+              ? 'This coupon is for one-time use — 2 attendees cannot use it'
+              : `This coupon has ${remaining} uses left — you can notify at most ${remaining} attendees`,
+          );
+        }
+      }
+    }
+
     const title = input.title?.trim() || `Coupon: ${coupon.code}`;
     const message =
       input.message?.trim() ||
@@ -242,9 +275,9 @@ export class CouponService {
       title,
       description: message,
       delivery: 'immediate',
-      audienceType: input.audienceType ?? 'all',
+      audienceType,
       audienceRoles: input.audienceRoles,
-      audienceUserIds: input.audienceUserIds,
+      audienceUserIds: audienceType === 'users' ? audienceUserIds : input.audienceUserIds,
       sendPush: input.sendPush ?? true,
     });
 
