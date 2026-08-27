@@ -69,7 +69,7 @@ export function UsersPage() {
         queryClient.invalidateQueries({ queryKey: ['users', 'list'] }),
         queryClient.invalidateQueries({ queryKey: ['users', 'stats'] }),
       ]);
-      toast.success('Attendee created');
+      toast.success('Attendee created — invite code emailed');
       closeModal();
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to create attendee')),

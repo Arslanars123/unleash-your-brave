@@ -148,6 +148,7 @@ export async function createContainer() {
     speakerRepository,
     sponsorRepository,
     membershipRepository,
+    mailService,
   );
   const authService = new AuthService(userRepository, userService, mailService);
   const eventService = new EventService(eventRepository);

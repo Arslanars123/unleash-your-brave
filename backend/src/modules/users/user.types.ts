@@ -158,7 +158,8 @@ export interface PublicUser {
 export interface CreateUserInput {
   email: string;
   name: string;
-  password: string;
+  /** Optional — when omitted for members, an invite code email is sent instead. */
+  password?: string;
   role?: UserRole;
   speakerId?: string | null;
   sponsorId?: string | null;

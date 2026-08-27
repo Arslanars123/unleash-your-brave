@@ -106,8 +106,7 @@ function validate(values: AttendeeFormValues, mode: 'create' | 'edit'): FieldErr
   }
 
   if (mode === 'create') {
-    if (!values.password) errors.password = 'Password is required';
-    else if (values.password.length < 8) errors.password = 'Password must be at least 8 characters';
+    // Password is not collected — backend emails an invite code (checkout-style).
   } else if (values.password && values.password.length < 8) {
     errors.password = 'Password must be at least 8 characters';
   }
@@ -127,7 +126,6 @@ export function toCreatePayload(values: AttendeeFormValues): CreateUserPayload {
   return {
     email: values.email.trim().toLowerCase(),
     name: values.fullName.trim(),
-    password: values.password,
     role: 'member',
     status: values.status,
     photoUrl: values.photoUrl.trim(),
@@ -348,16 +346,22 @@ export function AttendeeFormModal({
             onChange={(e) => update('email', e.target.value)}
           />
 
-          <Input
-            label={mode === 'create' ? 'password' : 'password (leave blank to keep)'}
-            requiredMark={mode === 'create'}
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            value={values.password}
-            error={errors.password}
-            onChange={(e) => update('password', e.target.value)}
-          />
+          {mode === 'create' ? (
+            <p className="hint" style={{ marginTop: -4 }}>
+              No password needed — they’ll get an email with a one-time invite code to sign in and
+              set their own password (same as checkout).
+            </p>
+          ) : (
+            <Input
+              label="password (leave blank to keep)"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              value={values.password}
+              error={errors.password}
+              onChange={(e) => update('password', e.target.value)}
+            />
+          )}
 
           <MediaImageField
             ref={photoRef}

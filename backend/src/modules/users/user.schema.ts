@@ -61,7 +61,7 @@ export const createUserSchema = z
   .object({
     email: z.string().email().toLowerCase(),
     name: z.string().trim().min(2).max(80),
-    password: z.string().min(8).max(128),
+    password: z.string().min(8).max(128).optional(),
     role: z.enum(USER_ROLES).default('member'),
     status: z.enum(USER_STATUSES).optional().default('active'),
     speakerId: z.string().uuid().nullable().optional(),

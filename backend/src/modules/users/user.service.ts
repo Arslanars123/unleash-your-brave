@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { env } from '../../config/env.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
+import { logger } from '../../core/logger.js';
+import type { MailService } from '../mail/mail.service.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
 import type { SponsorRepository } from '../sponsors/sponsor.repository.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
@@ -44,6 +46,7 @@ export class UserService {
     private readonly speakers?: SpeakerRepository,
     private readonly sponsors?: SponsorRepository,
     private readonly memberships?: MembershipRepository,
+    private readonly mail?: MailService,
   ) {}
 
   async list(query: ListUsersQuery): Promise<PaginatedResult<PublicUser>> {
@@ -356,6 +359,7 @@ export class UserService {
     const sponsorId = input.sponsorId ?? null;
     const membershipId =
       role === 'admin' ? null : (input.membershipId ?? null);
+    const providedPassword = input.password?.trim() ?? '';
 
     if (role === 'speaker' && !speakerId) {
       throw new BadRequestError('Speaker accounts must link a speaker profile');
@@ -363,14 +367,27 @@ export class UserService {
     if (role === 'sponsor' && !sponsorId) {
       throw new BadRequestError('Sponsor accounts must link a sponsor profile');
     }
+    if (role === 'admin' && !providedPassword) {
+      throw new BadRequestError('Password is required for admin accounts');
+    }
 
     await this.assertProfileLinks(speakerId, sponsorId);
     await this.assertMembership(membershipId);
 
+    // Attendee / portal create without password → same invite-code flow as checkout.
+    const useInvite = !providedPassword;
+    const inviteCode = useInvite ? generateInviteCode() : undefined;
+    const inviteExpiresAt = useInvite
+      ? new Date(Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000)
+      : null;
+
     const created = await this.users.create({
       email: input.email,
       name: input.name,
-      passwordHash: await bcrypt.hash(input.password, PASSWORD_SALT_ROUNDS),
+      passwordHash: await bcrypt.hash(
+        providedPassword || randomSecretPassword(),
+        PASSWORD_SALT_ROUNDS,
+      ),
       role,
       status: input.status ?? 'active',
       speakerId,
@@ -391,7 +408,26 @@ export class UserService {
       isVip: input.isVip,
       points: input.points,
       profileCompleted: input.profileCompleted,
+      inviteCodeHash: inviteCode
+        ? await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS)
+        : null,
+      inviteCodeExpiresAt: inviteExpiresAt,
+      mustChangePassword: useInvite,
     });
+
+    if (inviteCode && this.mail) {
+      try {
+        await this.mail.sendInviteCode({
+          to: created.email,
+          name: created.name,
+          inviteCode,
+          expiresAt: inviteExpiresAt!,
+          dualAccess: Boolean(created.speakerId || created.sponsorId),
+        });
+      } catch (error) {
+        logger.error({ err: error, email: created.email }, 'Failed to send invite email');
+      }
+    }
 
     return toPublicUser(created);
   }
