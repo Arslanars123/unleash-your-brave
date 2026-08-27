@@ -67,6 +67,7 @@ export const createUserSchema = z
     speakerId: z.string().uuid().nullable().optional(),
     sponsorId: z.string().uuid().nullable().optional(),
     membershipId: z.string().uuid().nullable().optional(),
+    eventId: z.string().uuid().optional(),
     ...profileFields,
   })
   .superRefine((value, ctx) => {
@@ -82,6 +83,28 @@ export const createUserSchema = z
         code: z.ZodIssueCode.custom,
         path: ['sponsorId'],
         message: 'Link a sponsor profile for sponsor accounts',
+      });
+    }
+    if (value.role === 'member') {
+      if (!value.eventId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['eventId'],
+          message: 'Event is required',
+        });
+      }
+      if (!value.membershipId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['membershipId'],
+          message: 'Membership is required',
+        });
+      }
+    } else if (!value.password) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['password'],
+        message: 'Password is required',
       });
     }
   });

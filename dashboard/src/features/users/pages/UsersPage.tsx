@@ -25,10 +25,12 @@ export function UsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicUser | null>(null);
   const [viewing, setViewing] = useState<PublicUser | null>(null);
+  const [formEventId, setFormEventId] = useState<string | undefined>();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
-  const { eventId, selectedEdition, clearEditionFilter } = useEditionScope({ optional: true });
+  const { eventId, selectedEdition, clearEditionFilter, editions, currentEdition } =
+    useEditionScope({ optional: true });
 
   useAttendeeRealtime(true);
 
@@ -36,13 +38,20 @@ export function UsersPage() {
     setPage(1);
   }, [eventId]);
 
+  const membershipEventId = modalOpen
+    ? editing
+      ? undefined
+      : formEventId
+    : eventId;
+
   const membershipsQuery = useQuery({
-    queryKey: ['memberships', 'list', eventId ?? 'library', 'attendee-form'],
+    queryKey: ['memberships', 'list', membershipEventId ?? 'library', 'attendee-form'],
     queryFn: () =>
       membershipsApi.list({
         perPage: 100,
-        ...(eventId ? { eventId } : {}),
+        ...(membershipEventId ? { eventId: membershipEventId } : {}),
       }),
+    enabled: modalOpen,
   });
 
   const usersQuery = useQuery({
@@ -69,7 +78,7 @@ export function UsersPage() {
         queryClient.invalidateQueries({ queryKey: ['users', 'list'] }),
         queryClient.invalidateQueries({ queryKey: ['users', 'stats'] }),
       ]);
-      toast.success('Attendee created — invite code emailed');
+      toast.success('Attendee created — invite email sent');
       closeModal();
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to create attendee')),
@@ -118,12 +127,14 @@ export function UsersPage() {
 
   function openCreate() {
     setEditing(null);
+    setFormEventId(eventId || currentEdition?.id || editions[0]?.id);
     setModalOpen(true);
   }
 
   function openEdit(user: PublicUser) {
     setViewing(null);
     setEditing(user);
+    setFormEventId(undefined);
     setModalOpen(true);
   }
 
@@ -370,8 +381,12 @@ export function UsersPage() {
         open={modalOpen}
         mode={editing ? 'edit' : 'create'}
         initialUser={editing}
+        events={editions}
+        defaultEventId={formEventId}
         memberships={memberships}
+        membershipsLoading={membershipsQuery.isLoading}
         loading={saving}
+        onEventChange={setFormEventId}
         onClose={closeModal}
         onSubmit={handleSubmit}
       />

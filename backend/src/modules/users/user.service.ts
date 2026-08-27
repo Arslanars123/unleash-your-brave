@@ -1,12 +1,15 @@
 import bcrypt from 'bcryptjs';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { env } from '../../config/env.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
-import { logger } from '../../core/logger.js';
+import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
+import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
+import { computeMembershipPeriod } from '../memberships/membership-entitlement.js';
+import type { MembershipService } from '../memberships/membership.service.js';
+import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
 import type { SponsorRepository } from '../sponsors/sponsor.repository.js';
-import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { PaginatedResult, UserRepository } from './user.repository.js';
 import type {
   CreateUserInput,
@@ -41,13 +44,30 @@ export function generatePasswordResetOtp(): string {
 }
 
 export class UserService {
+  private mail?: MailService;
+  private membershipService?: MembershipService;
+  private purchases?: MembershipPurchaseRepository;
+  private events?: EventService;
+
   constructor(
     private readonly users: UserRepository,
     private readonly speakers?: SpeakerRepository,
     private readonly sponsors?: SponsorRepository,
     private readonly memberships?: MembershipRepository,
-    private readonly mail?: MailService,
   ) {}
+
+  /** Wire invite + complimentary purchase helpers after container services are ready. */
+  configureAttendeeInvite(deps: {
+    mail: MailService;
+    membershipService: MembershipService;
+    purchases: MembershipPurchaseRepository;
+    events: EventService;
+  }): void {
+    this.mail = deps.mail;
+    this.membershipService = deps.membershipService;
+    this.purchases = deps.purchases;
+    this.events = deps.events;
+  }
 
   async list(query: ListUsersQuery): Promise<PaginatedResult<PublicUser>> {
     const { items, total } = await this.users.list(query);
@@ -359,7 +379,6 @@ export class UserService {
     const sponsorId = input.sponsorId ?? null;
     const membershipId =
       role === 'admin' ? null : (input.membershipId ?? null);
-    const providedPassword = input.password?.trim() ?? '';
 
     if (role === 'speaker' && !speakerId) {
       throw new BadRequestError('Speaker accounts must link a speaker profile');
@@ -367,27 +386,22 @@ export class UserService {
     if (role === 'sponsor' && !sponsorId) {
       throw new BadRequestError('Sponsor accounts must link a sponsor profile');
     }
-    if (role === 'admin' && !providedPassword) {
-      throw new BadRequestError('Password is required for admin accounts');
-    }
 
     await this.assertProfileLinks(speakerId, sponsorId);
-    await this.assertMembership(membershipId);
 
-    // Attendee / portal create without password → same invite-code flow as checkout.
-    const useInvite = !providedPassword;
-    const inviteCode = useInvite ? generateInviteCode() : undefined;
-    const inviteExpiresAt = useInvite
-      ? new Date(Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000)
-      : null;
+    if (role === 'member') {
+      return this.createMemberWithInvite(input, membershipId);
+    }
+
+    if (!input.password) {
+      throw new BadRequestError('Password is required');
+    }
+    await this.assertMembership(membershipId);
 
     const created = await this.users.create({
       email: input.email,
       name: input.name,
-      passwordHash: await bcrypt.hash(
-        providedPassword || randomSecretPassword(),
-        PASSWORD_SALT_ROUNDS,
-      ),
+      passwordHash: await bcrypt.hash(input.password, PASSWORD_SALT_ROUNDS),
       role,
       status: input.status ?? 'active',
       speakerId,
@@ -408,26 +422,109 @@ export class UserService {
       isVip: input.isVip,
       points: input.points,
       profileCompleted: input.profileCompleted,
-      inviteCodeHash: inviteCode
-        ? await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS)
-        : null,
-      inviteCodeExpiresAt: inviteExpiresAt,
-      mustChangePassword: useInvite,
     });
 
-    if (inviteCode && this.mail) {
-      try {
-        await this.mail.sendInviteCode({
-          to: created.email,
-          name: created.name,
-          inviteCode,
-          expiresAt: inviteExpiresAt!,
-          dualAccess: Boolean(created.speakerId || created.sponsorId),
-        });
-      } catch (error) {
-        logger.error({ err: error, email: created.email }, 'Failed to send invite email');
-      }
+    return toPublicUser(created);
+  }
+
+  /**
+   * Admin “Create Attendee”: no password — email invite code (same as checkout),
+   * require event + linked membership, reject duplicate emails.
+   */
+  private async createMemberWithInvite(
+    input: CreateUserInput,
+    membershipId: string | null,
+  ): Promise<PublicUser> {
+    const eventId = input.eventId?.trim() ?? '';
+    if (!eventId) {
+      throw new BadRequestError('Event is required');
     }
+    if (!membershipId) {
+      throw new BadRequestError('Membership is required');
+    }
+    if (!this.membershipService || !this.mail || !this.purchases || !this.events) {
+      throw new BadRequestError('Attendee invite is not configured');
+    }
+
+    await this.events.requireEvent(eventId);
+    await this.membershipService.assertLinkedToEvent(membershipId, eventId);
+    const membership = await this.membershipService.requireMembership(membershipId);
+
+    const inviteCode = generateInviteCode();
+    const expiresAt = new Date(
+      Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+    );
+    const period = computeMembershipPeriod({ membership });
+    const nameParts = input.name.trim().split(/\s+/);
+    const firstName = nameParts[0] ?? '';
+    const lastName = nameParts.slice(1).join(' ');
+
+    const created = await this.users.create({
+      email: input.email,
+      name: input.name,
+      firstName,
+      lastName,
+      passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
+      inviteCodeHash: await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS),
+      inviteCodeExpiresAt: expiresAt,
+      mustChangePassword: true,
+      role: 'member',
+      status: input.status ?? 'active',
+      speakerId: null,
+      sponsorId: null,
+      membershipId,
+      membershipStatus: period.membershipStatus,
+      membershipExpiresAt: period.periodEnd,
+      photoUrl: input.photoUrl,
+      title: input.title?.trim() || membership.name,
+      business: input.business,
+      industry: input.industry,
+      location: input.location,
+      bio: input.bio,
+      goals: input.goals,
+      interests: input.interests,
+      networkingPrefs: input.networkingPrefs,
+      linkedinUrl: input.linkedinUrl,
+      instagramUrl: input.instagramUrl,
+      websiteUrl: input.websiteUrl,
+      isVip: input.isVip,
+      points: input.points,
+      profileCompleted: input.profileCompleted ?? false,
+    });
+
+    await this.purchases.create({
+      eventId,
+      userId: created.id,
+      email: created.email,
+      firstName,
+      lastName,
+      membershipId: membership.id,
+      membershipName: membership.name,
+      price: 0,
+      currency: 'usd',
+      couponCode: null,
+      couponId: null,
+      originalPrice: membership.price,
+      discountAmount: membership.price,
+      kind: 'purchase',
+      previousMembershipId: null,
+      previousMembershipName: null,
+      paymentStatus: 'paid',
+      stripeCheckoutSessionId: `admin-invite-${randomUUID()}`,
+      stripePaymentIntentId: null,
+      stripeCustomerId: null,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      purchasedAt: new Date(),
+    });
+
+    await this.mail.sendInviteCode({
+      to: created.email,
+      name: created.name,
+      inviteCode,
+      expiresAt,
+      dualAccess: false,
+    });
 
     return toPublicUser(created);
   }

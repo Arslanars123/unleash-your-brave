@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import type {
   CreateUserPayload,
   NetworkingPref,
+  PublicEvent,
   PublicMembership,
   PublicUser,
   UpdateUserPayload,
@@ -12,6 +13,7 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { MediaImageField, type MediaImageFieldHandle } from '@/shared/ui/MediaImageField';
 import { TextArea } from '@/shared/ui/TextArea';
+import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
 
 export interface AttendeeFormValues {
   email: string;
@@ -33,6 +35,7 @@ export interface AttendeeFormValues {
   points: string;
   profileCompleted: boolean;
   status: 'active' | 'suspended';
+  eventId: string;
   membershipId: string;
 }
 
@@ -58,6 +61,7 @@ const emptyForm: AttendeeFormValues = {
   points: '0',
   profileCompleted: false,
   status: 'active',
+  eventId: '',
   membershipId: '',
 };
 
@@ -82,6 +86,7 @@ function userToForm(user: PublicUser): AttendeeFormValues {
     points: String(user.points ?? 0),
     profileCompleted: Boolean(user.profileCompleted),
     status: user.status,
+    eventId: '',
     membershipId: user.membershipId ?? '',
   };
 }
@@ -106,7 +111,8 @@ function validate(values: AttendeeFormValues, mode: 'create' | 'edit'): FieldErr
   }
 
   if (mode === 'create') {
-    // Password is not collected — backend emails an invite code (checkout-style).
+    if (!values.eventId) errors.eventId = 'Event is required';
+    if (!values.membershipId) errors.membershipId = 'Membership is required';
   } else if (values.password && values.password.length < 8) {
     errors.password = 'Password must be at least 8 characters';
   }
@@ -128,6 +134,8 @@ export function toCreatePayload(values: AttendeeFormValues): CreateUserPayload {
     name: values.fullName.trim(),
     role: 'member',
     status: values.status,
+    eventId: values.eventId,
+    membershipId: values.membershipId,
     photoUrl: values.photoUrl.trim(),
     title: values.title.trim(),
     business: values.business.trim(),
@@ -143,7 +151,6 @@ export function toCreatePayload(values: AttendeeFormValues): CreateUserPayload {
     isVip: values.isVip,
     points: Number(values.points) || 0,
     profileCompleted: values.profileCompleted,
-    membershipId: values.membershipId || null,
   };
 }
 
@@ -242,8 +249,12 @@ interface AttendeeFormModalProps {
   open: boolean;
   mode: 'create' | 'edit';
   initialUser?: PublicUser | null;
+  events?: PublicEvent[];
+  defaultEventId?: string;
   memberships?: PublicMembership[];
+  membershipsLoading?: boolean;
   loading?: boolean;
+  onEventChange?: (eventId: string) => void;
   onClose: () => void;
   onSubmit: (payload: CreateUserPayload | UpdateUserPayload) => Promise<void> | void;
 }
@@ -252,8 +263,12 @@ export function AttendeeFormModal({
   open,
   mode,
   initialUser,
+  events = [],
+  defaultEventId,
   memberships = [],
+  membershipsLoading = false,
   loading = false,
+  onEventChange,
   onClose,
   onSubmit,
 }: AttendeeFormModalProps) {
@@ -267,7 +282,15 @@ export function AttendeeFormModal({
     if (!open) return;
     setSubmitted(false);
     setErrors({});
-    setValues(initialUser ? userToForm(initialUser) : emptyForm);
+    if (initialUser) {
+      setValues(userToForm(initialUser));
+    } else {
+      const eventId = defaultEventId || events[0]?.id || '';
+      setValues({ ...emptyForm, eventId });
+      if (eventId) onEventChange?.(eventId);
+    }
+    // Intentionally only reset when opening / switching user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialUser]);
 
   if (!open) return null;
@@ -275,6 +298,10 @@ export function AttendeeFormModal({
   function update<K extends keyof AttendeeFormValues>(key: K, value: AttendeeFormValues[K]) {
     setValues((current) => {
       const next = { ...current, [key]: value };
+      if (key === 'eventId') {
+        next.membershipId = '';
+        onEventChange?.(String(value));
+      }
       if (submitted) setErrors(validate(next, mode));
       return next;
     });
@@ -348,8 +375,7 @@ export function AttendeeFormModal({
 
           {mode === 'create' ? (
             <p className="hint" style={{ marginTop: -4 }}>
-              No password needed — they’ll get an email with a one-time invite code to sign in and
-              set their own password (same as checkout).
+              No password needed — they get an invite code by email (same as checkout).
             </p>
           ) : (
             <Input
@@ -362,6 +388,68 @@ export function AttendeeFormModal({
               onChange={(e) => update('password', e.target.value)}
             />
           )}
+
+          {mode === 'create' ? (
+            <label className="field">
+              <span className="field-label">
+                Event <span className="required-mark">*</span>
+              </span>
+              <select
+                className="field-input"
+                value={values.eventId}
+                onChange={(e) => update('eventId', e.target.value)}
+                required
+              >
+                <option value="">Select event</option>
+                {events.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {event.name} ({formatEditionRange(event)}
+                    {event.status === 'live'
+                      ? ', live'
+                      : event.status === 'upcoming'
+                        ? ', upcoming'
+                        : event.status === 'ended'
+                          ? ', past'
+                          : ''}
+                    )
+                  </option>
+                ))}
+              </select>
+              {errors.eventId ? <p className="form-error">{errors.eventId}</p> : null}
+            </label>
+          ) : null}
+
+          <label className="field">
+            <span className="field-label">
+              Membership{mode === 'create' ? <span className="required-mark"> *</span> : null}
+            </span>
+            <select
+              className="field-input"
+              value={values.membershipId}
+              onChange={(e) => update('membershipId', e.target.value)}
+              disabled={mode === 'create' && !values.eventId}
+              required={mode === 'create'}
+            >
+              <option value="">
+                {mode === 'create'
+                  ? values.eventId
+                    ? 'Select membership'
+                    : 'Select an event first'
+                  : 'No membership assigned'}
+              </option>
+              {memberships.map((membership) => (
+                <option key={membership.id} value={membership.id}>
+                  {membership.name}
+                  {membership.price != null ? ` ($${membership.price})` : ''}
+                </option>
+              ))}
+            </select>
+            {membershipsLoading ? <p className="hint">Loading memberships…</p> : null}
+            {mode === 'create' && values.eventId && !membershipsLoading && memberships.length === 0 ? (
+              <p className="hint">No memberships are linked to this event yet.</p>
+            ) : null}
+            {errors.membershipId ? <p className="form-error">{errors.membershipId}</p> : null}
+          </label>
 
           <MediaImageField
             ref={photoRef}
@@ -378,22 +466,6 @@ export function AttendeeFormModal({
             value={values.title}
             onChange={(e) => update('title', e.target.value)}
           />
-
-          <label className="field">
-            <span className="field-label">Membership</span>
-            <select
-              className="field-input"
-              value={values.membershipId}
-              onChange={(e) => update('membershipId', e.target.value)}
-            >
-              <option value="">No membership assigned</option>
-              {memberships.map((membership) => (
-                <option key={membership.id} value={membership.id}>
-                  {membership.name}
-                </option>
-              ))}
-            </select>
-          </label>
 
           <Input
             label="business"

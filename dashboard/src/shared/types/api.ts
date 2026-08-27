@@ -55,13 +55,13 @@ export interface PublicUser {
 export interface CreateUserPayload {
   email: string;
   name: string;
-  /** Optional — attendees get an invite-code email instead when omitted. */
   password?: string;
   role?: UserRole;
   status?: UserStatus;
   speakerId?: string | null;
   sponsorId?: string | null;
   membershipId?: string | null;
+  eventId?: string;
   photoUrl?: string;
   title?: string;
   business?: string;

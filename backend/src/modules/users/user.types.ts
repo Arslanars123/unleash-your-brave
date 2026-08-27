@@ -158,12 +158,14 @@ export interface PublicUser {
 export interface CreateUserInput {
   email: string;
   name: string;
-  /** Optional — when omitted for members, an invite code email is sent instead. */
+  /** Required for non-member roles. Member creates use invite email instead. */
   password?: string;
   role?: UserRole;
   speakerId?: string | null;
   sponsorId?: string | null;
   membershipId?: string | null;
+  /** Required when creating a member attendee (invite flow). */
+  eventId?: string;
   photoUrl?: string;
   title?: string;
   business?: string;

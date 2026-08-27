@@ -148,7 +148,6 @@ export async function createContainer() {
     speakerRepository,
     sponsorRepository,
     membershipRepository,
-    mailService,
   );
   const authService = new AuthService(userRepository, userService, mailService);
   const eventService = new EventService(eventRepository);
@@ -168,6 +167,12 @@ export async function createContainer() {
   // CLIENT_TESTING_MODE — remove repository + service + injections when deleting feature.
   const clientTestingRepository = new MongoClientTestingRepository();
   const clientTestingService = new ClientTestingService(clientTestingRepository);
+  userService.configureAttendeeInvite({
+    mail: mailService,
+    membershipService,
+    purchases: membershipPurchaseRepository,
+    events: eventService,
+  });
   const effectiveAccessService = new EffectiveAccessService(
     userRepository,
     membershipRepository,
