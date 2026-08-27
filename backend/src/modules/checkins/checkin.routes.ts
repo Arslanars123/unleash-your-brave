@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate.js';
 import type { CheckInController } from './checkin.controller.js';
 import {
   checkInStatsQuerySchema,
+  cancelMyPendingFormSchema,
   completeCheckInWithFormSchema,
   completeMyCheckInFormSchema,
   listCheckInsQuerySchema,
@@ -37,6 +38,14 @@ export function createCheckInRouter(controller: CheckInController): Router {
     authenticate,
     validate({ query: myPendingFormQuerySchema }),
     asyncHandler(controller.myPendingForm),
+  );
+
+  // Attendee: discard unfinished door scan (show QR again)
+  router.post(
+    '/cancel-my-pending-form',
+    authenticate,
+    validate({ body: cancelMyPendingFormSchema }),
+    asyncHandler(controller.cancelMyPendingForm),
   );
 
   // Attendee: submit waiver on phone → creates check-in

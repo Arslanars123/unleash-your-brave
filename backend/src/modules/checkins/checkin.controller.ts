@@ -26,6 +26,15 @@ export class CheckInController {
     sendSuccess(res, await this.service.getMyPendingForm(req.auth.userId, eventId));
   };
 
+  cancelMyPendingForm = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth) throw new UnauthorizedError();
+    const body = req.body as { eventId?: string };
+    sendSuccess(
+      res,
+      await this.service.cancelMyPendingForm(req.auth.userId, body.eventId),
+    );
+  };
+
   completeMyForm = async (req: Request, res: Response): Promise<void> => {
     if (!req.auth) throw new UnauthorizedError();
     const body = req.body as {
@@ -54,6 +63,7 @@ export class CheckInController {
       userId?: string;
       expectedEventId?: string;
       source?: 'qr' | 'manual';
+      poll?: boolean;
     };
     sendSuccess(
       res,
@@ -63,6 +73,7 @@ export class CheckInController {
         userId: body.userId,
         expectedEventId: body.expectedEventId,
         source: body.source,
+        poll: body.poll,
         adminUserId: req.auth.userId,
       }),
     );

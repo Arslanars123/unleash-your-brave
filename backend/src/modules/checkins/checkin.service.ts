@@ -169,6 +169,8 @@ export class CheckInService {
     userId?: string;
     expectedEventId?: string;
     source?: 'qr' | 'manual';
+    /** When true, only report status — do not create/refresh a pending session. */
+    poll?: boolean;
     adminUserId: string;
   }): Promise<CheckInScanResult> {
     const { eventId, userId } = await this.resolveAttendeeIds(input);
@@ -200,6 +202,19 @@ export class CheckInService {
       const activeForm = await this.checkInForms.findActiveForm(eventId);
       if (activeForm) {
         if (source === 'qr' && this.pendingScans) {
+          // Dashboard wait-loop: report whether the phone session is still open.
+          if (input.poll) {
+            const pending = await this.pendingScans.findActiveByEventAndUser(
+              eventId,
+              userId,
+            );
+            if (pending) {
+              return this.toFormRequiredScanResult(user, eventId, activeForm, true);
+            }
+            // Attendee abandoned / expired without checking in.
+            return this.toIdleScanResult(user, eventId);
+          }
+
           await this.pendingScans.upsert({
             eventId,
             userId,
@@ -224,12 +239,24 @@ export class CheckInService {
     eventId?: string,
   ): Promise<MyPendingCheckInForm> {
     if (!this.pendingScans || !this.checkInForms) {
-      return { pending: false, eventId: null, expiresAt: null, form: null };
+      return {
+        pending: false,
+        eventId: null,
+        scannedAt: null,
+        expiresAt: null,
+        form: null,
+      };
     }
 
     const pending = await this.pendingScans.findActiveByUser(userId, eventId);
     if (!pending) {
-      return { pending: false, eventId: null, expiresAt: null, form: null };
+      return {
+        pending: false,
+        eventId: null,
+        scannedAt: null,
+        expiresAt: null,
+        form: null,
+      };
     }
 
     const existing = await this.checkIns.findByEventAndUser(
@@ -238,21 +265,57 @@ export class CheckInService {
     );
     if (existing) {
       await this.pendingScans.deleteByEventAndUser(pending.eventId, userId);
-      return { pending: false, eventId: null, expiresAt: null, form: null };
+      return {
+        pending: false,
+        eventId: null,
+        scannedAt: null,
+        expiresAt: null,
+        form: null,
+      };
     }
 
     const form = await this.checkInForms.findActiveForm(pending.eventId);
     if (!form || form.id !== pending.formId) {
       await this.pendingScans.deleteById(pending.id);
-      return { pending: false, eventId: null, expiresAt: null, form: null };
+      return {
+        pending: false,
+        eventId: null,
+        scannedAt: null,
+        expiresAt: null,
+        form: null,
+      };
     }
 
     return {
       pending: true,
       eventId: pending.eventId,
+      scannedAt: pending.updatedAt.toISOString(),
       expiresAt: pending.expiresAt.toISOString(),
       form: toPublicCheckInForm(form),
     };
+  }
+
+  /** Clear an unfinished door scan so the attendee can show QR again. */
+  async cancelMyPendingForm(
+    userId: string,
+    eventId?: string,
+  ): Promise<{ cleared: boolean }> {
+    if (!this.pendingScans) return { cleared: false };
+
+    if (eventId) {
+      const pending = await this.pendingScans.findActiveByEventAndUser(
+        eventId,
+        userId,
+      );
+      if (!pending) return { cleared: false };
+      await this.pendingScans.deleteByEventAndUser(eventId, userId);
+      return { cleared: true };
+    }
+
+    const pending = await this.pendingScans.findActiveByUser(userId);
+    if (!pending) return { cleared: false };
+    await this.pendingScans.deleteById(pending.id);
+    return { cleared: true };
   }
 
   async completeMyForm(input: {
@@ -543,6 +606,24 @@ export class CheckInService {
       membershipIdAtCheckIn: user.membershipId ?? null,
       membershipNameAtCheckIn,
     });
+  }
+
+  private async toIdleScanResult(
+    user: NonNullable<Awaited<ReturnType<UserRepository['findById']>>>,
+    eventId: string,
+  ): Promise<CheckInScanResult> {
+    const membership = await this.buildMembershipSummary(user, eventId, null);
+    return {
+      eventId,
+      requiresForm: false,
+      awaitingAttendeeForm: false,
+      form: null,
+      formSubmission: null,
+      checkIn: null,
+      alreadyCheckedIn: false,
+      user: toPublicUser(user),
+      membership,
+    };
   }
 
   private async toFormRequiredScanResult(

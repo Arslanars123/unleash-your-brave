@@ -64,6 +64,8 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
   CheckInQrEntity? _qr;
   CheckInFormEntity? _pendingForm;
   Timer? _pendingPoll;
+  /// Only accept door scans that happen after this screen is ready.
+  DateTime? _listenFrom;
 
   String? get _resolvedEventId {
     final fromWidget = widget.eventId?.trim();
@@ -105,14 +107,19 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
 
   Future<void> _pollPendingForm() async {
     final qr = _qr;
+    final listenFrom = _listenFrom;
     if (!mounted || qr == null || qr.checkedIn || _submittingWaiver) return;
-    if (_pendingForm != null) return;
+    if (_pendingForm != null || listenFrom == null) return;
     try {
-      final form = await sl<CheckInRemoteDataSource>().getMyPendingForm(
+      final pending = await sl<CheckInRemoteDataSource>().getMyPendingForm(
         eventId: qr.eventId.isNotEmpty ? qr.eventId : _resolvedEventId,
       );
-      if (!mounted || form == null) return;
-      setState(() => _pendingForm = form);
+      if (!mounted || pending == null) return;
+      // Ignore leftover sessions from earlier unfinished scans.
+      if (!pending.scannedAt.isAfter(listenFrom.subtract(const Duration(seconds: 2)))) {
+        return;
+      }
+      setState(() => _pendingForm = pending.form);
       _stopPendingPoll();
     } catch (_) {
       // Soft-fail; keep showing QR and try again on the next tick.
@@ -126,20 +133,30 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
       _error = null;
       _needsPurchase = false;
       _pendingForm = null;
+      _listenFrom = null;
     });
     try {
+      final eventHint = _resolvedEventId;
+      // Unfinished prior scans must not open the form on entry — QR first.
+      try {
+        await sl<CheckInRemoteDataSource>().cancelMyPendingForm(
+          eventId: eventHint,
+        );
+      } catch (_) {
+        // Best-effort; still load QR.
+      }
+
       final qr =
-          await sl<CheckInRemoteDataSource>().getMyQr(eventId: _resolvedEventId);
+          await sl<CheckInRemoteDataSource>().getMyQr(eventId: eventHint);
       if (!mounted) return;
       setState(() {
         _qr = qr;
         _loading = false;
+        // Accept only scans that happen after QR is on screen.
+        _listenFrom = DateTime.now();
       });
       if (!qr.checkedIn) {
-        await _pollPendingForm();
-        if (mounted && _pendingForm == null && !qr.checkedIn) {
-          _startPendingPoll();
-        }
+        _startPendingPoll();
       }
     } on NetworkException catch (error) {
       if (!mounted) return;
@@ -390,7 +407,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
               Text(
                 _pendingForm != null
                     ? 'Staff scanned your QR. Complete and submit the waiver below to finish check-in.'
-                    : 'Show this QR at the door. When staff scan it, the waiver form appears here. You are marked checked in only after you submit it.',
+                    : 'Show this QR at the door. Keep this screen open — after staff scan it, the waiver appears here. You are checked in only after you submit.',
                 style: AppTypography.body.copyWith(
                   color: AppColors.textSecondary,
                 ),

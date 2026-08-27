@@ -93,6 +93,8 @@ export interface CheckInScanResult {
 export interface MyPendingCheckInForm {
   pending: boolean;
   eventId: string | null;
+  /** When staff last scanned (ISO). */
+  scannedAt: string | null;
   expiresAt: string | null;
   form: PublicCheckInForm | null;
 }

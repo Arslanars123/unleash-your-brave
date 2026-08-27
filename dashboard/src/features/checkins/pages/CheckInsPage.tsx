@@ -136,6 +136,7 @@ export function CheckInsPage() {
         userId: payload.userId,
         eventId: payload.eventId,
         source: payload.source,
+        poll: payload.poll,
         expectedEventId: eventId ?? undefined,
       }),
     onSuccess: (result, variables) => {
@@ -156,6 +157,24 @@ export function CheckInsPage() {
         toast.success(message);
         setToken('');
         setScanHold(false);
+        setScannerResetKey((value) => value + 1);
+        return;
+      }
+
+      // Poll: attendee closed Check-in / cancelled without submitting.
+      if (
+        variables.poll &&
+        !result.requiresForm &&
+        !result.checkIn &&
+        !result.alreadyCheckedIn
+      ) {
+        setAwaitingAttendee(null);
+        setPendingFormScan(null);
+        pendingPayloadRef.current = null;
+        setScanHold(false);
+        setLastResult(
+          `${result.user.name} is showing QR again — scan when they are ready`,
+        );
         setScannerResetKey((value) => value + 1);
         return;
       }

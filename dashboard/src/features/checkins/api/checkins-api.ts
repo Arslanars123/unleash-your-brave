@@ -51,6 +51,7 @@ export const checkInsApi = {
     userId?: string;
     expectedEventId?: string;
     source?: 'qr' | 'manual';
+    poll?: boolean;
   }): Promise<CheckInScanResult> {
     const { data } = await apiClient.post<SuccessEnvelope<CheckInScanResult>>(
       '/checkins/scan',

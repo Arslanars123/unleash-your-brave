@@ -66,7 +66,9 @@ class CheckInRemoteDataSource {
   }
 
   /// After staff scans the QR, this becomes pending until the attendee submits.
-  Future<CheckInFormEntity?> getMyPendingForm({String? eventId}) async {
+  Future<({CheckInFormEntity form, DateTime scannedAt})?> getMyPendingForm({
+    String? eventId,
+  }) async {
     try {
       final response = await _dioClient.client.get(
         ApiConstants.checkInMyPendingForm,
@@ -79,7 +81,26 @@ class CheckInRemoteDataSource {
       if (data['pending'] != true) return null;
       final form = data['form'];
       if (form is! Map<String, dynamic>) return null;
-      return _formFromJson(form);
+      final scannedAtRaw = data['scannedAt'] as String?;
+      final scannedAt = scannedAtRaw != null && scannedAtRaw.isNotEmpty
+          ? DateTime.tryParse(scannedAtRaw)?.toLocal()
+          : null;
+      if (scannedAt == null) return null;
+      return (form: _formFromJson(form), scannedAt: scannedAt);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  /// Drop an unfinished door scan so Check-in shows the QR again.
+  Future<void> cancelMyPendingForm({String? eventId}) async {
+    try {
+      await _dioClient.client.post(
+        ApiConstants.checkInCancelMyPendingForm,
+        data: {
+          if (eventId != null && eventId.isNotEmpty) 'eventId': eventId,
+        },
+      );
     } on DioException catch (error) {
       throwMappedDioError(error);
     }

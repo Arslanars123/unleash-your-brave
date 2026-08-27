@@ -21,6 +21,8 @@ export const scanCheckInSchema = z
      * Defaults from whether a token was provided.
      */
     source: z.enum(['qr', 'manual']).optional(),
+    /** Status poll only — never creates/refreshes a pending door session. */
+    poll: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.token) return;
@@ -33,6 +35,10 @@ export const scanCheckInSchema = z
   });
 
 export const myPendingFormQuerySchema = z.object({
+  eventId: z.string().uuid().optional(),
+});
+
+export const cancelMyPendingFormSchema = z.object({
   eventId: z.string().uuid().optional(),
 });
 
