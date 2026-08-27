@@ -232,11 +232,6 @@ class _StoreProductDetailPageState extends State<StoreProductDetailPage> {
                           borderRadius:
                               BorderRadius.circular(AppTheme.radiusCard),
                         ),
-                        child: const Icon(
-                          Icons.shopping_bag_outlined,
-                          color: AppColors.accentPink,
-                          size: 40,
-                        ),
                       ),
                     const SizedBox(height: 20),
                     if (product.categoryName?.trim().isNotEmpty == true)
@@ -313,14 +308,23 @@ class _StoreProductDetailPageState extends State<StoreProductDetailPage> {
                     ],
                     const SizedBox(height: 28),
                     FilledButton(
-                      onPressed: null,
+                      onPressed: product.inStock
+                          ? () => context.push(
+                                '/store/products/${product.id}/checkout',
+                                extra: product,
+                              )
+                          : null,
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.accentPink,
                         foregroundColor: AppColors.bgBase,
+                        disabledBackgroundColor: AppColors.bgCard,
+                        disabledForegroundColor: AppColors.textTertiary,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: Text(
-                        'Purchase coming soon',
+                        product.inStock
+                            ? 'Review & purchase'
+                            : 'Out of stock',
                         style: AppTypography.button,
                       ),
                     ),

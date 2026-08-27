@@ -31,3 +31,7 @@ export const submitCheckInFormSchema = z.object({
   signatureDataUrl: z.string().max(2_000_000).optional().default(''),
   signedName: z.string().trim().min(1).max(200),
 });
+
+export const memberSubmitCheckInFormSchema = submitCheckInFormSchema.extend({
+  eventId: z.string().uuid('eventId is required'),
+});

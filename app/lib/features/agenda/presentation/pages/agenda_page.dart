@@ -30,7 +30,11 @@ enum _AgendaStatus { bootstrapping, loading, refreshing, success, offline, error
 enum _DayLoadStatus { idle, loading, ready, offline, error }
 
 class AgendaPage extends StatefulWidget {
-  const AgendaPage({super.key});
+  const AgendaPage({super.key, this.focusEventId});
+
+  /// When set (e.g. from My / Previous events), show that edition’s agenda.
+  /// Home / Map stay on the preferred current edition.
+  final String? focusEventId;
 
   @override
   State<AgendaPage> createState() => _AgendaPageState();
@@ -41,6 +45,7 @@ class _AgendaPageState extends State<AgendaPage> {
 
   _AgendaStatus _status = _AgendaStatus.bootstrapping;
   EventEntity? _event;
+  EventEntity? _currentEvent;
   bool _agendaLocked = false;
   final Map<int, List<SessionEntity>> _sessionsByDay = {};
   final Map<int, _DayLoadStatus> _dayStatus = {};
@@ -57,10 +62,25 @@ class _AgendaPageState extends State<AgendaPage> {
 
   AgendaLocalDataSource get _local => sl<AgendaLocalDataSource>();
 
+  bool get _viewingOtherEdition {
+    final focus = widget.focusEventId?.trim();
+    final currentId = _currentEvent?.id;
+    if (focus == null || focus.isEmpty || currentId == null) return false;
+    return focus != currentId;
+  }
+
   @override
   void initState() {
     super.initState();
     unawaited(_bootstrap());
+  }
+
+  @override
+  void didUpdateWidget(covariant AgendaPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusEventId != widget.focusEventId) {
+      unawaited(_load(isRefresh: false, silentIfCached: false));
+    }
   }
 
   @override
@@ -171,16 +191,30 @@ class _AgendaPageState extends State<AgendaPage> {
     }
 
     try {
-      final cubit = context.read<SelectedEventCubit>();
-      await cubit.ensureReady();
-      final selectedId = cubit.state.eventId;
+      EventEntity? current;
+      try {
+        current = await sl<EventsRemoteDataSource>().getCurrent();
+      } catch (_) {
+        current = null;
+      }
+
+      final focusId = widget.focusEventId?.trim();
       EventModel event;
-      if (selectedId != null && selectedId.isNotEmpty) {
-        event = await sl<EventsRemoteDataSource>().getById(selectedId);
-      } else if (cubit.state.event != null) {
-        event = await sl<EventsRemoteDataSource>().getById(cubit.state.event!.id);
+      if (focusId != null && focusId.isNotEmpty) {
+        event = await sl<EventsRemoteDataSource>().getById(focusId);
+      } else if (current != null) {
+        event = await sl<EventsRemoteDataSource>().getById(current.id);
       } else {
-        throw const ServerException('No event selected');
+        final cubit = context.read<SelectedEventCubit>();
+        await cubit.ensureReady();
+        final selectedId = cubit.state.eventId;
+        if (selectedId != null && selectedId.isNotEmpty) {
+          event = await sl<EventsRemoteDataSource>().getById(selectedId);
+        } else if (cubit.state.event != null) {
+          event = await sl<EventsRemoteDataSource>().getById(cubit.state.event!.id);
+        } else {
+          throw const ServerException('No event selected');
+        }
       }
       await _local.cacheEvent(event);
       if (!mounted) return;
@@ -199,6 +233,7 @@ class _AgendaPageState extends State<AgendaPage> {
       final nextDay = event.days.isEmpty ? null : _resolveSelectedDay(event);
       setState(() {
         _event = event;
+        _currentEvent = current;
         _agendaLocked = agendaLocked;
         _selectedDayNumber = nextDay;
         _status = _AgendaStatus.success;
@@ -481,10 +516,13 @@ class _AgendaPageState extends State<AgendaPage> {
     final sidePad = context.pagePadding.left;
 
     return BlocListener<SelectedEventCubit, SelectedEventState>(
-      listenWhen: (prev, next) =>
-          next.eventId != null &&
-          next.eventId!.isNotEmpty &&
-          prev.eventId != next.eventId,
+      listenWhen: (prev, next) {
+        // Only follow global current-event changes when not viewing another edition.
+        if (widget.focusEventId?.trim().isNotEmpty == true) return false;
+        return next.eventId != null &&
+            next.eventId!.isNotEmpty &&
+            prev.eventId != next.eventId;
+      },
       listener: (context, state) {
         if (state.eventId == _boundEventId) return;
         unawaited(_load(isRefresh: false, silentIfCached: false));
@@ -523,11 +561,15 @@ class _AgendaPageState extends State<AgendaPage> {
                   ? _ScrollableFill(
                       child: _AgendaLockedView(
                         event: _event,
+                        showBackToCurrent: _viewingOtherEdition,
+                        onBackToCurrent: () => context.go('/agenda'),
                       ),
                     )
                   : _AgendaBody(
                 sidePad: sidePad,
                 event: _event,
+                showBackToCurrent: _viewingOtherEdition,
+                onBackToCurrent: () => context.go('/agenda'),
                 selectedDay: _selectedDay,
                 selectedDayNumber: _selectedDayNumber,
                 sessions: _pagedSessions,
@@ -582,9 +624,15 @@ class _ScrollableFill extends StatelessWidget {
 }
 
 class _AgendaLockedView extends StatelessWidget {
-  const _AgendaLockedView({required this.event});
+  const _AgendaLockedView({
+    required this.event,
+    this.showBackToCurrent = false,
+    this.onBackToCurrent,
+  });
 
   final EventEntity? event;
+  final bool showBackToCurrent;
+  final VoidCallback? onBackToCurrent;
 
   @override
   Widget build(BuildContext context) {
@@ -596,23 +644,33 @@ class _AgendaLockedView extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.lock_outline,
-                size: 40,
-                color: AppColors.textTertiary,
-              ),
-              const SizedBox(height: 16),
+              if (showBackToCurrent && onBackToCurrent != null) ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: onBackToCurrent,
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    label: const Text('Back to current event agenda'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.accentPink,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+              if (event?.dateRangeLabel.isNotEmpty == true) ...[
+                Text(
+                  event!.dateRangeLabel,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+              ],
               Text(
-                'Agenda locked',
-                style: AppTypography.headline.copyWith(fontSize: 24),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                event?.dateRangeLabel.isNotEmpty == true
-                    ? '${event!.dateRangeLabel}\nAdmin has not enabled agenda access for this edition.'
-                    : 'Admin has not enabled agenda access for this edition.',
-                style: AppTypography.caption.copyWith(height: 1.45),
+                'Admin has not enabled agenda access for this edition for you.',
+                style: AppTypography.body.copyWith(height: 1.45),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -645,6 +703,8 @@ class _AgendaBody extends StatelessWidget {
     required this.suggestionsFor,
     required this.onPageChanged,
     required this.onRetryDay,
+    this.showBackToCurrent = false,
+    this.onBackToCurrent,
   });
 
   final double sidePad;
@@ -667,6 +727,8 @@ class _AgendaBody extends StatelessWidget {
   final List<SearchSuggestionItem> Function(String draft) suggestionsFor;
   final ValueChanged<int> onPageChanged;
   final VoidCallback onRetryDay;
+  final bool showBackToCurrent;
+  final VoidCallback? onBackToCurrent;
 
   @override
   Widget build(BuildContext context) {
@@ -691,6 +753,22 @@ class _AgendaBody extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (showBackToCurrent && onBackToCurrent != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: onBackToCurrent,
+                          icon: const Icon(Icons.arrow_back, size: 18),
+                          label: const Text('Back to current event agenda'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.accentPink,
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     Text(
                       'AGENDA',
                       style: AppTypography.microLabel.copyWith(

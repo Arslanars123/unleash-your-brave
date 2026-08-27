@@ -426,6 +426,16 @@ export interface SpeakerPayload {
   photo?: string;
 }
 
+/** Editions where the authenticated speaker has sessions / associations. */
+export interface SpeakerLinkedEvent {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  sessionCount: number;
+}
+
 export type SessionMaterialType = 'pdf' | 'video' | 'doc' | 'link';
 
 export interface PublicMembership {
@@ -733,6 +743,15 @@ export interface CountdownSettings {
 export interface UpdateCountdownSettingsPayload {
   enabled?: boolean;
   rules?: CountdownRule[];
+}
+
+export interface AppBranding {
+  homeCoverImage: string;
+  updatedAt: string;
+}
+
+export interface UpdateAppBrandingPayload {
+  homeCoverImage?: string;
 }
 
 export interface PublicPostAuthor {

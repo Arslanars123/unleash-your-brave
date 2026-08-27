@@ -6,7 +6,11 @@ import type { CreateSessionInput, ListSessionsQuery, UpdateSessionInput } from '
 
 function viewerFromRequest(req: Request): SessionViewerContext | undefined {
   if (!req.auth) return undefined;
-  return { userId: req.auth.userId, role: req.auth.role };
+  return {
+    userId: req.auth.userId,
+    role: req.auth.role,
+    speakerId: req.auth.speakerId ?? null,
+  };
 }
 
 export class SessionController {

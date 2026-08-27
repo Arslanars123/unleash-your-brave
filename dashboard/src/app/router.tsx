@@ -5,6 +5,7 @@ import { getHomePathForUser, useAuth } from '@/features/auth/context/AuthProvide
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { SetPasswordPage } from '@/features/auth/pages/SetPasswordPage';
+import { AppBrandingPage } from '@/features/branding/pages/AppBrandingPage';
 import { OverviewPage } from '@/features/dashboard/pages/OverviewPage';
 import { AnnouncementsPage } from '@/features/announcements/pages/AnnouncementsPage';
 import { CountdownSettingsPage } from '@/features/announcements/pages/CountdownSettingsPage';
@@ -49,6 +50,7 @@ export function AppRouter() {
           <Route element={<AppShell />}>
             <Route element={<ProtectedRoute roles={['admin']} />}>
               <Route index element={<OverviewPage />} />
+              <Route path="app-home" element={<AppBrandingPage />} />
               <Route path="events" element={<EventsPage />} />
               <Route path="sessions" element={<SessionsPage />} />
               <Route path="speakers" element={<SpeakersPage />} />

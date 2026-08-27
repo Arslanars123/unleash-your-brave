@@ -34,7 +34,12 @@ import 'package:url_launcher/url_launcher.dart';
 }
 
 class EventsListPage extends StatefulWidget {
-  const EventsListPage({super.key});
+  const EventsListPage({super.key, this.initialFocus});
+
+  /// `discover` = upcoming events not yet purchased.
+  /// `previous` = all ended editions (purchased or not).
+  /// Anything else (including null) = My events bookings only.
+  final String? initialFocus;
 
   @override
   State<EventsListPage> createState() => _EventsListPageState();
@@ -45,7 +50,11 @@ class _EventsListPageState extends State<EventsListPage> {
   String? _error;
   List<EventBookingEntity> _bookings = const [];
   List<EventEntity> _available = const [];
+  List<EventEntity> _previous = const [];
   bool _purchasing = false;
+
+  bool get _isDiscover => widget.initialFocus == 'discover';
+  bool get _isPrevious => widget.initialFocus == 'previous';
 
   @override
   void initState() {
@@ -62,16 +71,25 @@ class _EventsListPageState extends State<EventsListPage> {
       final results = await Future.wait([
         sl<CheckInRemoteDataSource>().getMyBookings(),
         sl<EventsRemoteDataSource>().listAvailable(),
+        sl<EventsRemoteDataSource>().listPrevious(),
       ]);
       if (!mounted) return;
       final bookings = results[0] as List<EventBookingEntity>;
       final available = results[1] as List<EventEntity>;
-      final bookedIds = bookings.map((b) => b.event.id).toSet();
+      final previous = results[2] as List<EventEntity>;
+      // Purchased for this edition (not content carried from another edition).
+      final purchasedIds = bookings
+          .where((b) => !b.carriedFromPrevious)
+          .map((b) => b.event.id)
+          .toSet();
       setState(() {
-        _bookings = bookings;
-        _available = available
-            .where((e) => !bookedIds.contains(e.id))
+        _bookings = bookings
+            .where((b) => !b.carriedFromPrevious)
             .toList(growable: false);
+        _available = available
+            .where((e) => !purchasedIds.contains(e.id))
+            .toList(growable: false);
+        _previous = previous;
         _loading = false;
       });
     } on NetworkException catch (error) {
@@ -195,7 +213,7 @@ class _EventsListPageState extends State<EventsListPage> {
       );
 
       if (selected == null || !mounted) return;
-      await _checkout(user: user, membership: selected);
+      await _checkout(user: user, membership: selected, eventId: event.id);
     } on NetworkException catch (error) {
       AppToast.error(error.message);
     } on ServerException catch (error) {
@@ -210,6 +228,7 @@ class _EventsListPageState extends State<EventsListPage> {
   Future<void> _checkout({
     required UserEntity user,
     required MembershipEntity membership,
+    required String eventId,
   }) async {
     try {
       final names = _splitDisplayName(user.name);
@@ -219,6 +238,7 @@ class _EventsListPageState extends State<EventsListPage> {
         email: user.email,
         firstName: names.firstName,
         lastName: names.lastName,
+        eventId: eventId,
         successUrl: ApiConstants.checkoutSuccessUrl,
         cancelUrl: ApiConstants.checkoutCancelUrl,
       );
@@ -248,8 +268,28 @@ class _EventsListPageState extends State<EventsListPage> {
       .where((b) => b.event.isLive || b.event.isUpcoming || b.event.isPaused)
       .toList(growable: false);
 
-  List<EventBookingEntity> get _pastBookings =>
-      _bookings.where((b) => b.event.isEnded).toList(growable: false);
+  EventBookingEntity? _purchaseFor(String eventId) {
+    for (final booking in _bookings) {
+      if (booking.event.id == eventId) return booking;
+    }
+    return null;
+  }
+
+  String get _pageTitle {
+    if (_isDiscover) return 'Upcoming events';
+    if (_isPrevious) return 'Previous events';
+    return 'My events';
+  }
+
+  String get _pageHint {
+    if (_isDiscover) {
+      return 'Events you can still book. Purchase a membership to unlock agenda, materials, and check-in for that edition.';
+    }
+    if (_isPrevious) {
+      return 'All past editions — whether you purchased a membership or not. Open one to view agenda when access allows.';
+    }
+    return 'Your purchased upcoming and live editions. Open any booking to view its agenda — access follows Event permissions set by admin.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -257,7 +297,7 @@ class _EventsListPageState extends State<EventsListPage> {
       backgroundColor: AppColors.bgBase,
       appBar: buildSubpageAppBar(
         context,
-        title: 'My events',
+        title: _pageTitle,
         fallbackLocation: '/',
       ),
       body: RefreshIndicator(
@@ -277,7 +317,7 @@ class _EventsListPageState extends State<EventsListPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Open any past or upcoming booking to view its agenda. What you can see follows Event access permissions set by admin.',
+                          _pageHint,
                           style: AppTypography.caption.copyWith(height: 1.45),
                         ),
                         SizedBox(height: context.sectionGap),
@@ -290,14 +330,60 @@ class _EventsListPageState extends State<EventsListPage> {
                               minHeight: 2,
                             ),
                           ),
-                        _SectionLabel('Your bookings'),
-                        const SizedBox(height: 10),
-                        if (_bookings.isEmpty)
-                          _EmptyHint(
-                            'You don’t have event access yet. Browse available events below to purchase a pass.',
-                          )
-                        else ...[
-                          if (_currentBookings.isNotEmpty) ...[
+                        if (_isDiscover) ...[
+                          _SectionLabel('Open for booking'),
+                          const SizedBox(height: 10),
+                          if (_available.isEmpty)
+                            const _EmptyHint(
+                              'No upcoming events are open for booking right now.',
+                            )
+                          else
+                            for (final event in _available) ...[
+                              _AvailableEventCard(
+                                event: event,
+                                onOpen: () => context.push(
+                                  '/events/${event.id}',
+                                  extra: event,
+                                ),
+                                onBook: () => _openPurchase(event),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                        ] else if (_isPrevious) ...[
+                          _SectionLabel('Past editions'),
+                          const SizedBox(height: 10),
+                          if (_previous.isEmpty)
+                            const _EmptyHint(
+                              'No previous events to show yet.',
+                            )
+                          else
+                            for (final event in _previous) ...[
+                              _PreviousEventCard(
+                                event: event,
+                                purchase: _purchaseFor(event.id),
+                                onOpen: () async {
+                                  await _selectEvent(event);
+                                  if (!context.mounted) return;
+                                  final purchase = _purchaseFor(event.id);
+                                  context.push(
+                                    '/events/${event.id}',
+                                    extra: purchase ?? event,
+                                  );
+                                },
+                                onViewAgenda: () {
+                                  context.go('/agenda?eventId=${event.id}');
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                        ] else ...[
+                          _SectionLabel('Your bookings'),
+                          const SizedBox(height: 10),
+                          if (_currentBookings.isEmpty)
+                            const _EmptyHint(
+                              'You don’t have any purchased upcoming events yet. Open Upcoming events from the menu to book a pass.',
+                            )
+                          else
                             for (final booking in _currentBookings) ...[
                               _BookingCard(
                                 booking: booking,
@@ -309,44 +395,11 @@ class _EventsListPageState extends State<EventsListPage> {
                                     extra: booking,
                                   );
                                 },
-                                onViewAgenda: () async {
-                                  await _selectEvent(booking.event);
-                                  if (!context.mounted) return;
-                                  context.go('/agenda');
-                                },
-                                onQr: booking.qrEntitled
-                                    ? () async {
-                                        await _selectEvent(booking.event);
-                                        if (!context.mounted) return;
-                                        context.push(
-                                          '/check-in?eventId=${booking.event.id}',
-                                        );
-                                      }
-                                    : null,
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                          ],
-                          if (_pastBookings.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            _SectionLabel('Previous'),
-                            const SizedBox(height: 10),
-                            for (final booking in _pastBookings) ...[
-                              _BookingCard(
-                                booking: booking,
-                                onOpen: () async {
-                                  await _selectEvent(booking.event);
-                                  if (!context.mounted) return;
-                                  context.push(
-                                    '/events/${booking.event.id}',
-                                    extra: booking,
+                                onViewAgenda: () {
+                                  context.go(
+                                    '/agenda?eventId=${booking.event.id}',
                                   );
                                 },
-                                onViewAgenda: () async {
-                                  await _selectEvent(booking.event);
-                                  if (!context.mounted) return;
-                                  context.go('/agenda');
-                                },
                                 onQr: booking.qrEntitled
                                     ? () async {
                                         await _selectEvent(booking.event);
@@ -359,25 +412,7 @@ class _EventsListPageState extends State<EventsListPage> {
                               ),
                               const SizedBox(height: 12),
                             ],
-                          ],
                         ],
-                        SizedBox(height: context.sectionGap),
-                        _SectionLabel('Discover'),
-                        const SizedBox(height: 10),
-                        if (_available.isEmpty)
-                          const _EmptyHint(
-                            'No other upcoming events are open for booking right now.',
-                          )
-                        else
-                          for (final event in _available) ...[
-                            _AvailableEventCard(
-                              event: event,
-                              onOpen: () =>
-                                  context.push('/events/${event.id}', extra: event),
-                              onBook: () => _openPurchase(event),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
                       ],
                     ),
         ),
@@ -432,12 +467,14 @@ class _BookingCard extends StatelessWidget {
     required this.booking,
     required this.onOpen,
     required this.onViewAgenda,
+    this.onBook,
     this.onQr,
   });
 
   final EventBookingEntity booking;
   final VoidCallback onOpen;
   final VoidCallback onViewAgenda;
+  final VoidCallback? onBook;
   final VoidCallback? onQr;
 
   @override
@@ -491,6 +528,15 @@ class _BookingCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+              ] else if (booking.carriedFromPrevious) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Preview access · purchase to unlock QR',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.accentPink,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
               if (booking.checkedIn) ...[
                 const SizedBox(height: 6),
@@ -526,6 +572,114 @@ class _BookingCard extends StatelessWidget {
                     ),
                   ],
                 ],
+              ),
+              if (onBook != null) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: onBook,
+                    child: const Text('Book / Purchase'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviousEventCard extends StatelessWidget {
+  const _PreviousEventCard({
+    required this.event,
+    required this.onOpen,
+    required this.onViewAgenda,
+    this.purchase,
+  });
+
+  final EventEntity event;
+  final EventBookingEntity? purchase;
+  final VoidCallback onOpen;
+  final VoidCallback onViewAgenda;
+
+  @override
+  Widget build(BuildContext context) {
+    final purchased = purchase != null;
+    final membershipLabel = purchase?.effectiveMembershipName;
+    return Material(
+      color: AppColors.bgCard,
+      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      event.name,
+                      style: AppTypography.body.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  _StatusChip(status: event.status),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                event.dateRangeLabel,
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              if (event.venueLabel.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  event.venueLabel,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 6),
+              Text(
+                purchased
+                    ? (membershipLabel?.isNotEmpty == true
+                        ? 'Purchased · $membershipLabel'
+                        : 'Purchased')
+                    : 'Not purchased',
+                style: AppTypography.caption.copyWith(
+                  color: purchased
+                      ? AppColors.accentPink
+                      : AppColors.textTertiary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onViewAgenda,
+                  icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                  label: const Text('View agenda'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.borderSubtle),
+                  ),
+                ),
               ),
             ],
           ),

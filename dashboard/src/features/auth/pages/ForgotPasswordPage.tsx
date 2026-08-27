@@ -97,7 +97,7 @@ export function ForgotPasswordPage() {
   return (
     <div className="auth-shell">
       <div className="auth-card">
-        <BrandLogo height={156} />
+        <BrandLogo height={200} />
         <h1>Reset password</h1>
         <p className="muted">
           {step === 'email' && 'Enter your email and we will send a verification code.'}

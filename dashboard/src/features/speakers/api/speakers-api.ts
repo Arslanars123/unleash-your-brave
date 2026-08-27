@@ -2,6 +2,7 @@ import { apiClient } from '@/shared/api/client';
 import type {
   PaginationMeta,
   PublicSpeaker,
+  SpeakerLinkedEvent,
   SpeakerPayload,
   SuccessEnvelope,
 } from '@/shared/types/api';
@@ -36,6 +37,13 @@ export const speakersApi = {
 
   async getMe(): Promise<PublicSpeaker> {
     const { data } = await apiClient.get<SuccessEnvelope<PublicSpeaker>>('/speakers/me');
+    return data.data;
+  },
+
+  async listMyEvents(): Promise<SpeakerLinkedEvent[]> {
+    const { data } = await apiClient.get<SuccessEnvelope<SpeakerLinkedEvent[]>>(
+      '/speakers/me/events',
+    );
     return data.data;
   },
 

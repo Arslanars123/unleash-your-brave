@@ -39,6 +39,8 @@ function normalizeMaterials(materials: SessionMaterialInput[] | undefined): Sess
 export interface SessionViewerContext {
   userId: string;
   role: UserRole;
+  /** When set, the viewer may manage sessions assigned to this speaker. */
+  speakerId?: string | null;
 }
 
 function isSessionAccessible(session: Session, membershipIds: string[]): boolean {
@@ -64,33 +66,61 @@ export class SessionService {
     query: ListSessionsQuery,
     viewer?: SessionViewerContext,
   ): Promise<PaginatedResult<PublicSession>> {
-    const featureAccess = viewer
-      ? await this.resolveFeatureAccess(viewer.userId, query.eventId)
-      : null;
-    const accessibleIds = featureAccess?.accessibleMembershipIds
-      ?? (viewer
-        ? await this.resolveAccessibleMembershipIds(viewer.userId, query.eventId)
-        : []);
-
     const { items, total } = await this.sessions.list(query);
+    // Resolve attendee feature access per edition — never reuse the preferred/current
+    // event's locks for sessions that belong to other editions.
+    const accessByEvent = new Map<
+      string,
+      {
+        featureAccess: Awaited<ReturnType<EffectiveAccessService['resolveForUser']>> | null;
+        accessibleIds: string[];
+      }
+    >();
+
     const mapped = await Promise.all(
-      items.map((session) =>
-        this.toPublic(
+      items.map(async (session) => {
+        if (this.isSpeakerOwner(session, viewer) || viewer?.role === 'admin') {
+          return this.toPublic(session, {
+            accessRestricted: false,
+            agendaLocked: false,
+            materialsLocked: false,
+            reviewsLocked: false,
+          });
+        }
+
+        if (!viewer) {
+          return this.toPublic(session);
+        }
+
+        let cached = accessByEvent.get(session.eventId);
+        if (!cached) {
+          const featureAccess = await this.resolveFeatureAccess(viewer.userId, session.eventId);
+          const accessibleIds =
+            featureAccess?.accessibleMembershipIds ??
+            (await this.resolveAccessibleMembershipIds(viewer.userId, session.eventId));
+          cached = { featureAccess, accessibleIds };
+          accessByEvent.set(session.eventId, cached);
+        }
+
+        return this.toPublic(
           session,
-          this.buildLocks(
-            session,
-            accessibleIds,
-            viewer,
-            featureAccess,
-          ),
-        ),
-      ),
+          this.buildLocks(session, cached.accessibleIds, viewer, cached.featureAccess),
+        );
+      }),
     );
     return { items: mapped, total };
   }
 
   async getById(id: string, viewer?: SessionViewerContext): Promise<PublicSession> {
     const session = await this.requireSession(id);
+    if (this.isSpeakerOwner(session, viewer) || viewer?.role === 'admin') {
+      return this.toPublic(session, {
+        accessRestricted: false,
+        agendaLocked: false,
+        materialsLocked: false,
+        reviewsLocked: false,
+      });
+    }
     const featureAccess = viewer
       ? await this.resolveFeatureAccess(viewer.userId, session.eventId)
       : null;
@@ -222,19 +252,32 @@ export class SessionService {
     return this.access.resolveForUser(userId, eventId);
   }
 
+  private isSpeakerOwner(session: Session, viewer?: SessionViewerContext): boolean {
+    return Boolean(
+      viewer?.speakerId && session.speakerId && viewer.speakerId === session.speakerId,
+    );
+  }
+
   private buildLocks(
     session: Session,
     accessibleIds: string[],
     viewer: SessionViewerContext | undefined,
     featureAccess: Awaited<ReturnType<EffectiveAccessService['resolveForUser']>> | null,
   ) {
+    if (this.isSpeakerOwner(session, viewer) || viewer?.role === 'admin') {
+      return {
+        accessRestricted: false,
+        agendaLocked: false,
+        materialsLocked: false,
+        reviewsLocked: false,
+      };
+    }
     const accessRestricted = this.isAccessRestricted(session, accessibleIds, viewer);
-    const isAdmin = viewer?.role === 'admin';
     return {
       accessRestricted,
-      agendaLocked: !isAdmin && featureAccess ? !featureAccess.viewAgenda : false,
-      materialsLocked: !isAdmin && featureAccess ? !featureAccess.viewMaterials : false,
-      reviewsLocked: !isAdmin && featureAccess ? !featureAccess.submitReviews : false,
+      agendaLocked: featureAccess ? !featureAccess.viewAgenda : false,
+      materialsLocked: featureAccess ? !featureAccess.viewMaterials : false,
+      reviewsLocked: featureAccess ? !featureAccess.submitReviews : false,
     };
   }
 

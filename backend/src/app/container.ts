@@ -1,3 +1,6 @@
+import { AppBrandingController } from '../modules/app-branding/app-branding.controller.js';
+import { createAppBrandingRouter } from '../modules/app-branding/app-branding.routes.js';
+import { AppBrandingService } from '../modules/app-branding/app-branding.service.js';
 import { AccessController } from '../modules/access/access.controller.js';
 import { createAccessRouter } from '../modules/access/access.routes.js';
 import { EffectiveAccessService } from '../modules/access/access.service.js';
@@ -14,6 +17,7 @@ import { ChatService } from '../modules/chat/chat.service.js';
 import { PushNotificationService } from '../modules/chat/push.service.js';
 import { CheckInController } from '../modules/checkins/checkin.controller.js';
 import { createCheckInRouter } from '../modules/checkins/checkin.routes.js';
+import { CheckInQrTokenRepository } from '../modules/checkins/checkin-qr-token.repository.js';
 import { CheckInService } from '../modules/checkins/checkin.service.js';
 import { CheckInFormController } from '../modules/checkin-forms/checkin-form.controller.js';
 import { createCheckInFormRouter } from '../modules/checkin-forms/checkin-form.routes.js';
@@ -62,6 +66,7 @@ import { createRealtimeRouter } from '../modules/realtime/realtime.routes.js';
 import { connectMongo } from '../db/mongo.js';
 import { MongoAnnouncementRepository } from '../db/repositories/mongo-announcement.repository.js';
 import { MongoAnnouncementReadRepository } from '../db/repositories/mongo-announcement-read.repository.js';
+import { MongoAppBrandingRepository } from '../db/repositories/mongo-app-branding.repository.js';
 import { MongoCountdownSettingsRepository } from '../db/repositories/mongo-countdown-settings.repository.js';
 import { MongoChatGroupRepository } from '../db/repositories/mongo-chat-group.repository.js';
 import { MongoChatMemberStateRepository } from '../db/repositories/mongo-chat-member-state.repository.js';
@@ -115,10 +120,13 @@ export async function createContainer() {
   const announcementRepository = new MongoAnnouncementRepository();
   const announcementReadRepository = new MongoAnnouncementReadRepository();
   const countdownSettingsRepository = new MongoCountdownSettingsRepository();
+  const appBrandingRepository = new MongoAppBrandingRepository();
   const checkInRepository = new MongoCheckInRepository();
   await checkInRepository.ensureIndexes();
   const checkInFormRepository = new MongoCheckInFormRepository();
   await checkInFormRepository.ensureIndexes();
+  const checkInQrTokenRepository = new CheckInQrTokenRepository();
+  await checkInQrTokenRepository.ensureIndexes();
   const postRepository = new MongoPostRepository();
   const chatGroupRepository = new MongoChatGroupRepository();
   const chatMessageRepository = new MongoChatMessageRepository();
@@ -172,6 +180,7 @@ export async function createContainer() {
     memberships: membershipService,
   });
   speakerService.setAssociationService(eventAssociationService);
+  speakerService.setSessionRepository(sessionRepository);
   sponsorService.setAssociationService(eventAssociationService);
   membershipService.setAssociationService(eventAssociationService);
   eventService.setAssociationService(eventAssociationService);
@@ -239,6 +248,7 @@ export async function createContainer() {
     checkInFormService,
     effectiveAccessService,
     membershipLifecycleService,
+    checkInQrTokenRepository,
   );
   const postService = new PostService(postRepository, userRepository);
   const chatHub = new ChatHub();
@@ -270,6 +280,8 @@ export async function createContainer() {
   const accessController = new AccessController(effectiveAccessService);
   const checkoutController = new CheckoutController(checkoutService);
   const announcementController = new AnnouncementController(announcementService);
+  const appBrandingService = new AppBrandingService(appBrandingRepository);
+  const appBrandingController = new AppBrandingController(appBrandingService);
   const checkInFormController = new CheckInFormController(checkInFormService);
   const checkInController = new CheckInController(checkInService);
   const postController = new PostController(postService);
@@ -310,6 +322,7 @@ export async function createContainer() {
       access: createAccessRouter(accessController),
       checkout: createCheckoutRouter(checkoutController),
       announcements: createAnnouncementRouter(announcementController),
+      appBranding: createAppBrandingRouter(appBrandingController),
       checkinForms: createCheckInFormRouter(checkInFormController),
       checkins: createCheckInRouter(checkInController),
       posts: createPostRouter(postController),

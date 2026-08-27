@@ -51,7 +51,7 @@ export function SetPasswordPage() {
   return (
     <div className="auth-shell">
       <form className="auth-card" onSubmit={onSubmit} noValidate>
-        <BrandLogo height={156} />
+        <BrandLogo height={200} />
         <h1>Set your password</h1>
         <p className="muted">Create a password for your portal account.</p>
 

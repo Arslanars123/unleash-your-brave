@@ -13,6 +13,7 @@ import type { MembershipRepository } from '../memberships/membership.repository.
 import { toPublicUser } from '../users/user.mapper.js';
 import type { UserRepository } from '../users/user.repository.js';
 import { toPublicCheckIn } from './checkin.mapper.js';
+import type { CheckInQrTokenRepository } from './checkin-qr-token.repository.js';
 import { issueCheckInToken, verifyCheckInToken } from './checkin.token.js';
 import type {
   CheckIn,
@@ -64,6 +65,7 @@ export class CheckInService {
     private readonly checkInForms?: CheckInFormService,
     private readonly access?: EffectiveAccessService,
     private readonly membershipLifecycle?: MembershipLifecycleService,
+    private readonly qrTokens?: CheckInQrTokenRepository,
   ) {}
 
   async getMyQr(userId: string, eventId?: string): Promise<MyCheckInQr> {
@@ -107,7 +109,7 @@ export class CheckInService {
       eventName: event.name,
       eventStatus: event.status,
       userId,
-      token: issueCheckInToken(event.id, userId),
+      token: await issueCheckInToken(event.id, userId, this.qrTokens),
       checkedIn: Boolean(existing),
       checkedInAt: existing?.checkedInAt.toISOString() ?? null,
     };
@@ -160,7 +162,7 @@ export class CheckInService {
     expectedEventId?: string;
     adminUserId: string;
   }): Promise<CheckInScanResult> {
-    const { eventId, userId } = this.resolveAttendeeIds(input);
+    const { eventId, userId } = await this.resolveAttendeeIds(input);
 
     const event = await this.events.getById(eventId);
     if (!event) throw new NotFoundError('Event');
@@ -217,7 +219,7 @@ export class CheckInService {
       throw new BadRequestError('Check-in forms are not available');
     }
 
-    const { eventId, userId } = this.resolveAttendeeIds(input);
+    const { eventId, userId } = await this.resolveAttendeeIds(input);
 
     const event = await this.events.getById(eventId);
     if (!event) throw new NotFoundError('Event');
@@ -344,17 +346,17 @@ export class CheckInService {
     };
   }
 
-  private resolveAttendeeIds(input: {
+  private async resolveAttendeeIds(input: {
     token?: string;
     eventId?: string;
     userId?: string;
     expectedEventId?: string;
-  }): { eventId: string; userId: string } {
+  }): Promise<{ eventId: string; userId: string }> {
     let eventId: string;
     let userId: string;
 
     if (input.token) {
-      const decoded = verifyCheckInToken(input.token);
+      const decoded = await verifyCheckInToken(input.token, this.qrTokens);
       eventId = decoded.eventId;
       userId = decoded.userId;
     } else if (input.eventId && input.userId) {

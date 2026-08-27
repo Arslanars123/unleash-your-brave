@@ -22,6 +22,11 @@ export class SpeakerController {
     sendSuccess(res, await this.service.getById(req.auth.speakerId));
   };
 
+  linkedEvents = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth?.speakerId) throw new ForbiddenError('No speaker profile linked to this account');
+    sendSuccess(res, await this.service.listLinkedEvents(req.auth.speakerId));
+  };
+
   create = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.create(req.body as CreateSpeakerInput), 201);
   };

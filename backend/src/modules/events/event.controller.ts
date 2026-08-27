@@ -37,6 +37,10 @@ export class EventController {
     sendSuccess(res, await this.service.listAvailableForPurchase());
   };
 
+  listPrevious = async (_req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.service.listPrevious());
+  };
+
   create = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.create(req.body as CreateEventInput), 201);
   };

@@ -12,6 +12,7 @@ class EventModel extends EventEntity {
     required super.venueCity,
     super.venueName,
     super.venueAddress,
+    super.coverImage,
     super.latitude,
     super.longitude,
     super.days,
@@ -34,6 +35,7 @@ class EventModel extends EventEntity {
       venueCity: json['venueCity'] as String? ?? '',
       venueName: json['venueName'] as String? ?? '',
       venueAddress: json['venueAddress'] as String? ?? '',
+      coverImage: json['coverImage'] as String? ?? '',
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       days: days,
@@ -51,6 +53,7 @@ class EventModel extends EventEntity {
       'venueCity': venueCity,
       'venueName': venueName,
       'venueAddress': venueAddress,
+      'coverImage': coverImage,
       'latitude': latitude,
       'longitude': longitude,
       'days': days

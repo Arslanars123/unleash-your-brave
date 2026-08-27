@@ -64,6 +64,7 @@ class MembershipsRemoteDataSource {
   Future<CheckoutEligibility> checkEligibility({
     required String email,
     required String membershipId,
+    String? eventId,
   }) async {
     try {
       final response = await _dioClient.client.get(
@@ -71,6 +72,7 @@ class MembershipsRemoteDataSource {
         queryParameters: {
           'email': email,
           'membershipId': membershipId,
+          if (eventId != null && eventId.isNotEmpty) 'eventId': eventId,
         },
       );
       final data =
@@ -128,6 +130,7 @@ class MembershipsRemoteDataSource {
     required String email,
     required String firstName,
     required String lastName,
+    String? eventId,
     String? successUrl,
     String? cancelUrl,
     String? couponCode,
@@ -142,6 +145,7 @@ class MembershipsRemoteDataSource {
           'email': email,
           'firstName': firstName,
           'lastName': lastName,
+          if (eventId != null && eventId.isNotEmpty) 'eventId': eventId,
           if (successUrl != null) 'successUrl': successUrl,
           if (cancelUrl != null) 'cancelUrl': cancelUrl,
           if (couponCode != null && couponCode.trim().isNotEmpty)

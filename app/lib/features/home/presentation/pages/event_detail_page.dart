@@ -109,6 +109,12 @@ class _EventDetailPageState extends State<EventDetailPage> {
   bool get _qrEntitled =>
       _booking?.qrEntitled == true || _access?.qrEntitled == true;
 
+  /// Content carried from another edition still needs a purchase for this event.
+  bool get _needsPurchase =>
+      !_entitled ||
+      _booking?.carriedFromPrevious == true ||
+      _access?.carriedFromPrevious == true;
+
   Future<void> _purchase() async {
     final event = _event;
     if (event == null) return;
@@ -189,6 +195,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
         email: user.email,
         firstName: names.firstName,
         lastName: names.lastName,
+        eventId: event.id,
         successUrl: ApiConstants.checkoutSuccessUrl,
         cancelUrl: ApiConstants.checkoutCancelUrl,
       );
@@ -298,21 +305,22 @@ class _EventDetailPageState extends State<EventDetailPage> {
                                   minHeight: 2,
                                 ),
                               ),
-                            if (_entitled) ...[
-                              if (_qrEntitled)
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    onPressed: _busy
-                                        ? null
-                                        : () => context.push(
-                                              '/check-in?eventId=${event.id}',
-                                            ),
-                                    icon: const Icon(Icons.qr_code_2),
-                                    label: const Text('Check-in QR'),
-                                  ),
+                            if (_qrEntitled) ...[
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _busy
+                                      ? null
+                                      : () => context.push(
+                                            '/check-in?eventId=${event.id}',
+                                          ),
+                                  icon: const Icon(Icons.qr_code_2),
+                                  label: const Text('Check-in QR'),
                                 ),
-                            ] else ...[
+                              ),
+                            ],
+                            if (_needsPurchase) ...[
+                              if (_qrEntitled) const SizedBox(height: 10),
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton(

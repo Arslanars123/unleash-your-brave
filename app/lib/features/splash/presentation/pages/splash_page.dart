@@ -132,7 +132,7 @@ class _SplashPageState extends State<SplashPage>
                   child: ScaleTransition(
                     scale: _scale,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -155,7 +155,7 @@ class _SplashPageState extends State<SplashPage>
                               );
                             },
                             child: const BrandLogo(
-                              height: 104,
+                              height: 196,
                               alignment: Alignment.center,
                             ),
                           ),

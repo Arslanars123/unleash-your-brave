@@ -7,8 +7,8 @@ interface BrandLogoProps {
 /** Official Unleash Your Brave wordmark. */
 export function BrandLogo({
   className = '',
-  height = 132,
-  alt = 'Unleash Your Brave',
+  height = 168,
+  alt = 'Unleash Your Brave — The Experience',
 }: BrandLogoProps) {
   return (
     <img

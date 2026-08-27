@@ -83,6 +83,21 @@ export class CheckInFormService {
     return submission ? toPublicCheckInFormSubmission(submission) : null;
   }
 
+  /** Attendee self-submit before or at the door (staff scan still works after). */
+  async submitForMember(
+    userId: string,
+    eventId: string,
+    input: SubmitCheckInFormInput,
+  ): Promise<PublicCheckInFormSubmission> {
+    await this.requireEvent(eventId);
+    const form = await this.forms.findActiveByEventId(eventId);
+    if (!form) {
+      throw new NotFoundError('Check-in form');
+    }
+    const submission = await this.saveSubmission(form, userId, input);
+    return toPublicCheckInFormSubmission(submission);
+  }
+
   async findSubmission(
     eventId: string,
     userId: string,

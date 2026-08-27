@@ -101,7 +101,7 @@ export function LoginPage() {
   return (
     <div className="auth-shell">
       <form className="auth-card" onSubmit={onSubmit} noValidate>
-        <BrandLogo height={156} />
+        <BrandLogo height={200} />
         <h1>Portal sign in</h1>
         <p className="muted">
           Use your email with your password, or your invite code the first time you sign in.

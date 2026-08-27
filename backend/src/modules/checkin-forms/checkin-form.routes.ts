@@ -6,6 +6,7 @@ import type { CheckInFormController } from './checkin-form.controller.js';
 import {
   eventIdParamSchema,
   eventIdQuerySchema,
+  memberSubmitCheckInFormSchema,
   upsertCheckInFormSchema,
 } from './checkin-form.schema.js';
 
@@ -26,6 +27,14 @@ export function createCheckInFormRouter(controller: CheckInFormController): Rout
     authenticate,
     validate({ query: eventIdQuerySchema }),
     asyncHandler(controller.getMySubmission),
+  );
+
+  // Member: sign / submit waiver before check-in
+  router.post(
+    '/submissions',
+    authenticate,
+    validate({ body: memberSubmitCheckInFormSchema }),
+    asyncHandler(controller.submitMyForm),
   );
 
   // Admin: form for event (active or not)

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -13,7 +12,6 @@ import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
-import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -73,16 +71,10 @@ class _MapPageState extends State<MapPage> {
     });
 
     try {
-      final cubit = context.read<SelectedEventCubit>();
-      await cubit.ensureReady();
-      final selectedId = cubit.state.eventId;
-      final event = selectedId != null && selectedId.isNotEmpty
-          ? await sl<EventsRemoteDataSource>()
-              .getById(selectedId)
-              .timeout(const Duration(seconds: 12))
-          : await sl<EventsRemoteDataSource>()
-              .getCurrent()
-              .timeout(const Duration(seconds: 12));
+      // Map always shows the preferred / current edition location.
+      final event = await sl<EventsRemoteDataSource>()
+          .getCurrent()
+          .timeout(const Duration(seconds: 12));
       if (!mounted) return;
 
       setState(() {

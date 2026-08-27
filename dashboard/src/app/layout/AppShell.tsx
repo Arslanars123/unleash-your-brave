@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Mic2,
   QrCode,
+  Smartphone,
   TicketPercent,
   UserRound,
   Users,
@@ -38,7 +39,7 @@ export function AppShell() {
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <BrandLogo height={108} className="sidebar-brand-logo" />
+          <BrandLogo height={132} className="sidebar-brand-logo" />
           <div>
             <strong>Unleash Your Brave</strong>
             <p>{portalLabel}</p>
@@ -51,6 +52,10 @@ export function AppShell() {
               <NavLink to="/" end>
                 <LayoutDashboard size={18} />
                 Overview
+              </NavLink>
+              <NavLink to="/app-home">
+                <Smartphone size={18} />
+                App home
               </NavLink>
               <NavLink to="/events">
                 <CalendarDays size={18} />

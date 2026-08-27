@@ -3,11 +3,13 @@ import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
 import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
+import type { SessionRepository } from '../sessions/session.repository.js';
 import type { UserService } from '../users/user.service.js';
 import type { PaginatedResult, SpeakerRepository } from './speaker.repository.js';
 import { toPublicSpeaker } from './speaker.mapper.js';
 import type {
   CreateSpeakerInput,
+  LinkedSpeakerEvent,
   ListSpeakersQuery,
   PublicSpeaker,
   Speaker,
@@ -16,6 +18,7 @@ import type {
 
 export class SpeakerService {
   private associations: EventAssociationService | null = null;
+  private sessions: SessionRepository | null = null;
 
   constructor(
     private readonly speakers: SpeakerRepository,
@@ -26,6 +29,10 @@ export class SpeakerService {
 
   setAssociationService(service: EventAssociationService): void {
     this.associations = service;
+  }
+
+  setSessionRepository(sessions: SessionRepository): void {
+    this.sessions = sessions;
   }
 
   async list(query: ListSpeakersQuery): Promise<PaginatedResult<PublicSpeaker>> {
@@ -139,6 +146,58 @@ export class SpeakerService {
       return;
     }
     throw new BadRequestError('Speaker must be associated with this event edition');
+  }
+
+  /**
+   * Editions where this speaker is assigned (via sessions and/or associations).
+   * Speakers manage session content per edition from the portal.
+   */
+  async listLinkedEvents(speakerId: string): Promise<LinkedSpeakerEvent[]> {
+    await this.requireSpeaker(speakerId);
+
+    const eventIds = new Set<string>();
+    const sessionCountByEvent = new Map<string, number>();
+
+    if (this.sessions) {
+      const { items } = await this.sessions.list({
+        speakerId,
+        page: 1,
+        perPage: 500,
+      });
+      for (const session of items) {
+        if (session.kind === 'event') continue;
+        eventIds.add(session.eventId);
+        sessionCountByEvent.set(
+          session.eventId,
+          (sessionCountByEvent.get(session.eventId) ?? 0) + 1,
+        );
+      }
+    }
+
+    if (this.associations) {
+      for (const eventId of await this.associations.listEventIdsForSpeaker(speakerId)) {
+        eventIds.add(eventId);
+      }
+    }
+
+    const results: LinkedSpeakerEvent[] = [];
+    for (const eventId of eventIds) {
+      try {
+        const event = await this.events.getById(eventId);
+        results.push({
+          id: event.id,
+          name: event.name,
+          startDate: event.startDate,
+          endDate: event.endDate,
+          status: event.status,
+          sessionCount: sessionCountByEvent.get(eventId) ?? 0,
+        });
+      } catch {
+        // Skip deleted / missing events.
+      }
+    }
+    results.sort((a, b) => b.startDate.localeCompare(a.startDate));
+    return results;
   }
 
   private async provisionPortalAccount(

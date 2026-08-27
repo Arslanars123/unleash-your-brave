@@ -75,3 +75,27 @@ class StoreProductEntity {
     return false;
   }
 }
+
+class StoreCheckoutSessionResult {
+  const StoreCheckoutSessionResult({
+    required this.sessionId,
+    required this.checkoutUrl,
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.totalPrice,
+    required this.currency,
+    required this.eventId,
+  });
+
+  final String sessionId;
+  final String checkoutUrl;
+  final String productId;
+  final String productName;
+  final int quantity;
+  final double unitPrice;
+  final double totalPrice;
+  final String currency;
+  final String eventId;
+}

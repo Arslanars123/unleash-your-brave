@@ -77,6 +77,11 @@ export class EventAssociationService {
     await this.associations.link(eventId, 'speaker', speakerId);
   }
 
+  /** Event IDs this speaker is linked to (session assignment / associations). */
+  async listEventIdsForSpeaker(speakerId: string): Promise<string[]> {
+    return this.associations.listEventIds(speakerId, 'speaker');
+  }
+
   async linkSponsor(eventId: string, sponsorId: string): Promise<void> {
     await this.events.requireEvent(eventId);
     await this.assertSponsorsExist([sponsorId]);

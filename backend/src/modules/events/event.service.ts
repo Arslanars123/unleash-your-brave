@@ -186,6 +186,19 @@ export class EventService {
       .map(toPublicEvent);
   }
 
+  /**
+   * Published ended editions for the app Previous events list
+   * (purchase optional — shows all past editions).
+   */
+  async listPrevious(): Promise<PublicEvent[]> {
+    const { items } = await this.events.list({ page: 1, perPage: 100 });
+    return items
+      .filter((event) => event.published !== false)
+      .filter((event) => editionStatus(event) === 'ended')
+      .sort((a, b) => b.startDate.getTime() - a.startDate.getTime())
+      .map(toPublicEvent);
+  }
+
   async getWorkspace(): Promise<EventWorkspace> {
     const { items } = await this.events.list({ page: 1, perPage: 100 });
     const editions = items.map(toPublicEvent);

@@ -37,6 +37,21 @@ export class CheckInFormController {
     sendSuccess(res, await this.service.getMySubmission(req.auth.userId, eventId));
   };
 
+  submitMyForm = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth) throw new UnauthorizedError();
+    const { eventId, ...input } = req.body as {
+      eventId: string;
+      answers: Record<string, string | boolean>;
+      signatureDataUrl?: string;
+      signedName: string;
+    };
+    sendSuccess(
+      res,
+      await this.service.submitForMember(req.auth.userId, eventId, input),
+      201,
+    );
+  };
+
   listSubmissions = async (req: Request, res: Response): Promise<void> => {
     const eventId = String(req.query.eventId ?? '');
     sendSuccess(res, await this.service.listSubmissions(eventId));

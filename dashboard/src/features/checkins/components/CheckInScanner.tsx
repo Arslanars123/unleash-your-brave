@@ -16,19 +16,23 @@ declare global {
 interface CheckInScannerProps {
   onScan: (token: string) => void;
   disabled?: boolean;
+  /** When true, pause frame decoding (e.g. while the scan API is in flight). */
+  paused?: boolean;
+  /** Bump to reset duplicate detection after a completed scan. */
+  resetKey?: number;
 }
 
 function extractToken(raw: string): string {
   const trimmed = raw.trim();
-  const match = trimmed.match(/uyb1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+  const match = trimmed.match(/uyb[12]\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){0,2}/);
   return match?.[0] ?? trimmed;
 }
 
 /**
- * Live camera QR scanner. Always samples frames onto a canvas and decodes with
- * jsQR (BarcodeDetector is used as a first pass when present).
+ * Live camera QR scanner. Prefers native BarcodeDetector when available;
+ * falls back to jsQR on a downscaled canvas for compatibility.
  */
-export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
+export function CheckInScanner({ onScan, disabled, paused, resetKey = 0 }: CheckInScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onScanRef = useRef(onScan);
@@ -36,14 +40,27 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const lastValue = useRef('');
+  const pausedRef = useRef(Boolean(paused));
+  const disabledRef = useRef(Boolean(disabled));
 
   onScanRef.current = onScan;
+  pausedRef.current = Boolean(paused);
+  disabledRef.current = Boolean(disabled);
+
+  useEffect(() => {
+    lastValue.current = '';
+    if (!paused) {
+      setHint((current) =>
+        current === 'QR found — checking in…' ? 'Point the camera at the attendee QR…' : current,
+      );
+    }
+  }, [resetKey, paused]);
 
   useEffect(() => {
     if (!active) return;
 
     let stream: MediaStream | null = null;
-    let timer = 0;
+    let raf = 0;
     let cancelled = false;
 
     async function start() {
@@ -83,7 +100,7 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
           const sourceH = el.videoHeight;
           if (!sourceW || !sourceH) return null;
 
-          const maxSide = 640;
+          const maxSide = detector ? 960 : 720;
           const scale = Math.min(1, maxSide / Math.max(sourceW, sourceH));
           const width = Math.max(1, Math.round(sourceW * scale));
           const height = Math.max(1, Math.round(sourceH * scale));
@@ -105,27 +122,33 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
 
           const image = ctx.getImageData(0, 0, width, height);
           const result = jsQR(image.data, image.width, image.height, {
-            inversionAttempts: 'attemptBoth',
+            inversionAttempts: 'dontInvert',
           });
-          return result?.data ? extractToken(result.data) : null;
+          if (result?.data) return extractToken(result.data);
+          const inverted = jsQR(image.data, image.width, image.height, {
+            inversionAttempts: 'onlyInvert',
+          });
+          return inverted?.data ? extractToken(inverted.data) : null;
         };
 
         const tick = async () => {
           if (cancelled) return;
-          try {
-            const value = await readFrame();
-            if (value && value !== lastValue.current) {
-              lastValue.current = value;
-              setHint('QR found — checking in…');
-              onScanRef.current(value);
+          if (!pausedRef.current && !disabledRef.current) {
+            try {
+              const value = await readFrame();
+              if (value && value !== lastValue.current) {
+                lastValue.current = value;
+                setHint('QR found — checking in…');
+                onScanRef.current(value);
+              }
+            } catch {
+              // ignore frame errors
             }
-          } catch {
-            // ignore frame errors
           }
           if (!cancelled) {
-            timer = window.setTimeout(() => {
+            raf = window.requestAnimationFrame(() => {
               void tick();
-            }, 120);
+            });
           }
         };
         void tick();
@@ -139,7 +162,7 @@ export function CheckInScanner({ onScan, disabled }: CheckInScannerProps) {
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      window.cancelAnimationFrame(raf);
       stream?.getTracks().forEach((track) => track.stop());
       if (videoRef.current) videoRef.current.srcObject = null;
     };

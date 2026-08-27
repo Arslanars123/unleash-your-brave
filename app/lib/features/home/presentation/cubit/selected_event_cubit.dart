@@ -71,18 +71,20 @@ class SelectedEventCubit extends Cubit<SelectedEventState> {
     emit(state.copyWith(loading: true, clearError: true));
 
     try {
-      final storedId = _prefs.getString(StorageKeys.selectedEventId)?.trim();
-      EventEntity? resolved;
+      // Home / Map / default Agenda always use the platform preferred (current) edition.
+      // Do not restore a past edition from prefs — that was switching home countdown/map.
+      EventEntity? resolved = await _resolveDefault();
 
-      if (storedId != null && storedId.isNotEmpty) {
-        try {
-          resolved = await _events.getById(storedId);
-        } catch (_) {
-          resolved = null;
+      if (resolved == null) {
+        final storedId = _prefs.getString(StorageKeys.selectedEventId)?.trim();
+        if (storedId != null && storedId.isNotEmpty) {
+          try {
+            resolved = await _events.getById(storedId);
+          } catch (_) {
+            resolved = null;
+          }
         }
       }
-
-      resolved ??= await _resolveDefault();
 
       if (resolved != null) {
         await _prefs.setString(StorageKeys.selectedEventId, resolved.id);
@@ -130,6 +132,12 @@ class SelectedEventCubit extends Cubit<SelectedEventState> {
     } finally {
       _resolving = false;
     }
+  }
+
+  /// Force Home / Map back onto the preferred current edition.
+  Future<void> restoreCurrentEvent() async {
+    _resolving = false;
+    await ensureReady(force: true);
   }
 
   Future<void> selectEvent(String eventId) async {

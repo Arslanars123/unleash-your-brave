@@ -61,7 +61,6 @@ class ProfilePage extends StatelessWidget {
                                 .read<AuthBloc>()
                                 .add(const AuthRefreshRequested());
                           },
-                          onCheckIn: () => context.push('/events'),
                           onNotifications: () => context.push('/notifications'),
                         ),
                         SizedBox(height: context.sectionGap),
@@ -221,12 +220,10 @@ class _ProfileHero extends StatelessWidget {
 class _QuickActions extends StatelessWidget {
   const _QuickActions({
     required this.onEdit,
-    required this.onCheckIn,
     required this.onNotifications,
   });
 
   final VoidCallback onEdit;
-  final VoidCallback onCheckIn;
   final VoidCallback onNotifications;
 
   @override
@@ -239,14 +236,6 @@ class _QuickActions extends StatelessWidget {
             label: 'Edit',
             onTap: onEdit,
             primary: true,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _ActionChip(
-            icon: Icons.event_available_outlined,
-            label: 'Events',
-            onTap: onCheckIn,
           ),
         ),
         const SizedBox(width: 10),
@@ -335,6 +324,7 @@ class _MembershipSectionState extends State<_MembershipSection>
   String? _error;
   List<MembershipEntity> _memberships = const [];
   EffectiveEventAccess? _access;
+  String? _catalogEventId;
   Timer? _catalogPoll;
 
   @override
@@ -407,6 +397,7 @@ class _MembershipSectionState extends State<_MembershipSection>
       }
       if (!mounted) return;
       setState(() {
+        _catalogEventId = eventId;
         _memberships = [...items]
           ..sort((a, b) {
             final bySort = a.sortOrder.compareTo(b.sortOrder);
@@ -562,6 +553,7 @@ class _MembershipSectionState extends State<_MembershipSection>
       final eligibility = await ds.checkEligibility(
         email: widget.user.email,
         membershipId: membership.id,
+        eventId: _catalogEventId,
       );
       if (!eligibility.allowed) {
         final reason = eligibility.reason ?? '';
@@ -582,6 +574,7 @@ class _MembershipSectionState extends State<_MembershipSection>
         email: widget.user.email,
         firstName: names.firstName,
         lastName: names.lastName,
+        eventId: _catalogEventId,
         successUrl: ApiConstants.checkoutSuccessUrl,
         cancelUrl: ApiConstants.checkoutCancelUrl,
         couponCode: result.couponCode,

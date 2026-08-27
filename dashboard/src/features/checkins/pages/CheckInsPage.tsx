@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ClipboardList, QrCode, UserCheck, X } from 'lucide-react';
+import { ClipboardList, QrCode, UserCheck, UserX, X } from 'lucide-react';
 import { CheckInFormEditorModal } from '@/features/checkin-forms/components/CheckInFormEditorModal';
 import {
   CheckInFormGateModal,
@@ -44,6 +44,12 @@ export function CheckInsPage() {
   const [token, setToken] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [scanDetail, setScanDetail] = useState<CheckInScanResult | null>(null);
+  const [scannerResetKey, setScannerResetKey] = useState(0);
+  /** Blocks camera/manual scan until admin dismisses the already-checked-in dialog. */
+  const [scanHold, setScanHold] = useState(false);
+  const [alreadyCheckedInDialog, setAlreadyCheckedInDialog] = useState<CheckInScanResult | null>(
+    null,
+  );
   const [formEditorOpen, setFormEditorOpen] = useState(false);
   const [pendingFormScan, setPendingFormScan] = useState<PendingFormScan | null>(null);
   const pendingPayloadRef = useRef<PendingFormScan['scanPayload'] | null>(null);
@@ -71,7 +77,15 @@ export function CheckInsPage() {
   useEffect(() => {
     setPage(1);
     setSearch('');
+    setScanHold(false);
+    setAlreadyCheckedInDialog(null);
   }, [eventId]);
+
+  function resumeScanning() {
+    setAlreadyCheckedInDialog(null);
+    setScanHold(false);
+    setScannerResetKey((value) => value + 1);
+  }
 
   function applyScanSuccess(result: CheckInScanResult) {
     setScanDetail(result);
@@ -81,13 +95,16 @@ export function CheckInsPage() {
     if (result.alreadyCheckedIn) {
       const message = `${name} was already checked in`;
       setLastResult(message);
-      toast.success(message);
-    } else {
-      const message = `Checked in ${name}`;
-      setLastResult(message);
-      toast.success(message);
+      setAlreadyCheckedInDialog(result);
+      setScanHold(true);
+      setToken('');
+      return;
     }
+    const message = `Checked in ${name}`;
+    setLastResult(message);
+    toast.success(message);
     setToken('');
+    setScannerResetKey((value) => value + 1);
   }
 
   const scanMutation = useMutation({
@@ -100,8 +117,8 @@ export function CheckInsPage() {
         ...payload,
         expectedEventId: eventId ?? undefined,
       }),
-    onSuccess: async (result, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ['checkins'] });
+    onSuccess: (result, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['checkins'] });
       if (result.requiresForm && result.form) {
         const pending = {
           form: result.form,
@@ -111,6 +128,7 @@ export function CheckInsPage() {
         pendingPayloadRef.current = variables;
         setPendingFormScan(pending);
         setLastResult(`Form required for ${result.user.name}`);
+        setScannerResetKey((value) => value + 1);
         return;
       }
       applyScanSuccess(result);
@@ -119,6 +137,7 @@ export function CheckInsPage() {
       const message = getApiErrorMessage(error, 'Check-in failed');
       setLastResult(message);
       toast.error(message);
+      setScannerResetKey((value) => value + 1);
     },
   });
 
@@ -133,24 +152,32 @@ export function CheckInsPage() {
         signedName: values.signedName,
       });
     },
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: ['checkins'] });
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['checkins'] });
       applyScanSuccess(result);
     },
     onError: (error) => {
       const message = getApiErrorMessage(error, 'Unable to complete check-in form');
       setLastResult(message);
       toast.error(message);
+      setScannerResetKey((value) => value + 1);
     },
   });
 
   const handleTokenScan = useCallback(
     (raw: string) => {
       const token = raw.trim();
-      if (!token || scanMutation.isPending || completeFormMutation.isPending) return;
+      if (
+        !token ||
+        scanHold ||
+        scanMutation.isPending ||
+        completeFormMutation.isPending
+      ) {
+        return;
+      }
       scanMutation.mutate({ token });
     },
-    [scanMutation.isPending, scanMutation.mutate, completeFormMutation.isPending],
+    [scanHold, scanMutation.isPending, scanMutation.mutate, completeFormMutation.isPending],
   );
 
   const stats = listQuery.data?.stats;
@@ -288,7 +315,11 @@ export function CheckInsPage() {
               </p>
               <CheckInScanner
                 onScan={handleTokenScanGated}
-                disabled={scanMutation.isPending || completeFormMutation.isPending}
+                disabled={
+                  scanHold || scanMutation.isPending || completeFormMutation.isPending
+                }
+                paused={scanHold || scanMutation.isPending || completeFormMutation.isPending}
+                resetKey={scannerResetKey}
               />
               <form
                 className="toolbar"
@@ -303,12 +334,14 @@ export function CheckInsPage() {
                   label="Or paste QR token"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder="uyb1...."
+                  placeholder="uyb1… or uyb2…"
                 />
                 <Button
                   type="submit"
                   loading={scanMutation.isPending}
-                  disabled={!token.trim() || completeFormMutation.isPending}
+                  disabled={
+                    !token.trim() || completeFormMutation.isPending || scanHold
+                  }
                 >
                   <UserCheck size={16} />
                   Check in
@@ -573,6 +606,49 @@ export function CheckInsPage() {
             await completeFormMutation.mutateAsync(values);
           }}
         />
+      ) : null}
+
+      {alreadyCheckedInDialog ? (
+        <div
+          className="modal-backdrop confirm-backdrop"
+          role="presentation"
+          onClick={resumeScanning}
+        >
+          <div
+            className="modal-panel confirm-panel"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="already-checked-in-title"
+            aria-describedby="already-checked-in-message"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="confirm-body">
+              <div className="confirm-icon confirm-icon-primary" aria-hidden>
+                <UserX size={22} />
+              </div>
+              <div className="confirm-copy">
+                <h2 id="already-checked-in-title">Already checked in</h2>
+                <p id="already-checked-in-message" className="muted">
+                  <strong>{alreadyCheckedInDialog.user.name}</strong> (
+                  {alreadyCheckedInDialog.user.email}) is already checked in for this event.
+                  {alreadyCheckedInDialog.checkIn?.checkedInAt ? (
+                    <>
+                      {' '}
+                      Checked in at{' '}
+                      {new Date(alreadyCheckedInDialog.checkIn.checkedInAt).toLocaleString()}.
+                    </>
+                  ) : null}
+                </p>
+              </div>
+            </div>
+            <div className="modal-actions confirm-actions">
+              <Button type="button" onClick={resumeScanning} autoFocus>
+                <QrCode size={16} />
+                Scan new
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

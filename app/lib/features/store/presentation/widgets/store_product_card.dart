@@ -43,54 +43,64 @@ class StoreProductCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppTheme.radiusCard),
-                ),
-                child: AspectRatio(
-                  aspectRatio: 1,
+              Expanded(
+                flex: 3,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(AppTheme.radiusCard),
+                  ),
                   child: hasImage
                       ? CachedNetworkImage(
                           imageUrl: imageUrl,
                           fit: BoxFit.cover,
+                          width: double.infinity,
                           errorWidget: (_, __, ___) => _placeholder(),
                         )
                       : _placeholder(),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.body.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      formatStoreMoney(product.price, product.currency),
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.accentPink,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (!product.inStock) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Out of stock',
-                        style: AppTypography.caption.copyWith(
-                          fontSize: 11,
-                          color: AppColors.textTertiary,
+              Expanded(
+                flex: 2,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          product.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.body.copyWith(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            height: 1.2,
+                          ),
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        formatStoreMoney(product.price, product.currency),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.accentPink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (!product.inStock)
+                        Text(
+                          'Out of stock',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(
+                            fontSize: 11,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
                     ],
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -103,11 +113,6 @@ class StoreProductCard extends StatelessWidget {
   Widget _placeholder() {
     return Container(
       color: AppColors.bgMaroon,
-      alignment: Alignment.center,
-      child: const Icon(
-        Icons.shopping_bag_outlined,
-        color: AppColors.accentPink,
-      ),
     );
   }
 }

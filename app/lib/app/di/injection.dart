@@ -18,12 +18,14 @@ import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dar
 import 'package:unleash_your_brave/features/agenda/data/datasources/agenda_local_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
 import 'package:unleash_your_brave/features/announcements/data/datasources/announcements_remote_datasource.dart';
+import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_form_remote_datasource.dart';
 import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
 import 'package:unleash_your_brave/features/chat/data/datasources/chat_local_datasource.dart';
 import 'package:unleash_your_brave/features/chat/data/datasources/chat_remote_datasource.dart';
 import 'package:unleash_your_brave/features/chat/data/repositories/chat_repository_impl.dart';
 import 'package:unleash_your_brave/features/chat/domain/repositories/chat_repository.dart';
 import 'package:unleash_your_brave/features/chat/presentation/cubit/chat_unread_cubit.dart';
+import 'package:unleash_your_brave/features/home/data/datasources/app_branding_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
@@ -72,10 +74,12 @@ Future<void> configureDependencies() async {
 
   // Home / events / agenda / announcements
   sl.registerLazySingleton(() => EventsRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => AppBrandingRemoteDataSource(sl()));
   sl.registerLazySingleton(() => SessionsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => AgendaLocalDataSource(sl()));
   sl.registerLazySingleton(() => AnnouncementsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => CheckInRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => CheckInFormRemoteDataSource(sl()));
   sl.registerLazySingleton(() => PostsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => MembershipsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => SponsorsRemoteDataSource(sl()));

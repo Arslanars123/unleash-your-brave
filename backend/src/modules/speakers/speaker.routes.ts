@@ -17,6 +17,13 @@ export function createSpeakerRouter(controller: SpeakerController): Router {
 
   router.get('/me', authenticate, authorize('speaker'), asyncHandler(controller.me));
 
+  router.get(
+    '/me/events',
+    authenticate,
+    authorize('speaker'),
+    asyncHandler(controller.linkedEvents),
+  );
+
   router.get('/:id', validate({ params: speakerIdParamSchema }), asyncHandler(controller.getById));
 
   router.post(

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/features/auth/context/AuthProvider';
 import { sponsorsApi } from '@/features/sponsors/api/sponsors-api';
 import { SponsorFormModal } from '@/features/sponsors/components/SponsorFormModal';
@@ -17,12 +17,6 @@ export function SponsorProfilePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [previewEventId, setPreviewEventId] = useState('');
 
-  const sponsorQuery = useQuery({
-    queryKey: ['sponsors', 'me', user?.sponsorId, previewEventId || 'profile'],
-    queryFn: () => sponsorsApi.getMe(previewEventId ? { eventId: previewEventId } : {}),
-    enabled: Boolean(user?.sponsorId),
-  });
-
   const linkedEventsQuery = useQuery({
     queryKey: ['sponsors', 'me', 'events', user?.sponsorId],
     queryFn: () => sponsorsApi.listMyEvents(),
@@ -38,6 +32,23 @@ export function SponsorProfilePage() {
     [linkedEventsQuery.data],
   );
 
+  // When linked to editions, always preview a real event — never a "no event" option.
+  useEffect(() => {
+    if (eventOptions.length === 0) {
+      setPreviewEventId('');
+      return;
+    }
+    setPreviewEventId((current) =>
+      eventOptions.some((option) => option.id === current) ? current : eventOptions[0]!.id,
+    );
+  }, [eventOptions]);
+
+  const sponsorQuery = useQuery({
+    queryKey: ['sponsors', 'me', user?.sponsorId, previewEventId || 'profile'],
+    queryFn: () => sponsorsApi.getMe(previewEventId ? { eventId: previewEventId } : {}),
+    enabled: Boolean(user?.sponsorId) && !linkedEventsQuery.isLoading,
+  });
+
   const saveMutation = useMutation({
     mutationFn: (payload: SponsorPayload) => sponsorsApi.update(user!.sponsorId!, payload),
     onSuccess: async () => {
@@ -51,7 +62,7 @@ export function SponsorProfilePage() {
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to save profile')),
   });
 
-  if (sponsorQuery.isLoading || linkedEventsQuery.isLoading) return <Spinner />;
+  if (linkedEventsQuery.isLoading || sponsorQuery.isLoading) return <Spinner />;
   if (sponsorQuery.isError) {
     return <p className="form-error">{getApiErrorMessage(sponsorQuery.error)}</p>;
   }
@@ -71,21 +82,27 @@ export function SponsorProfilePage() {
         <Button onClick={() => setModalOpen(true)}>Edit profile & offers</Button>
       </header>
 
-      <label className="field" style={{ maxWidth: 420, marginBottom: '1rem' }}>
-        <span className="field-label">Preview offers for event</span>
-        <select
-          className="field-input"
-          value={previewEventId}
-          onChange={(e) => setPreviewEventId(e.target.value)}
-        >
-          <option value="">Profile only (no event offers)</option>
-          {eventOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {eventOptions.length > 0 ? (
+        <label className="field" style={{ maxWidth: 420, marginBottom: '1rem' }}>
+          <span className="field-label">Event</span>
+          <select
+            className="field-input"
+            value={previewEventId}
+            onChange={(e) => setPreviewEventId(e.target.value)}
+          >
+            {eventOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="muted" style={{ marginBottom: '1rem' }}>
+          You are not linked to an event yet. Ask an admin to associate your sponsor profile with an
+          edition, then you can add offers for that event.
+        </p>
+      )}
 
       <article className="event-single-card" style={{ gridTemplateColumns: '140px 1fr' }}>
         <div className="event-single-media" style={{ minHeight: 140 }}>
@@ -104,11 +121,12 @@ export function SponsorProfilePage() {
         <div className="event-single-body">
           <h2>{sponsor.name}</h2>
           {sponsor.description ? <p className="muted">{sponsor.description}</p> : null}
-          <span className="badge role-member">
-            {previewEventId
-              ? `${sponsor.offers.length} ${sponsor.offers.length === 1 ? 'offer' : 'offers'} for this event`
-              : 'Offers are managed per event'}
-          </span>
+          {previewEventId ? (
+            <span className="badge role-member">
+              {sponsor.offers.length}{' '}
+              {sponsor.offers.length === 1 ? 'offer' : 'offers'} for this event
+            </span>
+          ) : null}
           {previewEventId && sponsor.offers.length > 0 ? (
             <ul className="day-preview" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {sponsor.offers.map((offer) => (
@@ -118,12 +136,6 @@ export function SponsorProfilePage() {
                 </li>
               ))}
             </ul>
-          ) : null}
-          {!previewEventId && eventOptions.length === 0 ? (
-            <p className="muted" style={{ marginTop: '0.75rem' }}>
-              You are not linked to an event yet. Ask an admin to associate your sponsor profile with
-              an edition, then you can add offers for that event.
-            </p>
           ) : null}
         </div>
       </article>

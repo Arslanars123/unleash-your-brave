@@ -265,115 +265,15 @@ export class CheckoutService {
       });
     }
 
-    // No paid booking for this event yet — fresh purchase (even if they hold another edition).
-    if (!existing || !existing.membershipId) {
-      return withAccount({
-        allowed: true,
-        reason: null,
-        kind: 'purchase',
-        currentMembershipId: null,
-        currentMembershipName: null,
-        currentMembershipPrice: null,
-        targetMembershipId: membership.id,
-        targetMembershipName: membership.name,
-        targetMembershipPrice: membership.price,
-        eventId: checkoutEventId,
-      });
-    }
-
-    const current = await this.memberships.findById(existing.membershipId);
-    if (!current || current.eventId !== checkoutEventId) {
-      return withAccount({
-        allowed: true,
-        reason: null,
-        kind: 'purchase',
-        currentMembershipId: null,
-        currentMembershipName: null,
-        currentMembershipPrice: null,
-        targetMembershipId: membership.id,
-        targetMembershipName: membership.name,
-        targetMembershipPrice: membership.price,
-        eventId: checkoutEventId,
-      });
-    }
-
-    if (existing.membershipId === membership.id) {
-      if (membership.billingKind === 'renewable') {
-        return withAccount({
-          allowed: true,
-          reason: null,
-          kind: 'renew',
-          currentMembershipId: existing.membershipId,
-          currentMembershipName: membership.name,
-          currentMembershipPrice: membership.price,
-          targetMembershipId: membership.id,
-          targetMembershipName: membership.name,
-          targetMembershipPrice: membership.price,
-          eventId: checkoutEventId,
-        });
-      }
-      return withAccount({
-        allowed: false,
-        reason: 'You already have this membership for this event',
-        kind: null,
-        currentMembershipId: existing.membershipId,
-        currentMembershipName: membership.name,
-        currentMembershipPrice: membership.price,
-        targetMembershipId: membership.id,
-        targetMembershipName: membership.name,
-        targetMembershipPrice: membership.price,
-        eventId: checkoutEventId,
-      });
-    }
-
-    const currentPrice = current.price ?? 0;
-    const currentName = current.name ?? 'Current membership';
-    const currentRank = (current.tierRank ?? 0) > 0 ? current.tierRank : currentPrice;
-    const targetRank = (membership.tierRank ?? 0) > 0 ? membership.tierRank : membership.price;
-
-    const isExpired =
-      existing.membershipStatus === 'expired' ||
-      (existing.membershipExpiresAt != null &&
-        existing.membershipExpiresAt.getTime() <= Date.now());
-
-    if (isExpired && membership.billingKind === 'renewable' && targetRank === currentRank) {
-      return withAccount({
-        allowed: true,
-        reason: null,
-        kind: 'renew',
-        currentMembershipId: existing.membershipId,
-        currentMembershipName: currentName,
-        currentMembershipPrice: currentPrice,
-        targetMembershipId: membership.id,
-        targetMembershipName: membership.name,
-        targetMembershipPrice: membership.price,
-        eventId: checkoutEventId,
-      });
-    }
-
-    if (targetRank <= currentRank) {
-      return withAccount({
-        allowed: false,
-        reason:
-          'You cannot purchase this membership. You can only continue with your current plan or upgrade to a higher membership plan.',
-        kind: null,
-        currentMembershipId: existing.membershipId,
-        currentMembershipName: currentName,
-        currentMembershipPrice: currentPrice,
-        targetMembershipId: membership.id,
-        targetMembershipName: membership.name,
-        targetMembershipPrice: membership.price,
-        eventId: checkoutEventId,
-      });
-    }
-
+    // No paid booking for this event yet — always allow a fresh purchase for
+    // this edition, even if the user holds the same plan on another edition.
     return withAccount({
       allowed: true,
       reason: null,
-      kind: 'upgrade',
-      currentMembershipId: existing.membershipId,
-      currentMembershipName: currentName,
-      currentMembershipPrice: currentPrice,
+      kind: 'purchase',
+      currentMembershipId: null,
+      currentMembershipName: null,
+      currentMembershipPrice: null,
       targetMembershipId: membership.id,
       targetMembershipName: membership.name,
       targetMembershipPrice: membership.price,

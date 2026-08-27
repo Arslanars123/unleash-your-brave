@@ -33,6 +33,7 @@ import 'package:unleash_your_brave/features/sponsors/domain/entities/sponsor_ent
 import 'package:unleash_your_brave/features/sponsors/presentation/pages/sponsor_detail_page.dart';
 import 'package:unleash_your_brave/features/sponsors/presentation/pages/sponsors_list_page.dart';
 import 'package:unleash_your_brave/features/store/domain/entities/store_entity.dart';
+import 'package:unleash_your_brave/features/store/presentation/pages/store_checkout_page.dart';
 import 'package:unleash_your_brave/features/store/presentation/pages/store_page.dart';
 import 'package:unleash_your_brave/features/store/presentation/pages/store_product_detail_page.dart';
 import 'package:unleash_your_brave/features/splash/presentation/pages/splash_page.dart';
@@ -122,8 +123,11 @@ class AppRouter {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/agenda',
-                builder: (context, state) => const AgendaPage(),
+        path: '/agenda',
+        builder: (context, state) {
+          final eventId = state.uri.queryParameters['eventId'];
+          return AgendaPage(focusEventId: eventId);
+        },
                 routes: [
                   GoRoute(
                     path: 'sessions/:sessionId',
@@ -210,7 +214,10 @@ class AppRouter {
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,
         path: '/events',
-        builder: (context, state) => const EventsListPage(),
+        builder: (context, state) {
+          final focus = state.uri.queryParameters['focus'];
+          return EventsListPage(initialFocus: focus);
+        },
         routes: [
           GoRoute(
             path: ':eventId',
@@ -258,6 +265,17 @@ class AppRouter {
         path: '/store',
         builder: (context, state) => const StorePage(),
         routes: [
+          GoRoute(
+            path: 'products/:productId/checkout',
+            builder: (context, state) {
+              final productId = state.pathParameters['productId'] ?? '';
+              final extra = state.extra;
+              return StoreCheckoutPage(
+                productId: productId,
+                initialProduct: extra is StoreProductEntity ? extra : null,
+              );
+            },
+          ),
           GoRoute(
             path: 'products/:productId',
             builder: (context, state) {

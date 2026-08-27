@@ -54,3 +54,12 @@ export interface ListSpeakersQuery {
   /** When true with no eventId, return the shared library (all speakers). */
   library?: boolean;
 }
+
+export interface LinkedSpeakerEvent {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  sessionCount: number;
+}

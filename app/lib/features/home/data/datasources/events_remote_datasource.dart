@@ -34,6 +34,30 @@ class EventsRemoteDataSource {
     }
   }
 
+  /// Published ended editions (purchased or not).
+  ///
+  /// Uses workspace `pastEditions` so it works on live before `/events/previous`
+  /// is deployed (that path currently hits `/:id` and fails UUID validation).
+  Future<List<EventModel>> listPrevious() async {
+    try {
+      return await _listPreviousFromWorkspace();
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  Future<List<EventModel>> _listPreviousFromWorkspace() async {
+    final response = await _dioClient.client.get(ApiConstants.eventWorkspace);
+    final payload =
+        (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?;
+    final past = payload?['pastEditions'] as List<dynamic>? ?? const [];
+    return past
+        .whereType<Map<String, dynamic>>()
+        .map(EventModel.fromJson)
+        .where((e) => e.isEnded)
+        .toList(growable: false);
+  }
+
   Future<EventModel> getById(String id) async {
     try {
       final response =

@@ -19,6 +19,7 @@ export function createEventRouter(controller: EventController): Router {
   router.get('/workspace', asyncHandler(controller.getWorkspace));
   router.get('/current', asyncHandler(controller.getCurrent));
   router.get('/available', asyncHandler(controller.listAvailable));
+  router.get('/previous', asyncHandler(controller.listPrevious));
   router.get('/:id', validate({ params: eventIdParamSchema }), asyncHandler(controller.getById));
   router.get(
     '/:id/associations',

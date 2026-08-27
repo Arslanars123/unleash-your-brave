@@ -11,6 +11,7 @@ class EventEntity {
     required this.venueCity,
     this.venueName = '',
     this.venueAddress = '',
+    this.coverImage = '',
     this.latitude,
     this.longitude,
     this.days = const [],
@@ -25,6 +26,8 @@ class EventEntity {
   final String venueCity;
   final String venueName;
   final String venueAddress;
+  /// Admin-managed image shown as the app home hero background.
+  final String coverImage;
   final double? latitude;
   final double? longitude;
   final List<EventDayEntity> days;
