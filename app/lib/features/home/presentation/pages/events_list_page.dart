@@ -346,6 +346,9 @@ class _EventsListPageState extends State<EventsListPage> {
                                   extra: event,
                                 ),
                                 onBook: () => _openPurchase(event),
+                                onViewMap: () {
+                                  context.go('/map?eventId=${event.id}');
+                                },
                               ),
                               const SizedBox(height: 12),
                             ],
@@ -373,6 +376,9 @@ class _EventsListPageState extends State<EventsListPage> {
                                 onViewAgenda: () {
                                   context.go('/agenda?eventId=${event.id}');
                                 },
+                                onViewMap: () {
+                                  context.go('/map?eventId=${event.id}');
+                                },
                               ),
                               const SizedBox(height: 12),
                             ],
@@ -398,6 +404,11 @@ class _EventsListPageState extends State<EventsListPage> {
                                 onViewAgenda: () {
                                   context.go(
                                     '/agenda?eventId=${booking.event.id}',
+                                  );
+                                },
+                                onViewMap: () {
+                                  context.go(
+                                    '/map?eventId=${booking.event.id}',
                                   );
                                 },
                                 onQr: booking.qrEntitled
@@ -467,14 +478,14 @@ class _BookingCard extends StatelessWidget {
     required this.booking,
     required this.onOpen,
     required this.onViewAgenda,
-    this.onBook,
+    required this.onViewMap,
     this.onQr,
   });
 
   final EventBookingEntity booking;
   final VoidCallback onOpen;
   final VoidCallback onViewAgenda;
-  final VoidCallback? onBook;
+  final VoidCallback onViewMap;
   final VoidCallback? onQr;
 
   @override
@@ -554,7 +565,19 @@ class _BookingCard extends StatelessWidget {
                     child: OutlinedButton.icon(
                       onPressed: onViewAgenda,
                       icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                      label: const Text('View agenda'),
+                      label: const Text('Agenda'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(color: AppColors.borderSubtle),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onViewMap,
+                      icon: const Icon(Icons.map_outlined, size: 16),
+                      label: const Text('Map'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.textPrimary,
                         side: const BorderSide(color: AppColors.borderSubtle),
@@ -573,16 +596,6 @@ class _BookingCard extends StatelessWidget {
                   ],
                 ],
               ),
-              if (onBook != null) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: onBook,
-                    child: const Text('Book / Purchase'),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -596,6 +609,7 @@ class _PreviousEventCard extends StatelessWidget {
     required this.event,
     required this.onOpen,
     required this.onViewAgenda,
+    required this.onViewMap,
     this.purchase,
   });
 
@@ -603,6 +617,7 @@ class _PreviousEventCard extends StatelessWidget {
   final EventBookingEntity? purchase;
   final VoidCallback onOpen;
   final VoidCallback onViewAgenda;
+  final VoidCallback onViewMap;
 
   @override
   Widget build(BuildContext context) {
@@ -669,17 +684,32 @@ class _PreviousEventCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: onViewAgenda,
-                  icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                  label: const Text('View agenda'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    side: const BorderSide(color: AppColors.borderSubtle),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onViewAgenda,
+                      icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                      label: const Text('Agenda'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(color: AppColors.borderSubtle),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onViewMap,
+                      icon: const Icon(Icons.map_outlined, size: 16),
+                      label: const Text('Map'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(color: AppColors.borderSubtle),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -694,11 +724,13 @@ class _AvailableEventCard extends StatelessWidget {
     required this.event,
     required this.onOpen,
     required this.onBook,
+    required this.onViewMap,
   });
 
   final EventEntity event;
   final VoidCallback onOpen;
   final VoidCallback onBook;
+  final VoidCallback onViewMap;
 
   @override
   Widget build(BuildContext context) {
@@ -758,12 +790,27 @@ class _AvailableEventCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: onBook,
-                  child: const Text('Book / Purchase'),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onViewMap,
+                      icon: const Icon(Icons.map_outlined, size: 16),
+                      label: const Text('Map'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(color: AppColors.borderSubtle),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: onBook,
+                      child: const Text('Book / Purchase'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

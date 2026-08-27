@@ -182,7 +182,10 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: '/map',
-                builder: (context, state) => const MapPage(),
+                builder: (context, state) {
+                  final eventId = state.uri.queryParameters['eventId'];
+                  return MapPage(focusEventId: eventId);
+                },
               ),
             ],
           ),

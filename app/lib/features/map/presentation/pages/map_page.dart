@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
@@ -14,7 +15,11 @@ import 'package:unleash_your_brave/features/home/data/datasources/events_remote_
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
 
 class MapPage extends StatefulWidget {
-  const MapPage({super.key});
+  const MapPage({super.key, this.focusEventId});
+
+  /// When set (from `/map?eventId=`), show that edition’s venue.
+  /// Back-to-current appears only if this differs from the preferred current event.
+  final String? focusEventId;
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -22,6 +27,7 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   EventEntity? _event;
+  EventEntity? _currentEvent;
   String? _errorMessage;
   bool _loading = true;
   bool _refreshing = false;
@@ -34,6 +40,13 @@ class _MapPageState extends State<MapPage> {
   Timer? _mapWatchdog;
   int _mapGeneration = 0;
 
+  bool get _viewingOtherEdition {
+    final focus = widget.focusEventId?.trim();
+    final currentId = _currentEvent?.id;
+    if (focus == null || focus.isEmpty || currentId == null) return false;
+    return focus != currentId;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +54,14 @@ class _MapPageState extends State<MapPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _load(isRefresh: false);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant MapPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusEventId != widget.focusEventId) {
+      unawaited(_load(isRefresh: false));
+    }
   }
 
   @override
@@ -71,14 +92,32 @@ class _MapPageState extends State<MapPage> {
     });
 
     try {
-      // Map always shows the preferred / current edition location.
-      final event = await sl<EventsRemoteDataSource>()
-          .getCurrent()
-          .timeout(const Duration(seconds: 12));
+      EventEntity? current;
+      try {
+        current = await sl<EventsRemoteDataSource>()
+            .getCurrent()
+            .timeout(const Duration(seconds: 12));
+      } catch (_) {
+        current = null;
+      }
+
+      final focusId = widget.focusEventId?.trim();
+      EventEntity event;
+      if (focusId != null && focusId.isNotEmpty) {
+        event = await sl<EventsRemoteDataSource>()
+            .getById(focusId)
+            .timeout(const Duration(seconds: 12));
+      } else if (current != null) {
+        event = current;
+      } else {
+        throw const ServerException('No event available');
+      }
+
       if (!mounted) return;
 
       setState(() {
         _event = event;
+        _currentEvent = current;
         _loading = false;
         _refreshing = false;
         _errorMessage = null;
@@ -141,7 +180,9 @@ class _MapPageState extends State<MapPage> {
     final lng = event.longitude;
     if (lat == null || lng == null) return;
 
-    final apple = Uri.parse('https://maps.apple.com/?ll=$lat,$lng&q=${Uri.encodeComponent(event.venueName.isNotEmpty ? event.venueName : event.name)}');
+    final apple = Uri.parse(
+      'https://maps.apple.com/?ll=$lat,$lng&q=${Uri.encodeComponent(event.venueName.isNotEmpty ? event.venueName : event.name)}',
+    );
     final google = Uri.parse(
       'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
     );
@@ -217,6 +258,21 @@ class _MapPageState extends State<MapPage> {
       backgroundColor: AppColors.bgBase,
       body: Column(
         children: [
+          if (_viewingOtherEdition)
+            SafeArea(
+              bottom: false,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => context.go('/map'),
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: const Text('Back to current event'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.accentPink,
+                  ),
+                ),
+              ),
+            ),
           Expanded(child: _buildMapArea(event)),
           _VenueFooter(
             event: event,
