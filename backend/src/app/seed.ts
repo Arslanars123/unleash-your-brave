@@ -89,6 +89,7 @@ export async function seedDemoData(
     name: 'magellan.explore1',
     password: 'Member123!',
     role: 'member',
+    eventId: eventId!,
     title: 'CTO',
     points: 125,
     profileCompleted: true,
@@ -325,6 +326,7 @@ async function ensureUser(
     name: string;
     password: string;
     role: 'admin' | 'member' | 'speaker' | 'sponsor';
+    eventId?: string;
     speakerId?: string;
     sponsorId?: string;
     membershipId?: string | null;
