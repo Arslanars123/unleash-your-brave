@@ -184,6 +184,12 @@ export interface CreateUserInput {
   status?: UserStatus;
 }
 
+export interface CreateUserResult {
+  user: PublicUser;
+  /** `linked` = existing account added to another event; `created` = new account. */
+  outcome: 'created' | 'linked';
+}
+
 export interface UpdateUserInput {
   name?: string;
   email?: string;

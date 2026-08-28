@@ -76,12 +76,16 @@ export function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateUserPayload) => usersApi.create(payload),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['users', 'list'] }),
         queryClient.invalidateQueries({ queryKey: ['users', 'stats'] }),
       ]);
-      toast.success('Attendee created — invite email sent');
+      toast.success(
+        result.outcome === 'linked'
+          ? 'Existing attendee added to this event — notification sent'
+          : 'Attendee created — invite email sent',
+      );
       closeModal();
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to create attendee')),

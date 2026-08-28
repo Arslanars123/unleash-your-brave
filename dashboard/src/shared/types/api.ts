@@ -79,6 +79,11 @@ export interface CreateUserPayload {
   profileCompleted?: boolean;
 }
 
+export interface CreateUserResult {
+  user: PublicUser;
+  outcome: 'created' | 'linked';
+}
+
 export interface UpdateUserPayload {
   name?: string;
   email?: string;

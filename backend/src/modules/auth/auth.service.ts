@@ -47,7 +47,7 @@ export class AuthService {
   ) {}
 
   async register(input: RegisterInput): Promise<AuthResult> {
-    const user = await this.userService.create({ ...input, role: 'member' });
+    const { user } = await this.userService.create({ ...input, role: 'member' });
     return {
       user,
       tokens: issueTokenPair(user.id, user.role, {

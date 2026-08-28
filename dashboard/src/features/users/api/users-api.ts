@@ -3,6 +3,7 @@ import type {
   AttendeeEventRecord,
   AttendeePurchaseSummary,
   CreateUserPayload,
+  CreateUserResult,
   PaginationMeta,
   PublicUser,
   SuccessEnvelope,
@@ -62,8 +63,8 @@ export const usersApi = {
     return data.data;
   },
 
-  async create(payload: CreateUserPayload): Promise<PublicUser> {
-    const { data } = await apiClient.post<SuccessEnvelope<PublicUser>>('/users', payload);
+  async create(payload: CreateUserPayload): Promise<CreateUserResult> {
+    const { data } = await apiClient.post<SuccessEnvelope<CreateUserResult>>('/users', payload);
     return data.data;
   },
 

@@ -228,6 +228,14 @@ export async function createContainer() {
     eventService,
   );
   const realtimeHub = new RealtimeHub();
+  userService.configureAttendeeInvite({
+    mail: mailService,
+    membershipService,
+    purchases: membershipPurchaseRepository,
+    events: eventService,
+    push: pushNotificationService,
+    realtimeHub,
+  });
   const announcementService = new AnnouncementService(
     announcementRepository,
     announcementReadRepository,

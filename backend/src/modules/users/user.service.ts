@@ -2,7 +2,10 @@ import bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { env } from '../../config/env.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
+import type { MembershipPurchase } from '../checkout/purchase.types.js';
 import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
+import type { PushNotificationService } from '../chat/push.service.js';
+import type { RealtimeHub } from '../realtime/realtime.hub.js';
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import { computeMembershipPeriod } from '../memberships/membership-entitlement.js';
@@ -13,6 +16,7 @@ import type { SponsorRepository } from '../sponsors/sponsor.repository.js';
 import type { PaginatedResult, UserRepository } from './user.repository.js';
 import type {
   CreateUserInput,
+  CreateUserResult,
   ListUsersQuery,
   PublicUser,
   UpdateUserInput,
@@ -48,6 +52,8 @@ export class UserService {
   private membershipService?: MembershipService;
   private purchases?: MembershipPurchaseRepository;
   private events?: EventService;
+  private push?: PushNotificationService;
+  private realtimeHub?: RealtimeHub;
 
   constructor(
     private readonly users: UserRepository,
@@ -62,11 +68,15 @@ export class UserService {
     membershipService: MembershipService;
     purchases: MembershipPurchaseRepository;
     events: EventService;
+    push?: PushNotificationService;
+    realtimeHub?: RealtimeHub;
   }): void {
     this.mail = deps.mail;
     this.membershipService = deps.membershipService;
     this.purchases = deps.purchases;
     this.events = deps.events;
+    this.push = deps.push;
+    this.realtimeHub = deps.realtimeHub;
   }
 
   async list(query: ListUsersQuery): Promise<PaginatedResult<PublicUser>> {
@@ -369,16 +379,28 @@ export class UserService {
     });
   }
 
-  async create(input: CreateUserInput): Promise<PublicUser> {
+  async create(input: CreateUserInput): Promise<CreateUserResult> {
+    const role = input.role ?? 'member';
+
+    if (role === 'member') {
+      const existing = await this.users.findByEmail(input.email);
+      if (existing) {
+        if (input.eventId && input.membershipId) {
+          return this.addExistingMemberToEvent(existing, input);
+        }
+        throw new ConflictError('A user with that email already exists');
+      }
+      const user = await this.createMemberWithInvite(input, input.membershipId ?? null);
+      return { user, outcome: 'created' };
+    }
+
     if (await this.users.findByEmail(input.email)) {
       throw new ConflictError('A user with that email already exists');
     }
 
-    const role = input.role ?? 'member';
     const speakerId = input.speakerId ?? null;
     const sponsorId = input.sponsorId ?? null;
-    const membershipId =
-      role === 'admin' ? null : (input.membershipId ?? null);
+    const membershipId = role === 'admin' ? null : (input.membershipId ?? null);
 
     if (role === 'speaker' && !speakerId) {
       throw new BadRequestError('Speaker accounts must link a speaker profile');
@@ -388,10 +410,6 @@ export class UserService {
     }
 
     await this.assertProfileLinks(speakerId, sponsorId);
-
-    if (role === 'member') {
-      return this.createMemberWithInvite(input, membershipId);
-    }
 
     if (!input.password) {
       throw new BadRequestError('Password is required');
@@ -424,12 +442,165 @@ export class UserService {
       profileCompleted: input.profileCompleted,
     });
 
-    return toPublicUser(created);
+    return { user: toPublicUser(created), outcome: 'created' };
+  }
+
+  /**
+   * Admin adds an existing attendee account to another event (one account per email).
+   */
+  private async addExistingMemberToEvent(
+    existing: User,
+    input: CreateUserInput,
+  ): Promise<CreateUserResult> {
+    const eventId = input.eventId?.trim() ?? '';
+    const membershipId = input.membershipId?.trim() ?? '';
+    if (!eventId || !membershipId) {
+      throw new BadRequestError('Event and membership are required');
+    }
+    if (!this.membershipService || !this.purchases || !this.events) {
+      throw new BadRequestError('Attendee invite is not configured');
+    }
+    if (existing.role !== 'member' && !existing.membershipId) {
+      throw new ConflictError(
+        `This email is already used by a ${existing.role} account`,
+      );
+    }
+
+    await this.events.requireEvent(eventId);
+    await this.membershipService.assertLinkedToEvent(membershipId, eventId);
+    const membership = await this.membershipService.requireMembership(membershipId);
+    const event = await this.events.getById(eventId);
+
+    const purchases = await this.purchases.listByUserId(existing.id);
+    const alreadyRegistered = purchases.some(
+      (item: MembershipPurchase) =>
+        item.eventId === eventId && item.paymentStatus === 'paid',
+    );
+    if (alreadyRegistered) {
+      throw new ConflictError('This attendee is already registered for this event');
+    }
+
+    const period = computeMembershipPeriod({ membership });
+    const nameParts = input.name.trim().split(/\s+/);
+    const firstName = nameParts[0] ?? existing.firstName ?? '';
+    const lastName = nameParts.slice(1).join(' ') || existing.lastName || '';
+
+    await this.purchases.create({
+      eventId,
+      userId: existing.id,
+      email: existing.email,
+      firstName,
+      lastName,
+      membershipId: membership.id,
+      membershipName: membership.name,
+      price: 0,
+      currency: 'usd',
+      couponCode: null,
+      couponId: null,
+      originalPrice: membership.price,
+      discountAmount: membership.price,
+      kind: 'purchase',
+      previousMembershipId: null,
+      previousMembershipName: null,
+      paymentStatus: 'paid',
+      stripeCheckoutSessionId: `admin-add-event-${randomUUID()}`,
+      stripePaymentIntentId: null,
+      stripeCustomerId: null,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      purchasedAt: new Date(),
+    });
+
+    const updated = await this.users.update(existing.id, {
+      name: input.name.trim(),
+      firstName,
+      lastName,
+      ...(input.photoUrl !== undefined ? { photoUrl: input.photoUrl } : {}),
+      ...(input.title !== undefined
+        ? { title: input.title.trim() || membership.name }
+        : {}),
+      ...(input.business !== undefined ? { business: input.business } : {}),
+      ...(input.industry !== undefined ? { industry: input.industry } : {}),
+      ...(input.location !== undefined ? { location: input.location } : {}),
+      ...(input.bio !== undefined ? { bio: input.bio } : {}),
+      ...(input.goals !== undefined ? { goals: input.goals } : {}),
+      ...(input.interests !== undefined ? { interests: input.interests } : {}),
+      ...(input.networkingPrefs !== undefined
+        ? { networkingPrefs: input.networkingPrefs }
+        : {}),
+      ...(input.linkedinUrl !== undefined ? { linkedinUrl: input.linkedinUrl } : {}),
+      ...(input.instagramUrl !== undefined ? { instagramUrl: input.instagramUrl } : {}),
+      ...(input.websiteUrl !== undefined ? { websiteUrl: input.websiteUrl } : {}),
+      ...(input.isVip !== undefined ? { isVip: input.isVip } : {}),
+      ...(input.points !== undefined ? { points: input.points } : {}),
+      ...(input.profileCompleted !== undefined
+        ? { profileCompleted: input.profileCompleted }
+        : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    });
+    if (!updated) throw new NotFoundError('User');
+
+    const eventName = event?.name ?? 'your event';
+    void this.notifyAttendeeAddedToEvent(updated, eventName, eventId);
+
+    this.realtimeHub?.publish({
+      type: 'attendee.upserted',
+      payload: {
+        id: updated.id,
+        email: updated.email,
+        name: updated.name,
+        eventId,
+        linkedToExisting: true,
+        membershipId: membership.id,
+        membershipName: membership.name,
+      },
+    });
+
+    return { user: toPublicUser(updated), outcome: 'linked' };
+  }
+
+  private async notifyAttendeeAddedToEvent(
+    user: User,
+    eventName: string,
+    eventId: string,
+  ): Promise<void> {
+    if (this.push) {
+      try {
+        await this.push.notifyUsers({
+          userIds: [user.id],
+          title: `Added to ${eventName}`,
+          body: `You're registered for ${eventName}. Open the app to view your booking and check-in QR.`,
+          data: {
+            type: 'attendee.event_added',
+            eventId,
+            eventName,
+          },
+        });
+      } catch {
+        // Push is best-effort.
+      }
+    }
+
+    if (this.mail) {
+      await this.mail.send({
+        to: user.email,
+        subject: `You're registered for ${eventName}`,
+        text: [
+          `Hi ${user.name},`,
+          '',
+          `You've been added to ${eventName}.`,
+          '',
+          'Open the app and sign in with your existing email to view your booking, agenda, and check-in QR.',
+          '',
+          `— ${env.appName}`,
+        ].join('\n'),
+      });
+    }
   }
 
   /**
    * Admin “Create Attendee”: no password — email invite code (same as checkout),
-   * require event + linked membership, reject duplicate emails.
+   * require event + linked membership.
    */
   private async createMemberWithInvite(
     input: CreateUserInput,
