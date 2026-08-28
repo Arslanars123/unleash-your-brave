@@ -92,6 +92,88 @@ export class UserService {
     return toPublicUser(await this.requireUser(id));
   }
 
+  /** True when the account should survive attendee-only removal (speaker/sponsor/admin). */
+  hasPortalAccess(user: Pick<User, 'role' | 'speakerId' | 'sponsorId'>): boolean {
+    return (
+      user.role === 'admin' ||
+      user.role === 'speaker' ||
+      user.role === 'sponsor' ||
+      Boolean(user.speakerId) ||
+      Boolean(user.sponsorId)
+    );
+  }
+
+  /** Clears attendee membership fields without deleting the login account. */
+  async stripAttendeeData(userId: string): Promise<PublicUser> {
+    const user = await this.requireUser(userId);
+    const nextRole =
+      user.role === 'admin'
+        ? 'admin'
+        : user.speakerId
+          ? 'speaker'
+          : user.sponsorId
+            ? 'sponsor'
+            : user.role;
+
+    const updated = await this.users.update(userId, {
+      membershipId: null,
+      membershipStatus: null,
+      membershipExpiresAt: null,
+      renewalReminderSentAt: null,
+      qrRenewalBlockedNoticeSentAt: null,
+      role: nextRole,
+    });
+    if (!updated) throw new NotFoundError('User');
+    return toPublicUser(updated);
+  }
+
+  /**
+   * Attach speaker/sponsor profiles that share this email (one login, multiple roles).
+   */
+  async linkPortalProfilesByEmail(userId: string, email: string): Promise<PublicUser> {
+    const user = await this.requireUser(userId);
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) return toPublicUser(user);
+
+    let speakerId = user.speakerId;
+    let sponsorId = user.sponsorId;
+
+    if (this.speakers && !speakerId) {
+      const speaker = await this.speakers.findByEmail(normalized);
+      if (speaker) speakerId = speaker.id;
+    }
+    if (this.sponsors && !sponsorId) {
+      const sponsor = await this.sponsors.findByEmail(normalized);
+      if (sponsor) sponsorId = sponsor.id;
+    }
+
+    if (speakerId === user.speakerId && sponsorId === user.sponsorId) {
+      return toPublicUser(user);
+    }
+
+    await this.assertProfileLinks(speakerId, sponsorId);
+
+    const nextRole =
+      user.role === 'admin'
+        ? 'admin'
+        : speakerId
+          ? user.role === 'sponsor' && sponsorId
+            ? user.role
+            : 'speaker'
+          : sponsorId
+            ? 'sponsor'
+            : user.role;
+
+    const updated = await this.users.update(userId, {
+      speakerId,
+      sponsorId,
+      role: nextRole,
+      status: 'active',
+    });
+    if (!updated) throw new NotFoundError('User');
+    return toPublicUser(updated);
+  }
+
   /**
    * Upsert a member from an external purchase webhook (e.g. GoHighLevel).
    * Creates an active member if the email is new; updates name/title if they exist.
@@ -297,11 +379,12 @@ export class UserService {
 
       await this.assertProfileLinks(nextSpeakerId, nextSponsorId);
 
-      // Keep an existing portal primary role; promote members into the portal being added.
-      const nextRole =
-        existing.role === 'speaker' || existing.role === 'sponsor'
-          ? existing.role
-          : input.role;
+      // Promote members when a portal profile is linked.
+      const nextRole = nextSpeakerId
+        ? 'speaker'
+        : nextSponsorId
+          ? 'sponsor'
+          : existing.role;
 
       // Password already set → never re-invite; unused invite → replace with a fresh code.
       const passwordAlreadySet = !existing.mustChangePassword;
@@ -556,7 +639,9 @@ export class UserService {
       },
     });
 
-    return { user: toPublicUser(updated), outcome: 'linked' };
+    const linked = await this.linkPortalProfilesByEmail(updated.id, updated.email);
+
+    return { user: linked, outcome: 'linked' };
   }
 
   private async notifyAttendeeAddedToEvent(
@@ -697,7 +782,7 @@ export class UserService {
       dualAccess: false,
     });
 
-    return toPublicUser(created);
+    return this.linkPortalProfilesByEmail(created.id, created.email);
   }
 
   async update(id: string, input: UpdateUserInput): Promise<PublicUser> {

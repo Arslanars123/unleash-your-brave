@@ -8,6 +8,7 @@ export interface PaginatedResult<T> {
 
 export interface SponsorRepository {
   findById(id: string): Promise<Sponsor | null>;
+  findByEmail(email: string): Promise<Sponsor | null>;
   list(query: ListSponsorsQuery): Promise<PaginatedResult<Sponsor>>;
   listByIds(ids: string[]): Promise<Sponsor[]>;
   create(data: Omit<Sponsor, 'id' | 'createdAt' | 'updatedAt'>): Promise<Sponsor>;
@@ -20,6 +21,16 @@ export class InMemorySponsorRepository implements SponsorRepository {
 
   async findById(id: string): Promise<Sponsor | null> {
     return this.sponsors.get(id) ?? null;
+  }
+
+  async findByEmail(email: string): Promise<Sponsor | null> {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) return null;
+    return (
+      [...this.sponsors.values()].find(
+        (sponsor) => sponsor.email.trim().toLowerCase() === normalized,
+      ) ?? null
+    );
   }
 
   async list(query: ListSponsorsQuery): Promise<PaginatedResult<Sponsor>> {

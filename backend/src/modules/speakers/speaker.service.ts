@@ -126,7 +126,7 @@ export class SpeakerService {
 
     const email = input.email?.trim() || updated.email.trim();
     if (email) {
-      await this.provisionPortalAccount(updated, email, Boolean(input.email?.trim()));
+      await this.provisionPortalAccount(updated, email, true);
     }
 
     return toPublicSpeaker(updated);

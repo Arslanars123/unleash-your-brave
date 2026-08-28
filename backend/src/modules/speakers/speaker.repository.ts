@@ -8,6 +8,7 @@ export interface PaginatedResult<T> {
 
 export interface SpeakerRepository {
   findById(id: string): Promise<Speaker | null>;
+  findByEmail(email: string): Promise<Speaker | null>;
   list(query: ListSpeakersQuery): Promise<PaginatedResult<Speaker>>;
   listByIds(ids: string[]): Promise<Speaker[]>;
   create(data: Omit<Speaker, 'id' | 'createdAt' | 'updatedAt'>): Promise<Speaker>;
@@ -20,6 +21,16 @@ export class InMemorySpeakerRepository implements SpeakerRepository {
 
   async findById(id: string): Promise<Speaker | null> {
     return this.speakers.get(id) ?? null;
+  }
+
+  async findByEmail(email: string): Promise<Speaker | null> {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) return null;
+    return (
+      [...this.speakers.values()].find(
+        (speaker) => speaker.email.trim().toLowerCase() === normalized,
+      ) ?? null
+    );
   }
 
   async list(query: ListSpeakersQuery): Promise<PaginatedResult<Speaker>> {

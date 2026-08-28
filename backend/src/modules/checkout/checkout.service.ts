@@ -672,12 +672,22 @@ export class CheckoutService {
   }
 
   async removeAttendeeCompletely(userId: string): Promise<void> {
-    await this.userService.getById(userId);
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundError('User');
 
     await this.purchases.deleteByUserId(userId);
     await this.checkIns?.deleteByUserId(userId);
     await this.checkInForms?.deleteSubmissionsByUserId(userId);
     await this.storeOrders?.deleteByUserId(userId);
+
+    if (this.userService.hasPortalAccess(user)) {
+      await this.userService.stripAttendeeData(userId);
+      this.realtimeHub.publish({
+        type: 'attendee.upserted',
+        payload: { id: userId, attendeeRemoved: true },
+      });
+      return;
+    }
 
     if (!(await this.users.delete(userId))) {
       throw new NotFoundError('User');
