@@ -5,6 +5,7 @@ import {
   ConflictError,
   NotFoundError,
 } from '../../core/errors/app-error.js';
+import { formatEditionRange } from '../../core/format-date.js';
 import { logger } from '../../core/logger.js';
 import type { CouponService } from '../coupons/coupon.service.js';
 import type { EventService } from '../events/event.service.js';
@@ -28,6 +29,7 @@ import type {
   PublicMembershipPurchase,
   PurchaseKind,
 } from './purchase.types.js';
+import { PURCHASE_KINDS } from './purchase.types.js';
 
 function moneyLabel(amount: number, currency: string): string {
   try {
@@ -362,6 +364,12 @@ export class CheckoutService {
       );
     }
 
+    const eventDateLabel = formatEditionRange(event.startDate, event.endDate);
+    const membershipBlurb = membership.description?.trim();
+    const productDescription = membershipBlurb
+      ? `${event.name} · ${eventDateLabel}\n${membershipBlurb}`
+      : `${event.name} · ${eventDateLabel}`;
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer_email: email,
@@ -376,9 +384,7 @@ export class CheckoutService {
             unit_amount: unitAmount,
             product_data: {
               name: `${membership.name} — ${event.name}`,
-              description:
-                membership.description?.trim() ||
-                `${env.appName} membership for ${event.name}`,
+              description: productDescription,
             },
           },
         },
@@ -388,6 +394,9 @@ export class CheckoutService {
         membershipName: membership.name,
         eventId: event.id,
         eventName: event.name,
+        eventStartDate: event.startDate.toISOString(),
+        eventEndDate: event.endDate.toISOString(),
+        eventDateLabel,
         email,
         firstName,
         lastName,
@@ -426,6 +435,30 @@ export class CheckoutService {
     const stripe = this.requireStripe();
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     const purchase = await this.purchases.findByStripeCheckoutSessionId(sessionId);
+    const metadata = session.metadata ?? {};
+
+    let eventName = metadata.eventName?.trim() || null;
+    let eventDateLabel = metadata.eventDateLabel?.trim() || null;
+    const eventId = metadata.eventId?.trim() || purchase?.eventId || null;
+
+    if (eventId && (!eventName || !eventDateLabel)) {
+      try {
+        const event = await this.events.getById(eventId);
+        eventName = eventName ?? event.name;
+        eventDateLabel =
+          eventDateLabel ?? formatEditionRange(event.startDate, event.endDate);
+      } catch {
+        // Session may reference a removed edition — keep Stripe metadata only.
+      }
+    }
+
+    const membershipName =
+      purchase?.membershipName ?? metadata.membershipName?.trim() ?? null;
+    const kind =
+      purchase?.kind ??
+      (metadata.kind && PURCHASE_KINDS.includes(metadata.kind as PurchaseKind)
+        ? (metadata.kind as PurchaseKind)
+        : null);
 
     return {
       sessionId: session.id,
@@ -433,6 +466,10 @@ export class CheckoutService {
       status: session.status,
       fulfilled: Boolean(purchase),
       purchase: purchase ? toPublicMembershipPurchase(purchase) : null,
+      eventName,
+      eventDateLabel,
+      membershipName,
+      kind,
     };
   }
 
