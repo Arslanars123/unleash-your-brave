@@ -326,17 +326,21 @@ export async function createContainer() {
   const mediaStorage = new MediaStorageService();
   const uploadController = new UploadController(mediaStorage);
 
-  await seedDemoData(
-    userService,
-    eventService,
-    speakerService,
-    sessionService,
-    sponsorService,
-    membershipService,
-    sessionFeedbackService,
-    announcementService,
-    postService,
-  );
+  try {
+    await seedDemoData(
+      userService,
+      eventService,
+      speakerService,
+      sessionService,
+      sponsorService,
+      membershipService,
+      sessionFeedbackService,
+      announcementService,
+      postService,
+    );
+  } catch (error) {
+    logger.warn({ err: error }, 'Demo seed skipped — server will continue without re-seeding');
+  }
 
   await chatService.ensureGroup();
 

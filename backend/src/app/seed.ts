@@ -228,11 +228,15 @@ export async function seedDemoData(
         const users = await userService.list({ page: 1, perPage: 50 });
         const member = users.items.find((user) => user.email === 'member@unleashyourbrave.com');
         if (member) {
-          await sessionFeedbackService.upsert(firstSession.id, member.id, {
-            rating: 5,
-            comment: 'Inspiring keynote — left feeling ready to lead with courage.',
-          });
-          logger.info('Seeded demo session feedback');
+          try {
+            await sessionFeedbackService.upsert(firstSession.id, member.id, {
+              rating: 5,
+              comment: 'Inspiring keynote — left feeling ready to lead with courage.',
+            });
+            logger.info('Seeded demo session feedback');
+          } catch (error) {
+            logger.debug({ err: error }, 'Skipped demo session feedback seed');
+          }
         }
       }
     }
