@@ -143,7 +143,6 @@ export class CheckoutService {
     const events = [];
     for (const event of available) {
       const memberships = await this.listMembershipsForEvent(event.id);
-      if (memberships.length === 0) continue;
       events.push({
         event: this.catalogEventSummary(event),
         memberships,
