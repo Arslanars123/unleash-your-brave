@@ -903,6 +903,7 @@ export class CheckoutService {
         role: upsert.user.role,
         speakerId: upsert.user.speakerId,
         sponsorId: upsert.user.sponsorId,
+        mustChangePassword: upsert.user.mustChangePassword,
       });
     }
 

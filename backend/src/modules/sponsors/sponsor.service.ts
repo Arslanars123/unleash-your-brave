@@ -250,7 +250,7 @@ export class SponsorService {
     email: string,
     issueInvite: boolean,
   ): Promise<void> {
-    const { inviteCode } = await this.users.upsertPortalAccount({
+    const { user, created, inviteCode } = await this.users.upsertPortalAccount({
       email,
       name: sponsor.name,
       role: 'sponsor',
@@ -258,7 +258,7 @@ export class SponsorService {
       issueInvite,
     });
 
-    if (inviteCode) {
+    if (created && inviteCode) {
       const expiresAt = new Date(
         Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
       );
@@ -274,6 +274,7 @@ export class SponsorService {
         to: email,
         name: sponsor.name,
         portalRole: 'sponsor',
+        mustChangePassword: user.mustChangePassword,
       });
     }
   }

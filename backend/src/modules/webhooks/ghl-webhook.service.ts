@@ -71,6 +71,7 @@ export class GhlWebhookService {
           role: user.role,
           speakerId: user.speakerId,
           sponsorId: user.sponsorId,
+          mustChangePassword: user.mustChangePassword,
         });
       } catch (error) {
         logger.error({ err: error, email: user.email }, 'Failed to send existing-account access email');

@@ -83,7 +83,7 @@ export function UsersPage() {
       ]);
       toast.success(
         result.outcome === 'linked'
-          ? 'Existing attendee added to this event — notification sent'
+          ? 'Existing account added to this event — login email sent (same email & password)'
           : 'Attendee created — invite email sent',
       );
       closeModal();

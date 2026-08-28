@@ -202,30 +202,6 @@ export class UserService {
     const applyName = input.applyName !== false;
 
     if (existing) {
-      // Speakers/sponsors (and any account) may also buy membership. Keep their
-      // portal role/links; issue a fresh app invite when they still need first login
-      // (expires any previous unused invite by replacing the hash).
-      const needsAppInvite = existing.mustChangePassword;
-      let inviteCode: string | undefined;
-      let invitePatch: Partial<{
-        inviteCodeHash: string;
-        inviteCodeExpiresAt: Date;
-        mustChangePassword: boolean;
-        passwordHash: string;
-      }> = {};
-
-      if (needsAppInvite) {
-        inviteCode = generateInviteCode();
-        invitePatch = {
-          inviteCodeHash: await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS),
-          inviteCodeExpiresAt: new Date(
-            Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
-          ),
-          mustChangePassword: true,
-          passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
-        };
-      }
-
       const updated = await this.users.update(existing.id, {
         ...(applyName
           ? {
@@ -237,10 +213,9 @@ export class UserService {
         ...(input.product?.trim() ? { title: input.product.trim() } : {}),
         ...(input.contactId?.trim() ? { ghlContactId: input.contactId.trim() } : {}),
         status: 'active',
-        ...invitePatch,
       });
       if (!updated) throw new NotFoundError('User');
-      return { user: toPublicUser(updated), created: false, inviteCode };
+      return { user: toPublicUser(updated), created: false };
     }
 
     const inviteCode = generateInviteCode();
@@ -386,15 +361,7 @@ export class UserService {
           ? 'sponsor'
           : existing.role;
 
-      // Password already set → never re-invite; unused invite → replace with a fresh code.
-      const passwordAlreadySet = !existing.mustChangePassword;
-      const shouldIssueInvite = !passwordAlreadySet && Boolean(input.issueInvite);
-      let inviteCode: string | undefined;
-
-      if (shouldIssueInvite) {
-        inviteCode = generateInviteCode();
-      }
-
+      // Existing logins keep their password — never re-issue an invite code.
       const updated = await this.users.update(existing.id, {
         email,
         name: input.name.trim(),
@@ -402,19 +369,9 @@ export class UserService {
         speakerId: nextSpeakerId,
         sponsorId: nextSponsorId,
         status: 'active',
-        ...(shouldIssueInvite
-          ? {
-              inviteCodeHash: await bcrypt.hash(inviteCode!, PASSWORD_SALT_ROUNDS),
-              inviteCodeExpiresAt: new Date(
-                Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
-              ),
-              mustChangePassword: true,
-              passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
-            }
-          : {}),
       });
       if (!updated) throw new NotFoundError('User');
-      return { user: toPublicUser(updated), created: false, inviteCode };
+      return { user: toPublicUser(updated), created: false };
     }
 
     const inviteCode = generateInviteCode();
@@ -622,7 +579,7 @@ export class UserService {
     if (!updated) throw new NotFoundError('User');
 
     const eventName = event?.name ?? 'your event';
-    void this.notifyAttendeeAddedToEvent(updated, eventName, eventId);
+    void this.notifyAttendeeAddedToEvent(updated, eventName, eventId, membership.name);
 
     this.realtimeHub?.publish({
       type: 'attendee.upserted',
@@ -646,6 +603,7 @@ export class UserService {
     user: User,
     eventName: string,
     eventId: string,
+    membershipName: string,
   ): Promise<void> {
     if (this.push) {
       try {
@@ -665,18 +623,15 @@ export class UserService {
     }
 
     if (this.mail) {
-      await this.mail.send({
+      await this.mail.sendExistingAccountMembershipAccess({
         to: user.email,
-        subject: `You're registered for ${eventName}`,
-        text: [
-          `Hi ${user.name},`,
-          '',
-          `You've been added to ${eventName}.`,
-          '',
-          'Open the app and sign in with your existing email to view your booking, agenda, and check-in QR.',
-          '',
-          `— ${env.appName}`,
-        ].join('\n'),
+        name: user.name,
+        membershipName,
+        role: user.role,
+        speakerId: user.speakerId,
+        sponsorId: user.sponsorId,
+        eventName,
+        mustChangePassword: user.mustChangePassword,
       });
     }
   }

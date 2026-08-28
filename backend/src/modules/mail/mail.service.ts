@@ -109,21 +109,43 @@ export class MailService {
     role: string;
     speakerId?: string | null;
     sponsorId?: string | null;
+    eventName?: string;
+    mustChangePassword?: boolean;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
     const parts: string[] = [];
     if (input.speakerId || input.role === 'speaker') parts.push('speaker');
     if (input.sponsorId || input.role === 'sponsor') parts.push('sponsor');
     const roleLabel =
       parts.length > 0 ? parts.join(' and ') : input.role === 'member' ? 'attendee' : 'account';
-    const subject = `Your ${env.appName} membership is ready — use your existing login`;
+
+    const registrationLine = input.eventName
+      ? `You've been registered for ${input.eventName} on your existing ${roleLabel} account.`
+      : `Your ${input.membershipName} membership is now active on your existing ${roleLabel} account.`;
+
+    const subject = input.eventName
+      ? `You're registered for ${input.eventName} — use your existing login`
+      : `Your ${env.appName} membership is ready — use your existing login`;
+
+    const loginLines = input.mustChangePassword
+      ? [
+          'You do not need a new invitation code.',
+          'If you have not set a password yet, open the app or dashboard and choose Forgot password with this email to create one.',
+          'If you already have a password, sign in with the same email and password you use today.',
+        ]
+      : [
+          'You do not need a new invitation code.',
+          'Sign in to the mobile app with the same email address and password you already use.',
+          parts.length > 0
+            ? `That login also continues to work for your ${roleLabel} dashboard access.`
+            : 'The same login works for the app and dashboard when you have dashboard access.',
+        ];
+
     const text = [
       `Hi ${input.name},`,
       '',
-      `Your ${input.membershipName} membership is now active on your existing ${roleLabel} account.`,
+      registrationLine,
       '',
-      'You do not need a new invitation code.',
-      'Sign in to the mobile app with the same email address and password you already use.',
-      `That login also continues to work for your ${roleLabel} dashboard access.`,
+      ...loginLines,
       '',
       'If you forgot your password, use Forgot password in the app or dashboard.',
       '',
@@ -132,9 +154,9 @@ export class MailService {
 
     const html = `
       <p>Hi ${escapeHtml(input.name)},</p>
-      <p>Your <strong>${escapeHtml(input.membershipName)}</strong> membership is now active on your existing ${escapeHtml(roleLabel)} account.</p>
+      <p>${escapeHtml(registrationLine)}</p>
       <p><strong>You do not need a new invitation code.</strong></p>
-      <p>Sign in to the mobile app with the same email address and password you already use. That login also continues to work for your ${escapeHtml(roleLabel)} dashboard access.</p>
+      ${loginLines.slice(1).map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
       <p>If you forgot your password, use Forgot password in the app or dashboard.</p>
       <p>If you did not expect this email, you can ignore it.</p>
     `;
@@ -146,17 +168,29 @@ export class MailService {
     to: string;
     name: string;
     portalRole: 'speaker' | 'sponsor';
+    mustChangePassword?: boolean;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
     const roleLabel = input.portalRole;
     const subject = `Your ${env.appName} ${roleLabel} dashboard access is ready`;
+
+    const loginLines = input.mustChangePassword
+      ? [
+          'You do not need a new invitation code.',
+          'If you have not set a password yet, open the app or dashboard and choose Forgot password with this email to create one.',
+          'If you already have a password, sign in with the same email and password you use today.',
+        ]
+      : [
+          'You do not need a new invitation code.',
+          'Sign in to the dashboard with the same email and password you already use for the mobile app.',
+          'Your attendee/membership access (if any) remains on the same login.',
+        ];
+
     const text = [
       `Hi ${input.name},`,
       '',
       `You now have ${roleLabel} access on your existing account.`,
       '',
-      'You do not need a new invitation code.',
-      'Sign in to the dashboard with the same email and password you already use for the mobile app.',
-      'Your attendee/membership access (if any) remains on the same login.',
+      ...loginLines,
       '',
       'If you forgot your password, use Forgot password in the app or dashboard.',
     ].join('\n');
@@ -165,7 +199,7 @@ export class MailService {
       <p>Hi ${escapeHtml(input.name)},</p>
       <p>You now have <strong>${escapeHtml(roleLabel)}</strong> access on your existing account.</p>
       <p><strong>You do not need a new invitation code.</strong></p>
-      <p>Sign in to the dashboard with the same email and password you already use for the mobile app. Your attendee/membership access (if any) remains on the same login.</p>
+      ${loginLines.slice(1).map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
       <p>If you forgot your password, use Forgot password in the app or dashboard.</p>
     `;
 
