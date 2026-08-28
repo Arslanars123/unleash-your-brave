@@ -5,6 +5,8 @@ import { usersApi } from '@/features/users/api/users-api';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
+import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
+import { AttendeeDeleteModal } from '@/features/users/components/AttendeeDeleteModal';
 import { AttendeeDetailModal } from '@/features/users/components/AttendeeDetailModal';
 import { AttendeeFormModal } from '@/features/users/components/AttendeeFormModal';
 import { useAttendeeRealtime } from '@/features/users/hooks/useAttendeeRealtime';
@@ -25,6 +27,7 @@ export function UsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PublicUser | null>(null);
   const [viewing, setViewing] = useState<PublicUser | null>(null);
+  const [deleting, setDeleting] = useState<PublicUser | null>(null);
   const [formEventId, setFormEventId] = useState<string | undefined>();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -114,13 +117,30 @@ export function UsersPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => usersApi.remove(id),
-    onSuccess: async () => {
+    mutationFn: ({
+      id,
+      eventId,
+      scope,
+    }: {
+      id: string;
+      eventId?: string;
+      scope: 'event' | 'all';
+    }) => usersApi.remove(id, { eventId, scope }),
+    onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['users', 'list'] }),
         queryClient.invalidateQueries({ queryKey: ['users', 'stats'] }),
+        queryClient.invalidateQueries({ queryKey: ['checkins'] }),
       ]);
-      toast.success('Attendee deleted');
+      toast.success(
+        variables.scope === 'event'
+          ? 'Attendee removed from this event'
+          : 'Attendee deleted from all events',
+      );
+      setDeleting(null);
+      if (viewing?.id === variables.id && variables.scope === 'all') {
+        setViewing(null);
+      }
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to delete attendee')),
   });
@@ -163,16 +183,18 @@ export function UsersPage() {
     await createMutation.mutateAsync(payload as CreateUserPayload);
   }
 
-  async function handleDelete(user: PublicUser) {
-    const label = user.fullName || user.name || user.email;
-    const ok = await confirm({
-      title: 'Delete attendee?',
-      message: `Delete “${label}”? This cannot be undone.`,
-      confirmLabel: 'Delete',
-      tone: 'danger',
+  async function handleDeleteConfirm(options: { scope: 'event' | 'all' }) {
+    const user = deleting;
+    if (!user) return;
+    await deleteMutation.mutateAsync({
+      id: user.id,
+      scope: options.scope,
+      ...(options.scope === 'event' && eventId ? { eventId } : {}),
     });
-    if (!ok) return;
-    await deleteMutation.mutateAsync(user.id);
+  }
+
+  function openDelete(user: PublicUser) {
+    setDeleting(user);
   }
 
   async function handleStatusToggle(user: PublicUser) {
@@ -346,7 +368,7 @@ export function UsersPage() {
                       <Button
                         variant="danger"
                         disabled={deleteMutation.isPending}
-                        onClick={() => void handleDelete(user)}
+                        onClick={() => openDelete(user)}
                       >
                         <Trash2 size={14} />
                         Delete
@@ -367,6 +389,19 @@ export function UsersPage() {
           </div>
         )
       ) : null}
+
+      <AttendeeDeleteModal
+        open={Boolean(deleting)}
+        attendeeLabel={deleting?.fullName || deleting?.name || deleting?.email || 'Attendee'}
+        eventLabel={
+          eventId && selectedEdition
+            ? `${selectedEdition.name} (${formatEditionRange(selectedEdition)})`
+            : null
+        }
+        loading={deleteMutation.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={(options) => void handleDeleteConfirm(options)}
+      />
 
       <AttendeeDetailModal
         open={Boolean(viewing)}

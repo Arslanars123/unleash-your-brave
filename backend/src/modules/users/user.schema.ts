@@ -226,3 +226,8 @@ export const updateMyProfileSchema = z
 export const upgradeMyMembershipSchema = z.object({
   membershipId: z.string().uuid(),
 });
+
+export const deleteUserQuerySchema = z.object({
+  eventId: z.string().uuid().optional(),
+  scope: z.enum(['event', 'all']).optional(),
+});

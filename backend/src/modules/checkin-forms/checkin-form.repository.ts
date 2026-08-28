@@ -26,4 +26,6 @@ export interface CheckInFormRepository {
     id: string,
     data: Partial<Omit<CheckInFormSubmission, 'id' | 'createdAt'>>,
   ): Promise<CheckInFormSubmission | null>;
+  deleteSubmissionByEventAndUser(eventId: string, userId: string): Promise<boolean>;
+  deleteSubmissionsByUserId(userId: string): Promise<number>;
 }

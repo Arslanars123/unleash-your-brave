@@ -21,6 +21,8 @@ export interface StoreOrderRepository {
   listByUserId(userId: string): Promise<StoreOrder[]>;
   /** Distinct user ids with a paid store order for the event. */
   listPaidUserIdsByEvent(eventId: string): Promise<string[]>;
+  deleteByUserId(userId: string): Promise<number>;
+  deleteByUserAndEvent(userId: string, eventId: string): Promise<number>;
   summarizePaidForEvent(eventId: string): Promise<StoreOrderEventSummary>;
   create(data: CreateStoreOrderInput): Promise<StoreOrder>;
   update(
@@ -76,6 +78,28 @@ export class InMemoryStoreOrderRepository implements StoreOrderRepository {
           .map((item) => item.userId),
       ),
     ];
+  }
+
+  async deleteByUserId(userId: string): Promise<number> {
+    let count = 0;
+    for (const [id, item] of this.items) {
+      if (item.userId === userId) {
+        this.items.delete(id);
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  async deleteByUserAndEvent(userId: string, eventId: string): Promise<number> {
+    let count = 0;
+    for (const [id, item] of this.items) {
+      if (item.userId === userId && item.eventId === eventId) {
+        this.items.delete(id);
+        count += 1;
+      }
+    }
+    return count;
   }
 
   async summarizePaidForEvent(eventId: string) {

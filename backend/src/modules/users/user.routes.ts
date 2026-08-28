@@ -6,6 +6,7 @@ import { validate } from '../../middleware/validate.js';
 import type { UserController } from './user.controller.js';
 import {
   createUserSchema,
+  deleteUserQuerySchema,
   listUsersQuerySchema,
   updateMyProfileSchema,
   updateUserSchema,
@@ -50,13 +51,23 @@ export function createUserRouter(controller: UserController): Router {
     asyncHandler(controller.listPurchases),
   );
 
+  router.get(
+    '/:id/event-records',
+    validate({ params: userIdParamSchema }),
+    asyncHandler(controller.listEventRecords),
+  );
+
   router.patch(
     '/:id',
     validate({ params: userIdParamSchema, body: updateUserSchema }),
     asyncHandler(controller.update),
   );
 
-  router.delete('/:id', validate({ params: userIdParamSchema }), asyncHandler(controller.remove));
+  router.delete(
+    '/:id',
+    validate({ params: userIdParamSchema, query: deleteUserQuerySchema }),
+    asyncHandler(controller.remove),
+  );
 
   return router;
 }

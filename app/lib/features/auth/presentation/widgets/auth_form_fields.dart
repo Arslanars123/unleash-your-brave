@@ -192,7 +192,7 @@ class AuthBrandHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const _AuthLogoGlow(
-          child: BrandLogo(height: 124, alignment: Alignment.center),
+          child: BrandLogo(height: 88, alignment: Alignment.center),
         ),
         SizedBox(height: context.isShortViewport ? 18 : 28),
         Text(

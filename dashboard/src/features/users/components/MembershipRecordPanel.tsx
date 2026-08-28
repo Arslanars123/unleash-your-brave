@@ -106,6 +106,8 @@ interface MembershipRecordPanelProps {
   sourceLabel: string;
   productTitle?: string | null;
   preferredEventId?: string;
+  /** When true, only show purchases for preferredEventId (check-in / per-event views). */
+  eventOnly?: boolean;
 }
 
 /** Clean membership summary + purchase history for attendee detail / check-in. */
@@ -114,8 +116,14 @@ export function MembershipRecordPanel({
   sourceLabel,
   productTitle,
   preferredEventId,
+  eventOnly = false,
 }: MembershipRecordPanelProps) {
-  const history = [...summary.purchases].sort((a, b) => {
+  const scopedPurchases =
+    eventOnly && preferredEventId
+      ? summary.purchases.filter((item) => item.eventId === preferredEventId)
+      : summary.purchases;
+
+  const history = [...scopedPurchases].sort((a, b) => {
     if (preferredEventId) {
       const aMatch = a.eventId === preferredEventId ? 0 : 1;
       const bMatch = b.eventId === preferredEventId ? 0 : 1;
@@ -127,6 +135,15 @@ export function MembershipRecordPanel({
   const preferredCount = preferredEventId
     ? history.filter((item) => item.eventId === preferredEventId).length
     : 0;
+
+  const historyHeadLabel =
+    eventOnly && preferredEventId
+      ? `${history.length} record${history.length === 1 ? '' : 's'} for this event`
+      : `${history.length} record${history.length === 1 ? '' : 's'}${
+          preferredEventId && preferredCount > 0
+            ? ` · ${preferredCount} for selected event first`
+            : ''
+        }`;
 
   const isRecurring =
     summary.isRecurring ?? summary.currentBillingKind === 'renewable';
@@ -243,11 +260,8 @@ export function MembershipRecordPanel({
         <div className="purchase-history-head">
           <h4>Payment history</h4>
           <span className="muted">
-            {history.length} record{history.length === 1 ? '' : 's'}
-            {preferredEventId && preferredCount > 0
-              ? ` · ${preferredCount} for selected event first`
-              : ''}
-            {summary.renewals?.length
+            {historyHeadLabel}
+            {!eventOnly && summary.renewals?.length
               ? ` · ${summary.renewals.length} renewal${summary.renewals.length === 1 ? '' : 's'}`
               : ''}
           </span>

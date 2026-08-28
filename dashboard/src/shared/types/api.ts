@@ -189,6 +189,15 @@ export interface AttendeePurchaseSummary {
   latestPurchase: PublicMembershipPurchase | null;
 }
 
+export interface AttendeeEventRecord {
+  eventId: string;
+  eventName: string;
+  eventStartDate: string;
+  eventEndDate: string;
+  eventStatus: string;
+  summary: AttendeePurchaseSummary;
+}
+
 export interface CheckInScanMembershipSummary extends AttendeePurchaseSummary {
   membershipIdAtCheckIn: string | null;
   membershipNameAtCheckIn: string | null;

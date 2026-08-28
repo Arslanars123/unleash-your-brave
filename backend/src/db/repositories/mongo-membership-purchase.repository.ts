@@ -63,6 +63,24 @@ export class MongoMembershipPurchaseRepository implements MembershipPurchaseRepo
     return [...new Set(docs.map((doc) => String(doc.userId)).filter(Boolean))];
   }
 
+  async deleteByUserId(userId: string): Promise<number> {
+    const result = await this.collection.deleteMany({ userId });
+    return result.deletedCount;
+  }
+
+  async deleteByUserAndEvent(userId: string, eventId: string): Promise<number> {
+    const result = await this.collection.deleteMany({ userId, eventId });
+    return result.deletedCount;
+  }
+
+  async listDistinctPaidEventIdsByUser(userId: string): Promise<string[]> {
+    const docs = await this.collection
+      .find({ userId, paymentStatus: 'paid' })
+      .project({ eventId: 1 })
+      .toArray();
+    return [...new Set(docs.map((doc) => String(doc.eventId)).filter(Boolean))];
+  }
+
   async summarizePaidForEvent(eventId: string) {
     const empty = {
       soldCount: 0,

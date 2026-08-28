@@ -155,7 +155,7 @@ class _SplashPageState extends State<SplashPage>
                               );
                             },
                             child: const BrandLogo(
-                              height: 120,
+                              height: 84,
                               alignment: Alignment.center,
                             ),
                           ),

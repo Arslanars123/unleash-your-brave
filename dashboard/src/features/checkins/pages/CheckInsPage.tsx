@@ -563,6 +563,8 @@ export function CheckInsPage() {
                         : 'Manual / admin / Stripe'
                     }
                     productTitle={scanDetail.user.title}
+                    preferredEventId={eventId ?? scanDetail.eventId}
+                    eventOnly
                   />
                   {scanDetail.formSubmission ? (
                     <CheckInFormSubmissionPanel

@@ -16,11 +16,16 @@ import { toPublicMembership } from '../memberships/membership.mapper.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { MembershipService } from '../memberships/membership.service.js';
 import type { RealtimeHub } from '../realtime/realtime.hub.js';
+import type { CheckInFormRepository } from '../checkin-forms/checkin-form.repository.js';
+import type { CheckInPendingScanRepository } from '../checkins/checkin-pending-scan.repository.js';
+import type { CheckInRepository } from '../../db/repositories/mongo-checkin.repository.js';
+import type { StoreOrderRepository } from '../store/store-order.repository.js';
 import type { UserRepository } from '../users/user.repository.js';
 import type { UserService } from '../users/user.service.js';
 import { toPublicMembershipPurchase } from './purchase.mapper.js';
 import type { MembershipPurchaseRepository } from './purchase.repository.js';
 import type {
+  AttendeeEventRecord,
   AttendeePurchaseSummary,
   CheckoutEligibility,
   CreateCheckoutSessionInput,
@@ -55,6 +60,10 @@ function splitDisplayName(fullName: string): { firstName: string; lastName: stri
 
 export class CheckoutService {
   private stripe: Stripe | null = null;
+  private checkIns?: CheckInRepository;
+  private checkInForms?: CheckInFormRepository;
+  private pendingScans?: CheckInPendingScanRepository;
+  private storeOrders?: StoreOrderRepository;
 
   constructor(
     private readonly purchases: MembershipPurchaseRepository,
@@ -68,6 +77,18 @@ export class CheckoutService {
     private readonly storeCheckout?: { fulfillCheckoutSession: (session: Stripe.Checkout.Session) => Promise<void> },
     private readonly membershipCatalog?: MembershipService,
   ) {}
+
+  configureAttendeeRemoval(deps: {
+    checkIns: CheckInRepository;
+    checkInForms: CheckInFormRepository;
+    pendingScans: CheckInPendingScanRepository;
+    storeOrders: StoreOrderRepository;
+  }): void {
+    this.checkIns = deps.checkIns;
+    this.checkInForms = deps.checkInForms;
+    this.pendingScans = deps.pendingScans;
+    this.storeOrders = deps.storeOrders;
+  }
 
   private requireStripe(): Stripe {
     if (!env.stripe.secretKey) {
@@ -538,32 +559,16 @@ export class CheckoutService {
 
     const all = await this.purchases.listByUserId(userId);
     const paidAll = all.filter((p) => p.paymentStatus === 'paid');
-    const preferred = eventId
-      ? paidAll.filter((p) => p.eventId === eventId)
-      : [];
-    // When an event filter is applied, put that edition's purchases first, then the rest.
-    const paid = eventId
-      ? [
-          ...preferred,
-          ...paidAll.filter((p) => p.eventId !== eventId),
-        ]
-      : paidAll;
+    const eventPaid = eventId ? paidAll.filter((p) => p.eventId === eventId) : paidAll;
+    const paid = eventId ? eventPaid : paidAll;
 
-    const eventPaid = eventId ? preferred : paid;
-    const original = (eventId ? eventPaid : paid)[0] ?? paid[0] ?? null;
-    const latest =
-      (eventId ? eventPaid : paid).length > 0
-        ? (eventId ? eventPaid : paid)[(eventId ? eventPaid : paid).length - 1]!
-        : paid.length > 0
-          ? paid[paid.length - 1]!
-          : null;
+    const original = paid[0] ?? null;
+    const latest = paid.length > 0 ? paid[paid.length - 1]! : null;
     const upgrades = paid.filter((p) => p.kind === 'upgrade');
     const renewals = paid.filter((p) => p.kind === 'renew');
 
     const focusMembershipId =
-      latest?.membershipId ??
-      (eventId ? null : user.membershipId) ??
-      user.membershipId;
+      latest?.membershipId ?? (eventId ? null : user.membershipId) ?? null;
 
     let currentMembershipName: string | null = null;
     let currentBillingKind: 'one_time' | 'renewable' | null = null;
@@ -580,7 +585,14 @@ export class CheckoutService {
 
     const now = Date.now();
     let currentMembershipStatus = user.membershipStatus ?? null;
-    if (
+    if (eventId) {
+      currentMembershipStatus =
+        latest?.periodEnd && latest.periodEnd.getTime() <= now
+          ? 'expired'
+          : latest
+            ? 'active'
+            : null;
+    } else if (
       user.membershipExpiresAt &&
       user.membershipExpiresAt.getTime() <= now &&
       currentMembershipStatus !== 'expired'
@@ -590,13 +602,20 @@ export class CheckoutService {
       currentMembershipStatus = 'active';
     }
 
+    const currentMembershipExpiresAt =
+      eventId && latest?.periodEnd
+        ? latest.periodEnd.toISOString()
+        : user.membershipExpiresAt
+          ? user.membershipExpiresAt.toISOString()
+          : latest?.periodEnd
+            ? latest.periodEnd.toISOString()
+            : null;
+
     return {
       currentMembershipId,
       currentMembershipName,
       currentMembershipStatus,
-      currentMembershipExpiresAt: user.membershipExpiresAt
-        ? user.membershipExpiresAt.toISOString()
-        : null,
+      currentMembershipExpiresAt,
       currentBillingKind,
       originalMembershipId: original?.membershipId ?? currentMembershipId,
       originalMembershipName: original?.membershipName ?? currentMembershipName,
@@ -605,6 +624,69 @@ export class CheckoutService {
       renewals: renewals.map(toPublicMembershipPurchase),
       latestPurchase: latest ? toPublicMembershipPurchase(latest) : null,
     };
+  }
+
+  async getAttendeeEventRecords(userId: string): Promise<AttendeeEventRecord[]> {
+    await this.userService.getById(userId);
+    const eventIds = await this.purchases.listDistinctPaidEventIdsByUser(userId);
+    const records: AttendeeEventRecord[] = [];
+
+    for (const eventId of eventIds) {
+      let event;
+      try {
+        event = await this.events.getById(eventId);
+      } catch {
+        continue;
+      }
+      records.push({
+        eventId: event.id,
+        eventName: event.name,
+        eventStartDate: event.startDate,
+        eventEndDate: event.endDate,
+        eventStatus: event.status,
+        summary: await this.getAttendeePurchaseSummary(userId, eventId),
+      });
+    }
+
+    records.sort(
+      (a, b) =>
+        new Date(b.eventStartDate).getTime() - new Date(a.eventStartDate).getTime(),
+    );
+    return records;
+  }
+
+  async removeAttendeeFromEvent(userId: string, eventId: string): Promise<void> {
+    await this.userService.getById(userId);
+    await this.events.getById(eventId);
+
+    await this.purchases.deleteByUserAndEvent(userId, eventId);
+    await this.checkIns?.deleteByEventAndUser(eventId, userId);
+    await this.checkInForms?.deleteSubmissionByEventAndUser(eventId, userId);
+    await this.pendingScans?.deleteByEventAndUser(eventId, userId);
+    await this.storeOrders?.deleteByUserAndEvent(userId, eventId);
+
+    this.realtimeHub.publish({
+      type: 'attendee.upserted',
+      payload: { id: userId, eventId, removedFromEvent: true },
+    });
+  }
+
+  async removeAttendeeCompletely(userId: string): Promise<void> {
+    await this.userService.getById(userId);
+
+    await this.purchases.deleteByUserId(userId);
+    await this.checkIns?.deleteByUserId(userId);
+    await this.checkInForms?.deleteSubmissionsByUserId(userId);
+    await this.storeOrders?.deleteByUserId(userId);
+
+    if (!(await this.users.delete(userId))) {
+      throw new NotFoundError('User');
+    }
+
+    this.realtimeHub.publish({
+      type: 'attendee.deleted',
+      payload: { id: userId },
+    });
   }
 
   private async fulfillCheckoutSession(session: Stripe.Checkout.Session): Promise<void> {

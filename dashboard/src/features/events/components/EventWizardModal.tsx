@@ -11,6 +11,14 @@ import {
   type EventFormValues,
   type FieldErrors,
 } from '@/features/events/components/event-form-utils';
+import { EventWizardCheckInFormStep } from '@/features/events/components/EventWizardCheckInFormStep';
+import {
+  freshWizardCheckInFormValues,
+  toCheckInFormPayload,
+  validateCheckInFormValues,
+  type CheckInFormFieldErrors,
+  type CheckInFormValues,
+} from '@/features/checkin-forms/checkin-form-utils';
 import {
   draftSessionsToPayloads,
   EventWizardSessionsStep,
@@ -18,7 +26,12 @@ import {
 } from '@/features/events/components/EventWizardSessionsStep';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { uploadImageFile } from '@/shared/lib/upload-image';
-import type { PublicEvent, ScheduleEventPayload, SessionPayload } from '@/shared/types/api';
+import type {
+  PublicEvent,
+  ScheduleEventPayload,
+  SessionPayload,
+  UpsertCheckInFormPayload,
+} from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { useToast } from '@/shared/ui/toast';
 
@@ -27,11 +40,13 @@ const STEPS = [
   { id: 'sponsors', label: 'Sponsors', description: 'Link sponsors to this edition' },
   { id: 'memberships', label: 'Memberships', description: 'Choose tiers for this event' },
   { id: 'sessions', label: 'Sessions', description: 'Build the agenda' },
+  { id: 'checkin', label: 'Check-in waiver', description: 'Required waiver form' },
 ] as const;
 
 export interface EventWizardResult {
   payload: ScheduleEventPayload;
   sessions: SessionPayload[];
+  checkInForm: UpsertCheckInFormPayload;
 }
 
 interface EventWizardModalProps {
@@ -58,12 +73,17 @@ export function EventWizardModal({
   const [pendingCover, setPendingCover] = useState<File | null>(null);
   const [pendingCoverPreview, setPendingCoverPreview] = useState<string | null>(null);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
+  const [checkInFormValues, setCheckInFormValues] = useState<CheckInFormValues>(
+    freshWizardCheckInFormValues,
+  );
+  const [checkInFormErrors, setCheckInFormErrors] = useState<CheckInFormFieldErrors>({});
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     setSubmitted(false);
     setErrors({});
+    setCheckInFormErrors({});
     setUploading(false);
     setPendingCover(null);
     setPendingCoverPreview((prev) => {
@@ -71,6 +91,7 @@ export function EventWizardModal({
       return null;
     });
     setDraftSessions([]);
+    setCheckInFormValues(freshWizardCheckInFormValues());
     setValues(scheduleBlankForm(previousEvent));
   }, [open, previousEvent]);
 
@@ -87,6 +108,13 @@ export function EventWizardModal({
       return preview;
     });
     setPendingCover(file);
+  }
+
+  function validateCheckInStep(): CheckInFormFieldErrors {
+    return validateCheckInFormValues(checkInFormValues, {
+      requireActive: true,
+      requireContent: true,
+    });
   }
 
   function validateCurrentStep(): FieldErrors {
@@ -108,15 +136,22 @@ export function EventWizardModal({
   function goBack() {
     setSubmitted(false);
     setErrors({});
+    setCheckInFormErrors({});
     setStep((current) => Math.max(current - 1, 0));
   }
 
   async function handleFinish() {
     setSubmitted(true);
     const nextErrors = validateEventForm(values, { mode: 'schedule', previousEvent });
+    const waiverErrors = validateCheckInStep();
     setErrors(nextErrors);
+    setCheckInFormErrors(waiverErrors);
     if (Object.keys(nextErrors).length > 0) {
       setStep(0);
+      return;
+    }
+    if (Object.keys(waiverErrors).length > 0) {
+      setStep(STEPS.length - 1);
       return;
     }
 
@@ -143,6 +178,7 @@ export function EventWizardModal({
     await onComplete({
       payload: toSchedulePayload(finalValues),
       sessions: draftSessionsToPayloads(draftSessions),
+      checkInForm: toCheckInFormPayload(checkInFormValues),
     });
   }
 
@@ -212,8 +248,9 @@ export function EventWizardModal({
                 membershipIds: values.membershipIds,
               }}
               showMemberships={false}
+              allowCreateSponsor
               disabled={busy}
-              hint="Select sponsors for this edition. You can skip this step and add sponsors later."
+              hint="Select sponsors for this edition, or create a new sponsor here. You can skip this step and add sponsors later."
               onChange={(next) =>
                 setValues((current) => ({
                   ...current,
@@ -250,6 +287,25 @@ export function EventWizardModal({
               sessions={draftSessions}
               disabled={busy}
               onChange={setDraftSessions}
+            />
+          ) : null}
+
+          {step === 4 ? (
+            <EventWizardCheckInFormStep
+              values={checkInFormValues}
+              errors={checkInFormErrors}
+              disabled={busy}
+              onChange={(next) => {
+                setCheckInFormValues(next);
+                if (submitted) {
+                  setCheckInFormErrors(
+                    validateCheckInFormValues(next, {
+                      requireActive: true,
+                      requireContent: true,
+                    }),
+                  );
+                }
+              }}
             />
           ) : null}
         </div>

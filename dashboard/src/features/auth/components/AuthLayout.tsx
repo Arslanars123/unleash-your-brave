@@ -24,12 +24,7 @@ export function AuthLayout({
 
         <div className="auth-brand-content">
           <p className="auth-brand-kicker">Admin portal</p>
-          <BrandLogo height={72} className="auth-brand-logo" />
-          <h1 className="auth-brand-title">
-            Unleash
-            <br />
-            Your Brave
-          </h1>
+          <BrandLogo variant="dark" height={148} className="auth-brand-logo" />
           <p className="auth-brand-line">{brandLine}</p>
         </div>
 

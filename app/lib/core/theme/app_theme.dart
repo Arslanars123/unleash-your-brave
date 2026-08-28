@@ -72,7 +72,7 @@ abstract final class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.accentPink,
-          foregroundColor: AppColors.textPrimary,
+          foregroundColor: Colors.white,
           disabledBackgroundColor: AppColors.bgMaroon,
           disabledForegroundColor: AppColors.textTertiary,
           minimumSize: const Size.fromHeight(52),

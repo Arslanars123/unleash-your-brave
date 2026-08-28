@@ -133,4 +133,17 @@ export class MongoCheckInFormRepository implements CheckInFormRepository {
     await this.submissions.replaceOne({ _id: id }, toDoc(updated));
     return updated;
   }
+
+  async deleteSubmissionByEventAndUser(
+    eventId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const result = await this.submissions.deleteOne({ eventId, userId });
+    return result.deletedCount === 1;
+  }
+
+  async deleteSubmissionsByUserId(userId: string): Promise<number> {
+    const result = await this.submissions.deleteMany({ userId });
+    return result.deletedCount;
+  }
 }

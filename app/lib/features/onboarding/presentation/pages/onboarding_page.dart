@@ -85,7 +85,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 StaggeredEntrance(
                   child: Row(
                     children: [
-                      const BrandLogo(height: 72, alignment: Alignment.centerLeft),
+                      const BrandLogo(height: 52, alignment: Alignment.centerLeft),
                       const Spacer(),
                       if (!isLast)
                         TextButton(

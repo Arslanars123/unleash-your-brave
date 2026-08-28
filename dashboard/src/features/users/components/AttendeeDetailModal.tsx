@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Pencil, X } from 'lucide-react';
 import { MembershipRecordPanel } from '@/features/users/components/MembershipRecordPanel';
 import { usersApi } from '@/features/users/api/users-api';
-import { formatUsDateTime } from '@/shared/lib/datetime';
-import type { PublicUser } from '@/shared/types/api';
+import { formatEditionRange, formatUsDateTime } from '@/shared/lib/datetime';
+import type { AttendeeEventRecord, PublicUser } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Spinner } from '@/shared/ui/Spinner';
 
@@ -27,10 +27,17 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function eventRangeLabel(record: AttendeeEventRecord): string {
+  return formatEditionRange({
+    startDate: record.eventStartDate,
+    endDate: record.eventEndDate,
+  });
+}
+
 interface AttendeeDetailModalProps {
   open: boolean;
   user: PublicUser | null;
-  /** When set, membership summary / history prioritizes this edition. */
+  /** When set, that edition’s section is shown first. */
   preferredEventId?: string;
   preferredEventLabel?: string;
   onClose: () => void;
@@ -54,22 +61,29 @@ export function AttendeeDetailModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const purchasesQuery = useQuery({
-    queryKey: ['users', 'purchases', user?.id, preferredEventId ?? 'all'],
+  const eventRecordsQuery = useQuery({
+    queryKey: ['users', 'event-records', user?.id],
     enabled: open && Boolean(user?.id),
-    queryFn: () =>
-      usersApi.getPurchases(user!.id, preferredEventId ? { eventId: preferredEventId } : {}),
+    queryFn: () => usersApi.getEventRecords(user!.id),
   });
 
   if (!open || !user) return null;
 
   const fromGhl = Boolean(user.ghlContactId) || Boolean(user.title);
-  const summary = purchasesQuery.data;
   const sourceLabel = user.ghlContactId
     ? 'GoHighLevel webhook'
     : fromGhl
       ? 'Likely purchase / GHL'
       : 'Manual / admin / Stripe';
+
+  const records = [...(eventRecordsQuery.data ?? [])].sort((a, b) => {
+    if (preferredEventId) {
+      const aMatch = a.eventId === preferredEventId ? 0 : 1;
+      const bMatch = b.eventId === preferredEventId ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+    }
+    return new Date(b.eventStartDate).getTime() - new Date(a.eventStartDate).getTime();
+  });
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -108,25 +122,48 @@ export function AttendeeDetailModal({
         <div className="modal-body">
           <section className="attendee-detail-section">
             <h3>
-              Membership
+              Events & membership
               {preferredEventLabel ? (
                 <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>
                   · {preferredEventLabel} first
                 </span>
               ) : null}
             </h3>
-            {purchasesQuery.isLoading ? <Spinner /> : null}
-            {purchasesQuery.isError ? (
-              <p className="form-error">Could not load purchase history.</p>
+            {eventRecordsQuery.isLoading ? <Spinner /> : null}
+            {eventRecordsQuery.isError ? (
+              <p className="form-error">Could not load event records.</p>
             ) : null}
-            {summary ? (
-              <MembershipRecordPanel
-                summary={summary}
-                sourceLabel={sourceLabel}
-                productTitle={user.title}
-                preferredEventId={preferredEventId}
-              />
+            {!eventRecordsQuery.isLoading && records.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                No paid event memberships recorded yet.
+              </p>
             ) : null}
+            {records.map((record) => (
+              <div
+                key={record.eventId}
+                className="attendee-event-record"
+                style={{
+                  marginBottom: 24,
+                  paddingBottom: 24,
+                  borderBottom: '1px solid var(--border, #e8e4df)',
+                }}
+              >
+                <div style={{ marginBottom: 12 }}>
+                  <h4 style={{ margin: '0 0 4px' }}>{record.eventName}</h4>
+                  <p className="muted" style={{ margin: 0, fontSize: '0.875rem' }}>
+                    {eventRangeLabel(record)} · {record.eventStatus}
+                    {preferredEventId === record.eventId ? ' · selected event' : ''}
+                  </p>
+                </div>
+                <MembershipRecordPanel
+                  summary={record.summary}
+                  sourceLabel={sourceLabel}
+                  productTitle={user.title}
+                  preferredEventId={record.eventId}
+                  eventOnly
+                />
+              </div>
+            ))}
           </section>
 
           <section className="attendee-detail-section">

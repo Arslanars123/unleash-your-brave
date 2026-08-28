@@ -89,6 +89,16 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
     return [...new Set(docs.map((doc) => String(doc.userId)).filter(Boolean))];
   }
 
+  async deleteByUserId(userId: string): Promise<number> {
+    const result = await this.collection.deleteMany({ userId });
+    return result.deletedCount;
+  }
+
+  async deleteByUserAndEvent(userId: string, eventId: string): Promise<number> {
+    const result = await this.collection.deleteMany({ userId, eventId });
+    return result.deletedCount;
+  }
+
   async summarizePaidForEvent(eventId: string) {
     const [row] = await this.collection
       .aggregate<{

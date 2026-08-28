@@ -9,6 +9,8 @@ export interface CheckInRepository {
   listByEvent(eventId: string): Promise<CheckIn[]>;
   countByEvent(eventId: string): Promise<number>;
   create(data: Omit<CheckIn, 'id' | 'createdAt' | 'updatedAt'>): Promise<CheckIn>;
+  deleteByEventAndUser(eventId: string, userId: string): Promise<boolean>;
+  deleteByUserId(userId: string): Promise<number>;
 }
 
 export class MongoCheckInRepository implements CheckInRepository {
@@ -52,5 +54,15 @@ export class MongoCheckInRepository implements CheckInRepository {
     };
     await this.collection.insertOne(toDoc(checkIn));
     return checkIn;
+  }
+
+  async deleteByEventAndUser(eventId: string, userId: string): Promise<boolean> {
+    const result = await this.collection.deleteOne({ eventId, userId });
+    return result.deletedCount === 1;
+  }
+
+  async deleteByUserId(userId: string): Promise<number> {
+    const result = await this.collection.deleteMany({ userId });
+    return result.deletedCount;
   }
 }

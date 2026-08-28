@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
@@ -12,6 +13,7 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
+  Menu,
   MessageCircle,
   Mic2,
   QrCode,
@@ -20,6 +22,7 @@ import {
   UserRound,
   Users,
   ShoppingBag,
+  X,
 } from 'lucide-react';
 import { announcementsApi } from '@/features/announcements/api/announcements-api';
 import { usePortalAnnouncementRealtime } from '@/features/announcements/hooks/usePortalAnnouncementRealtime';
@@ -29,9 +32,22 @@ import { Button } from '@/shared/ui/Button';
 
 export function AppShell() {
   const { user, logout, isAdmin, isSpeaker, isSponsor } = useAuth();
+  const location = useLocation();
+  const [navOpen, setNavOpen] = useState(false);
   const portalNotifications = (isSpeaker || isSponsor) && !isAdmin;
 
   usePortalAnnouncementRealtime(portalNotifications);
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = navOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [navOpen]);
 
   const unreadQuery = useQuery({
     queryKey: ['announcements', 'unread-count'],
@@ -52,17 +68,34 @@ export function AppShell() {
           : 'Portal';
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <BrandLogo height={132} className="sidebar-brand-logo" />
-          <div>
-            <strong>Unleash Your Brave</strong>
-            <p>{portalLabel}</p>
-          </div>
+    <div className={`shell${navOpen ? ' shell-nav-open' : ''}`}>
+      <button
+        type="button"
+        className="sidebar-backdrop"
+        aria-label="Close menu"
+        tabIndex={navOpen ? 0 : -1}
+        onClick={() => setNavOpen(false)}
+      />
+
+      <aside className="sidebar" aria-label="Main navigation">
+        <div className="sidebar-mobile-head">
+          <BrandLogo height={120} className="sidebar-brand-logo" />
+          <button
+            type="button"
+            className="sidebar-close"
+            aria-label="Close menu"
+            onClick={() => setNavOpen(false)}
+          >
+            <X size={20} />
+          </button>
         </div>
 
-        <nav className="sidebar-nav">
+        <div className="sidebar-brand">
+          <BrandLogo height={148} className="sidebar-brand-logo sidebar-brand-logo-desktop" />
+          <p className="sidebar-portal-label">{portalLabel}</p>
+        </div>
+
+        <nav className="sidebar-nav" onClick={() => setNavOpen(false)}>
           {isAdmin ? (
             <>
               <NavLink to="/" end>
@@ -174,17 +207,30 @@ export function AppShell() {
 
       <div className="shell-main">
         <header className="topbar">
+          <div className="topbar-start">
+            <button
+              type="button"
+              className="mobile-nav-toggle"
+              aria-label={navOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen((open) => !open)}
+            >
+              <Menu size={22} />
+            </button>
+            <BrandLogo height={44} className="topbar-brand-logo" />
+          </div>
+
           <div className="topbar-user">
             <div className="user-chip">
               <span className="avatar">{user?.name?.charAt(0) ?? 'A'}</span>
-              <div>
+              <div className="user-chip-copy">
                 <strong>{user?.name}</strong>
                 <p>{user?.email}</p>
               </div>
             </div>
             <Button variant="ghost" onClick={logout} className="logout-btn">
               <LogOut size={16} />
-              Sign out
+              <span className="logout-label">Sign out</span>
             </Button>
           </div>
         </header>

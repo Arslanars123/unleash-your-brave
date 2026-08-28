@@ -23,6 +23,7 @@ import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dar
 import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/checkin_form_entity.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/checkin_qr_entity.dart';
+import 'package:unleash_your_brave/features/checkin/presentation/check_in_status_refresh.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/widgets/checkin_waiver_form.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
@@ -56,7 +57,7 @@ class CheckInQrPage extends StatefulWidget {
   State<CheckInQrPage> createState() => _CheckInQrPageState();
 }
 
-class _CheckInQrPageState extends State<CheckInQrPage> {
+class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserver {
   bool _loading = true;
   bool _purchasing = false;
   bool _submittingWaiver = false;
@@ -64,7 +65,8 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
   bool _needsPurchase = false;
   CheckInQrEntity? _qr;
   CheckInFormEntity? _pendingForm;
-  Timer? _pendingPoll;
+  Timer? _statusPoll;
+  StreamSubscription<String?>? _refreshSub;
   /// Only accept door scans that happen after this screen is ready.
   DateTime? _listenFrom;
 
@@ -77,7 +79,28 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshSub = CheckInStatusRefresh.instance.stream.listen((eventId) {
+      if (!mounted) return;
+      if (!_matchesEventScope(eventId)) return;
+      unawaited(_refreshCheckInStatus());
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  bool _matchesEventScope(String? eventId) {
+    if (eventId == null || eventId.isEmpty) return true;
+    final mine = _qr?.eventId.isNotEmpty == true
+        ? _qr!.eventId
+        : _resolvedEventId;
+    return mine == null || mine.isEmpty || mine == eventId;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted && !_loading) {
+      unawaited(_refreshCheckInStatus());
+    }
   }
 
   @override
@@ -90,45 +113,62 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
 
   @override
   void dispose() {
-    _pendingPoll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshSub?.cancel();
+    _stopStatusPoll();
     super.dispose();
   }
 
-  void _startPendingPoll() {
-    _pendingPoll?.cancel();
-    _pendingPoll = Timer.periodic(const Duration(seconds: 2), (_) {
-      unawaited(_pollPendingForm());
+  void _startStatusPoll() {
+    _stopStatusPoll();
+    _statusPoll = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_refreshCheckInStatus());
     });
   }
 
-  void _stopPendingPoll() {
-    _pendingPoll?.cancel();
-    _pendingPoll = null;
+  void _stopStatusPoll() {
+    _statusPoll?.cancel();
+    _statusPoll = null;
   }
 
-  Future<void> _pollPendingForm() async {
+  Future<void> _refreshCheckInStatus() async {
     final qr = _qr;
-    final listenFrom = _listenFrom;
     if (!mounted || qr == null || qr.checkedIn || _submittingWaiver) return;
-    if (_pendingForm != null || listenFrom == null) return;
+
+    final eventId = qr.eventId.isNotEmpty ? qr.eventId : _resolvedEventId;
+    if (eventId == null || eventId.isEmpty) return;
+
     try {
+      final latest =
+          await sl<CheckInRemoteDataSource>().getMyQr(eventId: eventId);
+      if (!mounted) return;
+
+      if (latest.checkedIn) {
+        setState(() {
+          _qr = latest;
+          _pendingForm = null;
+        });
+        _stopStatusPoll();
+        return;
+      }
+
+      if (_pendingForm != null || _listenFrom == null) return;
+
       final pending = await sl<CheckInRemoteDataSource>().getMyPendingForm(
-        eventId: qr.eventId.isNotEmpty ? qr.eventId : _resolvedEventId,
+        eventId: eventId,
       );
       if (!mounted || pending == null) return;
-      // Ignore leftover sessions from earlier unfinished scans.
-      if (!pending.scannedAt.isAfter(listenFrom.subtract(const Duration(seconds: 2)))) {
+      if (!pending.scannedAt.isAfter(_listenFrom!.subtract(const Duration(seconds: 2)))) {
         return;
       }
       setState(() => _pendingForm = pending.form);
-      _stopPendingPoll();
     } catch (_) {
-      // Soft-fail; keep showing QR and try again on the next tick.
+      // Soft-fail; polling retries on the next tick.
     }
   }
 
   Future<void> _load() async {
-    _stopPendingPoll();
+    _stopStatusPoll();
     setState(() {
       _loading = true;
       _error = null;
@@ -157,7 +197,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
         _listenFrom = DateTime.now();
       });
       if (!qr.checkedIn) {
-        _startPendingPoll();
+        _startStatusPoll();
       }
     } on NetworkException catch (error) {
       if (!mounted) return;
@@ -211,6 +251,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> {
         _pendingForm = null;
         _submittingWaiver = false;
       });
+      _stopStatusPoll();
       AppToast.success('Checked in — waiver submitted.');
     } on NetworkException catch (error) {
       if (!mounted) return;

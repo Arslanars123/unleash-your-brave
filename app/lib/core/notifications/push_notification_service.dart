@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unleash_your_brave/app/router/app_router.dart';
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/features/chat/domain/repositories/chat_repository.dart';
+import 'package:unleash_your_brave/features/checkin/presentation/check_in_status_refresh.dart';
 import 'package:unleash_your_brave/firebase_options.dart';
 
 /// Handles FCM + local notifications for chat and announcements.
@@ -246,16 +247,30 @@ class PushNotificationService {
   Future<void> _showForegroundNotification(RemoteMessage message) async {
     if (!isEnabled) return;
 
+    _handleCheckInRefresh(message.data);
+
     final notification = message.notification;
-    final isAnnouncement = message.data['type'] == 'announcement';
+    final type = message.data['type'] as String?;
+    final isAnnouncement = type == 'announcement';
+    final isCheckIn = type == 'checkin.completed' || type == 'checkin.form_required';
     final title = notification?.title ??
         (message.data['title'] as String?) ??
-        (isAnnouncement ? 'Announcement' : 'New message');
+        (isCheckIn
+            ? 'Check-in update'
+            : isAnnouncement
+                ? 'Announcement'
+                : 'New message');
     final body = notification?.body ??
         (message.data['body'] as String?) ??
-        (isAnnouncement ? 'Open notifications' : 'Open the group chat');
+        (isCheckIn
+            ? 'Your check-in status was updated'
+            : isAnnouncement
+                ? 'Open notifications'
+                : 'Open the group chat');
 
-    final channel = isAnnouncement ? _announcementsChannel : _androidChannel;
+    final channel = isAnnouncement || isCheckIn
+        ? _announcementsChannel
+        : _androidChannel;
 
     await _local.show(
       message.hashCode,
@@ -269,19 +284,21 @@ class PushNotificationService {
           importance: Importance.high,
           priority: Priority.high,
           icon: '@drawable/ic_stat_uyb',
-          color: const Color(0xFFF04E93),
+          color: const Color(0xFFE91E63),
           largeIcon: const DrawableResourceAndroidBitmap(
             '@drawable/ic_notification_brand',
           ),
           tag: isAnnouncement
               ? (message.data['announcementId'] as String? ?? 'announcement')
-              : (message.data['groupId'] as String? ?? 'chat'),
+              : isCheckIn
+                  ? (message.data['eventId'] as String? ?? 'checkin')
+                  : (message.data['groupId'] as String? ?? 'chat'),
         ),
         iOS: DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
-          threadIdentifier: isAnnouncement ? 'announcements' : 'chat',
+          threadIdentifier: isAnnouncement || isCheckIn ? 'announcements' : 'chat',
         ),
       ),
       payload: jsonEncodePayload(message.data),
@@ -293,7 +310,17 @@ class PushNotificationService {
   }
 
   void _handleMessageOpen(RemoteMessage message) {
+    _handleCheckInRefresh(message.data);
     _navigateFromData(message.data);
+  }
+
+  void _handleCheckInRefresh(Map<String, dynamic> data) {
+    final type = data['type'];
+    if (type == 'checkin.completed' || type == 'checkin.form_required') {
+      CheckInStatusRefresh.instance.notify(
+        eventId: data['eventId'] as String?,
+      );
+    }
   }
 
   void _navigateFromPayload(String? payload) {
@@ -312,6 +339,14 @@ class PushNotificationService {
 
   void _navigateFromData(Map<String, dynamic> data) {
     final type = data['type'];
+    if (type == 'checkin.completed' || type == 'checkin.form_required') {
+      final eventId = data['eventId'];
+      final path = (eventId != null && eventId.toString().isNotEmpty)
+          ? '/check-in?eventId=$eventId'
+          : '/check-in';
+      AppRouter.router.push(path);
+      return;
+    }
     if (type == 'announcement') {
       final id = data['announcementId'];
       final path = (id != null && id.toString().isNotEmpty)

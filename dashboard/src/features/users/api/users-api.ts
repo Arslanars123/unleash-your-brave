@@ -1,5 +1,6 @@
 import { apiClient } from '@/shared/api/client';
 import type {
+  AttendeeEventRecord,
   AttendeePurchaseSummary,
   CreateUserPayload,
   PaginationMeta,
@@ -49,6 +50,13 @@ export const usersApi = {
     return data.data;
   },
 
+  async getEventRecords(id: string): Promise<AttendeeEventRecord[]> {
+    const { data } = await apiClient.get<SuccessEnvelope<AttendeeEventRecord[]>>(
+      `/users/${id}/event-records`,
+    );
+    return data.data;
+  },
+
   async stats(): Promise<UserStats> {
     const { data } = await apiClient.get<SuccessEnvelope<UserStats>>('/users/stats');
     return data.data;
@@ -68,7 +76,12 @@ export const usersApi = {
     return this.update(id, { status });
   },
 
-  async remove(id: string): Promise<void> {
-    await apiClient.delete(`/users/${id}`);
+  async remove(
+    id: string,
+    options?: { eventId?: string; scope?: 'event' | 'all' },
+  ): Promise<void> {
+    await apiClient.delete(`/users/${id}`, {
+      params: options,
+    });
   },
 };

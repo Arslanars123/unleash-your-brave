@@ -61,6 +61,31 @@ export function draftSessionsToPayloads(sessions: DraftSession[]): SessionPayloa
   return sessions.map((item) => item.payload);
 }
 
+export function publicSessionToDraft(session: PublicSession): DraftSession {
+  return {
+    key: session.id,
+    payload: {
+      kind: session.kind ?? 'session',
+      name: session.name,
+      description: session.description,
+      speakerId: session.speakerId,
+      address: session.address ?? '',
+      eventDayNumber: session.eventDayNumber,
+      startTime: session.startTime ?? '',
+      endTime: session.endTime ?? '',
+      location: session.location ?? '',
+      membershipIds: [...(session.membershipIds ?? [])],
+      materials: (session.materials ?? []).map((material) => ({
+        id: material.id,
+        type: material.type,
+        title: material.title,
+        url: material.url,
+      })),
+      feedbackEnabled: session.feedbackEnabled ?? true,
+    },
+  };
+}
+
 export function EventWizardSessionsStep({
   eventDays,
   linkedMembershipIds,

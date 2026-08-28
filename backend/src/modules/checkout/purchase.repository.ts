@@ -33,6 +33,9 @@ export interface MembershipPurchaseRepository {
   listByEmailAndEvent(email: string, eventId: string): Promise<MembershipPurchase[]>;
   /** Distinct user ids with a paid membership purchase for the event. */
   listPaidUserIdsByEvent(eventId: string): Promise<string[]>;
+  deleteByUserId(userId: string): Promise<number>;
+  deleteByUserAndEvent(userId: string, eventId: string): Promise<number>;
+  listDistinctPaidEventIdsByUser(userId: string): Promise<string[]>;
   summarizePaidForEvent(eventId: string): Promise<MembershipPurchaseEventSummary>;
   create(data: CreateMembershipPurchaseInput): Promise<MembershipPurchase>;
   updatePaymentStatus(

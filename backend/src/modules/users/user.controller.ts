@@ -43,6 +43,12 @@ export class UserController {
     sendSuccess(res, await this.checkout.getAttendeePurchaseSummary(userId, eventId));
   };
 
+  listEventRecords = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.params.id as string;
+    await this.service.getById(userId);
+    sendSuccess(res, await this.checkout.getAttendeeEventRecords(userId));
+  };
+
   create = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.create(req.body as CreateUserInput), 201);
   };
@@ -67,7 +73,21 @@ export class UserController {
   };
 
   remove = async (req: Request, res: Response): Promise<void> => {
-    await this.service.delete(req.params.id as string);
+    const userId = req.params.id as string;
+    const eventId =
+      typeof req.query.eventId === 'string' && req.query.eventId.trim()
+        ? req.query.eventId.trim()
+        : undefined;
+    const scope =
+      req.query.scope === 'all' || req.query.scope === 'event'
+        ? req.query.scope
+        : undefined;
+
+    if (scope === 'all' || !eventId) {
+      await this.checkout.removeAttendeeCompletely(userId);
+    } else {
+      await this.checkout.removeAttendeeFromEvent(userId, eventId);
+    }
     res.status(204).send();
   };
 

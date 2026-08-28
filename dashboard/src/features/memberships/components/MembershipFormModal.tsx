@@ -259,22 +259,6 @@ export function MembershipFormModal({
             />
             <span>Featured on website</span>
           </label>
-          <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={values.validForFutureEvents}
-              onChange={(e) => update('validForFutureEvents', e.target.checked)}
-            />
-            <span>Valid for future events (content carry-over)</span>
-          </label>
-          <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={values.validForFutureQr}
-              onChange={(e) => update('validForFutureQr', e.target.checked)}
-            />
-            <span>QR for future events (check-in only for this membership)</span>
-          </label>
           <label className="field">
             <span>Membership type</span>
             <select

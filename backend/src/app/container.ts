@@ -274,6 +274,12 @@ export async function createContainer() {
     pushNotificationService,
     clientTestingService,
   );
+  checkoutService.configureAttendeeRemoval({
+    checkIns: checkInRepository,
+    checkInForms: checkInFormRepository,
+    pendingScans: checkInPendingScanRepository,
+    storeOrders: storeOrderRepository,
+  });
   const postService = new PostService(postRepository, userRepository);
   const chatHub = new ChatHub();
   const chatService = new ChatService(

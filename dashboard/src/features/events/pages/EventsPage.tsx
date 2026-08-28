@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarDays, CalendarPlus, MapPin, Pencil, Trash2 } from 'lucide-react';
 import { eventsApi } from '@/features/events/api/events-api';
-import { EventFormModal } from '@/features/events/components/EventFormModal';
+import { checkInFormsApi } from '@/features/checkin-forms/api/checkin-forms-api';
+import { EventFormModal, type EventEditResult } from '@/features/events/components/EventFormModal';
 import {
   EventWizardModal,
   type EventWizardResult,
@@ -60,13 +61,38 @@ export function EventsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: EventPayload }) => {
+    mutationFn: async ({
+      id,
+      payload,
+      sessions,
+      initialSessionIds,
+    }: {
+      id: string;
+      payload: EventPayload;
+      sessions: EventEditResult['sessions'];
+      initialSessionIds: string[];
+    }) => {
       const updated = await eventsApi.update(id, payload);
-      // Speakers are linked via sessions — only update memberships/sponsors here.
       await eventsApi.setAssociations(id, {
         sponsorIds: payload.sponsorIds ?? [],
         membershipIds: payload.membershipIds ?? [],
       });
+
+      const remainingKeys = new Set(sessions.map((item) => item.key));
+      const toDelete = initialSessionIds.filter((sessionId) => !remainingKeys.has(sessionId));
+      const toCreate = sessions.filter((item) => !initialSessionIds.includes(item.key));
+      const toUpdate = sessions.filter((item) => initialSessionIds.includes(item.key));
+
+      for (const sessionId of toDelete) {
+        await sessionsApi.remove(sessionId);
+      }
+      for (const draft of toCreate) {
+        await sessionsApi.create({ ...draft.payload, eventId: id });
+      }
+      for (const draft of toUpdate) {
+        await sessionsApi.update(draft.key, draft.payload);
+      }
+
       return updated;
     },
     onSuccess: async () => {
@@ -75,6 +101,7 @@ export function EventsPage() {
         queryClient.invalidateQueries({ queryKey: ['speakers'] }),
         queryClient.invalidateQueries({ queryKey: ['sponsors'] }),
         queryClient.invalidateQueries({ queryKey: ['memberships'] }),
+        queryClient.invalidateQueries({ queryKey: ['sessions'] }),
       ]);
       toast.success('Event updated');
       setEditOpen(false);
@@ -84,8 +111,9 @@ export function EventsPage() {
   });
 
   const scheduleMutation = useMutation({
-    mutationFn: async ({ payload, sessions }: EventWizardResult) => {
+    mutationFn: async ({ payload, sessions, checkInForm }: EventWizardResult) => {
       const event = await eventsApi.schedule(payload);
+      await checkInFormsApi.upsertByEvent(event.id, checkInForm);
       for (const session of sessions) {
         await sessionsApi.create({ ...session, eventId: event.id });
       }
@@ -98,6 +126,8 @@ export function EventsPage() {
         queryClient.invalidateQueries({ queryKey: ['sessions'] }),
         queryClient.invalidateQueries({ queryKey: ['sponsors'] }),
         queryClient.invalidateQueries({ queryKey: ['memberships'] }),
+        queryClient.invalidateQueries({ queryKey: ['checkin-forms'] }),
+        queryClient.invalidateQueries({ queryKey: ['checkins'] }),
       ]);
       toast.success('New event edition scheduled');
       setScheduleOpen(false);
@@ -139,21 +169,38 @@ export function EventsPage() {
     await deleteMutation.mutateAsync(edition.id);
   }
 
-  async function handleEditSubmit(payload: EventPayload) {
+  async function handleEditSubmit(result: EventEditResult) {
     const event = editingEvent;
     if (!event) return;
+
+    const newCount = result.sessions.filter(
+      (item) => !result.initialSessionIds.includes(item.key),
+    ).length;
+    const removedCount = result.initialSessionIds.filter(
+      (sessionId) => !result.sessions.some((item) => item.key === sessionId),
+    ).length;
+    const sessionNote =
+      newCount > 0 || removedCount > 0
+        ? ` ${newCount} new session${newCount === 1 ? '' : 's'} and ${removedCount} removal${removedCount === 1 ? '' : 's'} will be saved.`
+        : '';
+
     const ok = await confirm({
       title: 'Save event changes?',
       message: `Update “${event.name}” (${formatEditionRange(event)})?${
-        (payload as EventPayload).notifyAttendees !== false
+        result.payload.notifyAttendees !== false
           ? ' Attendees will be notified if you paused/resumed the event or changed dates.'
           : ''
-      }`,
+      }${sessionNote}`,
       confirmLabel: 'Save changes',
       tone: 'primary',
     });
     if (!ok) return;
-    await updateMutation.mutateAsync({ id: event.id, payload });
+    await updateMutation.mutateAsync({
+      id: event.id,
+      payload: result.payload,
+      sessions: result.sessions,
+      initialSessionIds: result.initialSessionIds,
+    });
   }
 
   async function handleWizardComplete(result: EventWizardResult) {
@@ -163,7 +210,7 @@ export function EventsPage() {
         : '';
     const ok = await confirm({
       title: 'Schedule new edition?',
-      message: `Create this event edition? Attendees will get a push about the new dates unless you turned notifications off.${sessionNote}`,
+      message: `Create this event edition with its check-in waiver? Attendees will get a push about the new dates unless you turned notifications off.${sessionNote}`,
       confirmLabel: 'Schedule',
       tone: 'primary',
     });
@@ -333,7 +380,7 @@ export function EventsPage() {
             setEditOpen(false);
             setEditingEvent(null);
           }}
-          onSubmit={(payload) => handleEditSubmit(payload as EventPayload)}
+          onSubmit={handleEditSubmit}
         />
       ) : null}
 
