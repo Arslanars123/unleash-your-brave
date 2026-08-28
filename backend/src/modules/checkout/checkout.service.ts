@@ -383,7 +383,7 @@ export class CheckoutService {
             currency,
             unit_amount: unitAmount,
             product_data: {
-              name: `${membership.name} — ${event.name}`,
+              name: `${membership.name} — ${event.name} (${eventDateLabel})`,
               description: productDescription,
             },
           },
