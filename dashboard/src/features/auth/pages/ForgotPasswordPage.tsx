@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router-dom';
+import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { authApi } from '@/features/auth/api/auth-api';
 import { useAuth } from '@/features/auth/context/AuthProvider';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -95,15 +95,17 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <BrandLogo height={200} />
-        <h1>Reset password</h1>
-        <p className="muted">
-          {step === 'email' && 'Enter your email and we will send a verification code.'}
-          {step === 'otp' && 'Enter the 6-digit code from your email.'}
-          {step === 'password' && 'Choose a new password for your account.'}
-        </p>
+    <AuthLayout brandLine="Reset securely — then get back to running the experience.">
+      <div className="auth-form">
+        <header className="auth-form-header">
+          <p className="auth-form-eyebrow">Account recovery</p>
+          <h2>Reset password</h2>
+          <p className="muted">
+            {step === 'email' && 'Enter your email and we will send a verification code.'}
+            {step === 'otp' && 'Enter the 6-digit code from your email.'}
+            {step === 'password' && 'Choose a new password for your account.'}
+          </p>
+        </header>
 
         {step === 'email' ? (
           <form onSubmit={submitEmail} noValidate>
@@ -135,7 +137,7 @@ export function ForgotPasswordPage() {
             <Button type="submit" loading={loading}>
               Verify code
             </Button>
-            <button type="button" className="text-link" onClick={() => setStep('email')}>
+            <button type="button" className="auth-text-link" onClick={() => setStep('email')}>
               Use a different email
             </button>
           </form>
@@ -165,10 +167,12 @@ export function ForgotPasswordPage() {
           </form>
         ) : null}
 
-        <p className="hint">
-          <Link to="/login">Back to sign in</Link>
+        <p className="auth-form-footer">
+          <Link className="auth-text-link" to="/login">
+            Back to sign in
+          </Link>
         </p>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
 import { announcementsApi } from '@/features/announcements/api/announcements-api';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { Button } from '@/shared/ui/Button';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -96,8 +97,8 @@ export function PortalNotificationsPage() {
                   )}
                   <span className="muted" style={{ fontSize: 12 }}>
                     {item.publishedAt
-                      ? new Date(item.publishedAt).toLocaleString()
-                      : new Date(item.createdAt).toLocaleString()}
+                      ? formatUsDateTime(item.publishedAt)
+                      : formatUsDateTime(item.createdAt)}
                   </span>
                 </div>
                 <h2 style={{ margin: '0 0 8px', fontSize: '1.1rem' }}>{item.title}</h2>

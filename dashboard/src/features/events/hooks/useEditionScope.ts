@@ -4,22 +4,9 @@ import { useSearchParams } from 'react-router-dom';
 import { eventsApi } from '@/features/events/api/events-api';
 import type { PublicEvent } from '@/shared/types/api';
 
-export function formatEditionRange(event: Pick<PublicEvent, 'startDate' | 'endDate'>): string {
-  const start = formatUtcDate(event.startDate);
-  const end = formatUtcDate(event.endDate);
-  return start === end ? start : `${start} – ${end}`;
-}
+import { formatEditionRange } from '@/shared/lib/datetime';
 
-function formatUtcDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-}
+export { formatEditionRange };
 
 /**
  * Shared edition scope for Speakers / Sessions / Sponsors / Check-ins / Store.

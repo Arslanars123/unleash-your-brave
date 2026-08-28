@@ -1,3 +1,4 @@
+import { formatUsDate } from '../../core/format-date.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
 import { cascadeDeleteEventData } from '../../db/event-cascade.js';
 import { logger } from '../../core/logger.js';
@@ -53,14 +54,7 @@ function scheduleFingerprint(days: EventDay[]): string {
 function formatEventRange(days: EventDay[]): string {
   if (days.length === 0) return '';
   const sorted = [...days].sort((a, b) => a.date.getTime() - b.date.getTime());
-  const fmt = (date: Date) =>
-    date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      timeZone: 'UTC',
-    });
+  const fmt = (date: Date) => formatUsDate(date, { utc: true });
   const first = sorted[0]!;
   const last = sorted[sorted.length - 1]!;
   if (first.date.getTime() === last.date.getTime()) return fmt(first.date);

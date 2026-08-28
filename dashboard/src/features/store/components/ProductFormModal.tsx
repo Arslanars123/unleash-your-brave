@@ -84,6 +84,9 @@ function validate(values: FormValues): FieldErrors {
   if (!Number.isFinite(stockQty) || stockQty < 0 || !Number.isInteger(stockQty)) {
     errors.stockQty = 'Enter a valid stock quantity';
   }
+  if (values.images.length === 0) {
+    errors.images = 'Add at least one product image';
+  }
   values.images.forEach((image, index) => {
     if (!isValidMediaRef(image)) errors[`image-${index}`] = 'Invalid image URL';
   });
@@ -174,6 +177,13 @@ export function ProductFormModal({
       ...current,
       { key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file, preview },
     ]);
+    if (errors.images) {
+      setErrors((current) => {
+        const next = { ...current };
+        delete next.images;
+        return next;
+      });
+    }
     if (fileRef.current) fileRef.current.value = '';
   }
 
@@ -188,6 +198,11 @@ export function ProductFormModal({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
+
+    if (values.images.length === 0 && pendingImages.length === 0) {
+      setErrors({ ...validate(values), images: 'Add at least one product image' });
+      return;
+    }
 
     let images = [...values.images];
     if (pendingImages.length > 0) {
@@ -326,10 +341,12 @@ export function ProductFormModal({
           </fieldset>
 
           <fieldset className="schedule-fieldset">
-            <legend>Images</legend>
+            <legend>
+              Images <span className="required-mark">*</span>
+            </legend>
             <div className="day-list">
               {values.images.length === 0 && pendingImages.length === 0 ? (
-                <p className="muted">No images yet.</p>
+                <p className="muted">Add at least one product image.</p>
               ) : (
                 <>
                   {values.images.map((image, index) => (
@@ -370,8 +387,8 @@ export function ProductFormModal({
                         alt=""
                         style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }}
                       />
-                      <p className="muted" style={{ flex: 1, margin: 0 }}>
-                        Selected — uploads on save
+                      <p className="hint" style={{ margin: 0 }}>
+                        Pending upload
                       </p>
                       <Button type="button" variant="ghost" onClick={() => removePending(item.key)}>
                         <Trash2 size={16} />
@@ -380,6 +397,8 @@ export function ProductFormModal({
                   ))}
                 </>
               )}
+            </div>
+            <div className="toolbar" style={{ marginTop: 8 }}>
               <input
                 ref={fileRef}
                 type="file"
@@ -399,6 +418,7 @@ export function ProductFormModal({
               </Button>
               <p className="hint">Images upload when you save the product</p>
             </div>
+            {errors.images ? <p className="form-error">{errors.images}</p> : null}
           </fieldset>
 
           <label className="checkbox-row">

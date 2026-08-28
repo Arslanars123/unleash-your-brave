@@ -11,6 +11,8 @@ interface EventAssociationPickerProps {
   value: EventAssociationSelection;
   onChange: (next: EventAssociationSelection) => void;
   disabled?: boolean;
+  showMemberships?: boolean;
+  showSponsors?: boolean;
   /** Explains that links are per-event and content stays separate. */
   hint?: string;
 }
@@ -27,6 +29,8 @@ export function EventAssociationPicker({
   value,
   onChange,
   disabled = false,
+  showMemberships = true,
+  showSponsors = true,
   hint = 'Select shared memberships and sponsors for this event. Speakers are assigned when you create sessions. The same tier or sponsor can be linked to multiple events.',
 }: EventAssociationPickerProps) {
   const sponsorsQuery = useQuery({
@@ -43,26 +47,36 @@ export function EventAssociationPicker({
 
   return (
     <fieldset className="schedule-fieldset" disabled={disabled}>
-      <legend>Event associations</legend>
+      <legend>
+        {showMemberships && showSponsors
+          ? 'Event associations'
+          : showSponsors
+            ? 'Sponsors'
+            : 'Memberships'}
+      </legend>
       <p className="hint">{hint}</p>
 
-      <AssociationChecklist
-        title="Memberships"
-        empty="No memberships in the library yet. Create them on the Memberships page, then link here."
-        items={memberships.map((item) => ({ id: item.id, label: item.name }))}
-        selected={value.membershipIds}
-        onToggle={(id) =>
-          onChange({ ...value, membershipIds: toggleId(value.membershipIds, id) })
-        }
-      />
+      {showMemberships ? (
+        <AssociationChecklist
+          title="Memberships"
+          empty="No memberships in the library yet. Create them on the Memberships page, then link here."
+          items={memberships.map((item) => ({ id: item.id, label: item.name }))}
+          selected={value.membershipIds}
+          onToggle={(id) =>
+            onChange({ ...value, membershipIds: toggleId(value.membershipIds, id) })
+          }
+        />
+      ) : null}
 
-      <AssociationChecklist
-        title="Sponsors"
-        empty="No sponsors in the library yet. Create them on the Sponsors page, then link here."
-        items={sponsors.map((item) => ({ id: item.id, label: item.name }))}
-        selected={value.sponsorIds}
-        onToggle={(id) => onChange({ ...value, sponsorIds: toggleId(value.sponsorIds, id) })}
-      />
+      {showSponsors ? (
+        <AssociationChecklist
+          title="Sponsors"
+          empty="No sponsors in the library yet. Create them on the Sponsors page, then link here."
+          items={sponsors.map((item) => ({ id: item.id, label: item.name }))}
+          selected={value.sponsorIds}
+          onToggle={(id) => onChange({ ...value, sponsorIds: toggleId(value.sponsorIds, id) })}
+        />
+      ) : null}
     </fieldset>
   );
 }

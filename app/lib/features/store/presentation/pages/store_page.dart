@@ -66,6 +66,28 @@ class _StorePageState extends State<StorePage> {
     return items;
   }
 
+  /// Prefer admin categories; fall back to categories present on products.
+  List<StoreCategoryEntity> get _filterCategories {
+    if (_categories.isNotEmpty) return _categories;
+    final byId = <String, StoreCategoryEntity>{};
+    for (final product in _products) {
+      final id = product.categoryId?.trim() ?? '';
+      final name = product.categoryName?.trim() ?? '';
+      if (id.isEmpty || name.isEmpty || byId.containsKey(id)) continue;
+      byId[id] = StoreCategoryEntity(
+        id: id,
+        eventId: product.eventId,
+        name: name,
+        description: '',
+        image: '',
+        sortOrder: byId.length,
+        isActive: true,
+        productCount: 0,
+      );
+    }
+    return byId.values.toList(growable: false);
+  }
+
   Future<String> _resolveEventId() async {
     final cubit = context.read<SelectedEventCubit>();
     await cubit.ensureReady();
@@ -240,14 +262,12 @@ class _StorePageState extends State<StorePage> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Event store',
+                      'Store',
                       style: AppTypography.headline.copyWith(fontSize: 28),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      _event?.name.isNotEmpty == true
-                          ? _event!.name
-                          : 'Browse products and partner merch',
+                      'Browse products by category',
                       style: AppTypography.caption.copyWith(fontSize: 14),
                     ),
                     if (refreshing) ...[
@@ -267,7 +287,7 @@ class _StorePageState extends State<StorePage> {
                       suggestionsFor: _suggestionsFor,
                       hintText: 'Search products',
                     ),
-                    if (_categories.isNotEmpty) ...[
+                    if (_filterCategories.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       SizedBox(
                         height: 40,
@@ -279,7 +299,7 @@ class _StorePageState extends State<StorePage> {
                               selected: _selectedCategoryId == null,
                               onTap: () => setState(() => _selectedCategoryId = null),
                             ),
-                            ..._categories.map(
+                            ..._filterCategories.map(
                               (category) => Padding(
                                 padding: const EdgeInsets.only(left: 8),
                                 child: _CategoryChip(
@@ -309,9 +329,11 @@ class _StorePageState extends State<StorePage> {
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: sidePad),
                 child: Text(
-                  _searchQuery.isEmpty
-                      ? 'No products in the store yet.'
-                      : 'No products match your search.',
+                  _selectedCategoryId != null
+                      ? 'No products in this category.'
+                      : _searchQuery.isEmpty
+                          ? 'No products in the store yet.'
+                          : 'No products match your search.',
                   textAlign: TextAlign.center,
                   style: AppTypography.caption,
                 ),

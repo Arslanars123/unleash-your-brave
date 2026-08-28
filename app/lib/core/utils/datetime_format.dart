@@ -20,3 +20,41 @@ String formatSessionTimeRange(String? startTime, String? endTime) {
   if (start.isNotEmpty && end.isNotEmpty) return '$start – $end';
   return start.isNotEmpty ? start : end;
 }
+
+const _shortMonths = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+String _shortMonth(int month) => _shortMonths[month - 1];
+
+/// Calendar date in US style, e.g. `Sep 10, 2026`.
+String formatUsDate(DateTime date, {bool utc = false}) {
+  final d = utc ? date.toUtc() : date.toLocal();
+  return '${_shortMonth(d.month)} ${d.day}, ${d.year}';
+}
+
+/// Date + time in US style, e.g. `Sep 10, 2026, 9:00 AM`.
+String formatUsDateTime(DateTime date) {
+  final local = date.toLocal();
+  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final minute = local.minute.toString().padLeft(2, '0');
+  final period = local.hour >= 12 ? 'PM' : 'AM';
+  return '${formatUsDate(local)}, $hour:$minute $period';
+}
+
+/// Short month + day for compact labels, e.g. `Sep 10`.
+String formatUsShortDate(DateTime date, {bool utc = false}) {
+  final d = utc ? date.toUtc() : date.toLocal();
+  return '${_shortMonth(d.month)} ${d.day}';
+}

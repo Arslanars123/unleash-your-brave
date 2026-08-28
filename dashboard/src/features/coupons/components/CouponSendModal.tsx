@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { usersApi } from '@/features/users/api/users-api';
 import type { PublicCoupon, PublicEvent } from '@/shared/types/api';
+import { formatUsDate } from '@/shared/lib/datetime';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { TextArea } from '@/shared/ui/TextArea';
@@ -31,21 +32,10 @@ function remainingRedemptions(coupon: PublicCoupon): number | null {
   return Math.max(0, coupon.maxRedemptions - coupon.redemptionCount);
 }
 
-function formatEventDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-}
-
 function eventSummary(event: PublicEvent | null | undefined): string {
   if (!event) return 'Event not found';
-  const start = formatEventDate(event.startDate);
-  const end = formatEventDate(event.endDate);
+  const start = formatUsDate(event.startDate, { utc: true });
+  const end = formatUsDate(event.endDate, { utc: true });
   const range = start && end ? `${start} – ${end}` : start || end;
   return range ? `${event.name} · ${range}` : event.name;
 }

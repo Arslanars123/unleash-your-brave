@@ -1,10 +1,23 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
+
+/// Wins the gesture arena against parent [Scrollable]s so drawing is not
+/// stolen by vertical scrolling on the waiver form.
+class _EagerPanGestureRecognizer extends PanGestureRecognizer {
+  _EagerPanGestureRecognizer({super.debugOwner});
+
+  @override
+  void rejectGesture(int pointer) {
+    // Prefer signing over scrolling when the pointer is on the pad.
+    acceptGesture(pointer);
+  }
+}
 
 /// Simple stroke signature pad that exports a PNG data URL.
 class SignaturePad extends StatefulWidget {
@@ -129,18 +142,40 @@ class _SignaturePadState extends State<SignaturePad> {
               borderRadius: BorderRadius.circular(AppTheme.radiusCard),
               border: Border.all(color: AppColors.borderSubtle),
             ),
-            child: GestureDetector(
-              onPanStart: (details) =>
-                  widget.controller.start(details.localPosition),
-              onPanUpdate: (details) =>
-                  widget.controller.update(details.localPosition),
-              onPanEnd: (_) => widget.controller.end(),
+            clipBehavior: Clip.antiAlias,
+            child: RawGestureDetector(
+              behavior: HitTestBehavior.opaque,
+              gestures: <Type, GestureRecognizerFactory>{
+                _EagerPanGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<_EagerPanGestureRecognizer>(
+                  () => _EagerPanGestureRecognizer(debugOwner: this),
+                  (_EagerPanGestureRecognizer instance) {
+                    instance.onStart = (details) {
+                      widget.controller.start(details.localPosition);
+                    };
+                    instance.onUpdate = (details) {
+                      widget.controller.update(details.localPosition);
+                    };
+                    instance.onEnd = (_) {
+                      widget.controller.end();
+                    };
+                    instance.onCancel = () {
+                      widget.controller.end();
+                    };
+                  },
+                ),
+              },
               child: CustomPaint(
                 painter: _SignaturePainter(widget.controller.strokes),
                 child: const SizedBox.expand(),
               ),
             ),
           ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Draw inside the box — the form will not scroll while you sign.',
+          style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
         ),
       ],
     );

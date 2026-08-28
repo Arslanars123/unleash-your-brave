@@ -170,25 +170,29 @@ export function AppShell() {
             </NavLink>
           ) : null}
         </nav>
-
-        <div className="sidebar-footer">
-          <div className="user-chip">
-            <span className="avatar">{user?.name?.charAt(0) ?? 'A'}</span>
-            <div>
-              <strong>{user?.name}</strong>
-              <p>{user?.email}</p>
-            </div>
-          </div>
-          <Button variant="ghost" onClick={logout} className="logout-btn">
-            <LogOut size={16} />
-            Sign out
-          </Button>
-        </div>
       </aside>
 
-      <main className="content">
-        <Outlet />
-      </main>
+      <div className="shell-main">
+        <header className="topbar">
+          <div className="topbar-user">
+            <div className="user-chip">
+              <span className="avatar">{user?.name?.charAt(0) ?? 'A'}</span>
+              <div>
+                <strong>{user?.name}</strong>
+                <p>{user?.email}</p>
+              </div>
+            </div>
+            <Button variant="ghost" onClick={logout} className="logout-btn">
+              <LogOut size={16} />
+              Sign out
+            </Button>
+          </div>
+        </header>
+
+        <main className="content">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

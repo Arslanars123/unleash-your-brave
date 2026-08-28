@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Pencil, Star, Trash2, X } from 'lucide-react';
 import { sessionsApi } from '@/features/sessions/api/sessions-api';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { PublicSession, PublicSessionFeedback } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -270,10 +271,7 @@ export function SessionFeedbackModal({ open, session, onClose }: SessionFeedback
                   {item.user?.email ? <p className="muted">{item.user.email}</p> : null}
                   {item.comment ? <p className="feedback-comment">{item.comment}</p> : null}
                   <p className="hint">
-                    {new Date(item.updatedAt).toLocaleString(undefined, {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}
+                    {formatUsDateTime(item.updatedAt)}
                   </p>
                   <div className="actions" style={{ marginTop: '0.5rem' }}>
                     <Button

@@ -3,6 +3,7 @@ import type {
   PublicCheckInForm,
   PublicCheckInFormSubmission,
 } from '@/shared/types/api';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 
 interface CheckInFormSubmissionPanelProps {
   form: PublicCheckInForm | null | undefined;
@@ -38,7 +39,7 @@ export function CheckInFormSubmissionPanel({
           <dt>Submitted</dt>
           <dd>
             {submission.submittedAt
-              ? new Date(submission.submittedAt).toLocaleString()
+              ? formatUsDateTime(submission.submittedAt)
               : '—'}
           </dd>
         </div>

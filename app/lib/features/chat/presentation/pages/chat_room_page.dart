@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:unleash_your_brave/core/utils/datetime_format.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/widgets/app_circle_avatar.dart';
@@ -573,14 +574,13 @@ class _MessageBubble extends StatelessWidget {
   String _formatTime(DateTime dateTime) {
     final now = DateTime.now();
     final diff = now.difference(dateTime);
-    
+
     if (diff.inDays > 0) {
-      return '${dateTime.day}/${dateTime.month}';
-    } else {
-      final hour = dateTime.hour.toString().padLeft(2, '0');
-      final minute = dateTime.minute.toString().padLeft(2, '0');
-      return '$hour:$minute';
+      return formatUsShortDate(dateTime);
     }
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 
   void _showReactionSheet(BuildContext context) {

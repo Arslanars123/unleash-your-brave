@@ -487,18 +487,19 @@ class _HomeDrawer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const BrandLogo(height: 68, alignment: Alignment.centerLeft),
+                  const BrandLogo(height: 68, alignment: Alignment.center),
                   const SizedBox(height: 16),
                   Text(
                     (name != null && name.isNotEmpty) ? name : 'Menu',
+                    textAlign: TextAlign.center,
                     style: AppTypography.headline.copyWith(fontSize: 24),
                   ),
                   if (user?.email.isNotEmpty == true) ...[
                     const SizedBox(height: 4),
                     Text(
                       user!.email,
+                      textAlign: TextAlign.center,
                       style: AppTypography.caption.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -542,11 +543,12 @@ class _HomeDrawer extends StatelessWidget {
             const Spacer(),
             const Divider(color: AppColors.borderSubtle, height: 1),
             _DrawerTile(
-              icon: Icons.person_outline,
-              title: 'Profile',
+              icon: Icons.logout,
+              title: 'Sign out',
               onTap: () {
                 Navigator.of(context).pop();
-                context.go('/profile');
+                context.read<AuthBloc>().add(const AuthLogoutRequested());
+                context.go('/login');
               },
             ),
             const SizedBox(height: 8),

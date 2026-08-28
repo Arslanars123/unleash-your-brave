@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { sessionsApi } from '@/features/sessions/api/sessions-api';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { formatSessionTimeRange } from '@/shared/lib/datetime';
+import { formatSessionTimeRange, formatUsDateTime } from '@/shared/lib/datetime';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
 import type { PublicSession } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -326,10 +326,7 @@ export function ViewSessionModal({
                       </div>
                       {item.comment ? <p className="feedback-comment">{item.comment}</p> : null}
                       <p className="hint">
-                        {new Date(item.updatedAt).toLocaleString(undefined, {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                        })}
+                        {formatUsDateTime(item.updatedAt)}
                       </p>
                     </li>
                   ))}

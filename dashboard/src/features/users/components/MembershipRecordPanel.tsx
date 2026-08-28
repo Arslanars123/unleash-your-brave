@@ -1,4 +1,5 @@
 import type { AttendeePurchaseSummary, PublicMembershipPurchase } from '@/shared/types/api';
+import { formatUsDate, formatUsDateTime } from '@/shared/lib/datetime';
 
 function display(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '—';
@@ -7,15 +8,11 @@ function display(value: string | number | null | undefined): string {
 }
 
 function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatUsDateTime(iso);
+}
+
+function formatMembershipPeriodEnd(iso: string): string {
+  return formatUsDate(iso, { utc: true });
 }
 
 function money(amount: number, currency: string): string {
@@ -84,7 +81,7 @@ function PurchaseCard({ item }: { item: PublicMembershipPurchase }) {
         {item.periodEnd ? (
           <div>
             <dt>Valid until</dt>
-            <dd>{formatDate(item.periodEnd)}</dd>
+            <dd>{formatMembershipPeriodEnd(item.periodEnd)}</dd>
           </div>
         ) : null}
       </dl>
@@ -145,7 +142,7 @@ export function MembershipRecordPanel({
             {membershipStatusLabel(summary.currentMembershipStatus)}
             {isRecurring ? ' · recurring' : ''}
             {summary.currentMembershipExpiresAt
-              ? ` · expires ${formatDate(summary.currentMembershipExpiresAt)}`
+              ? ` · expires ${formatMembershipPeriodEnd(summary.currentMembershipExpiresAt)}`
               : ''}
           </span>
         </div>
@@ -183,7 +180,7 @@ export function MembershipRecordPanel({
           <dt>Renewal / expiry</dt>
           <dd>
             {summary.currentMembershipExpiresAt
-              ? formatDate(summary.currentMembershipExpiresAt)
+              ? formatMembershipPeriodEnd(summary.currentMembershipExpiresAt)
               : isRecurring
                 ? 'Not set'
                 : 'No expiry (one-time)'}

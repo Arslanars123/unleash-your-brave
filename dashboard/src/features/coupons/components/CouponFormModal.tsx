@@ -6,26 +6,16 @@ import type {
   PublicEvent,
   PublicMembership,
 } from '@/shared/types/api';
+import { formatUsDate } from '@/shared/lib/datetime';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { TextArea } from '@/shared/ui/TextArea';
 
-function formatEventDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-}
-
 function eventOptionLabel(event: PublicEvent): string {
   const status =
     event.status === 'live' ? 'live' : event.status === 'upcoming' ? 'upcoming' : event.status;
-  const start = formatEventDate(event.startDate);
-  const end = formatEventDate(event.endDate);
+  const start = formatUsDate(event.startDate, { utc: true });
+  const end = formatUsDate(event.endDate, { utc: true });
   const range = start && end ? `${start} – ${end}` : start || end;
   return range
     ? `${event.name} (${status}, ${range})`

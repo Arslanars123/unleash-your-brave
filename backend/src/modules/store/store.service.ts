@@ -99,6 +99,9 @@ export class StoreService {
     if (categoryId) {
       await this.assertCategoryForEvent(categoryId, input.eventId);
     }
+    if (!input.images?.length) {
+      throw new BadRequestError('Add at least one product image');
+    }
 
     const created = await this.products.create({
       eventId: input.eventId,
@@ -109,7 +112,7 @@ export class StoreService {
       price: input.price,
       compareAtPrice: input.compareAtPrice ?? null,
       currency: (input.currency ?? 'USD').toUpperCase(),
-      images: input.images ?? [],
+      images: input.images,
       trackInventory: true,
       stockQty: input.stockQty ?? 0,
       lowStockThreshold: input.lowStockThreshold ?? 5,
@@ -126,6 +129,9 @@ export class StoreService {
 
     if (input.categoryId !== undefined && input.categoryId) {
       await this.assertCategoryForEvent(input.categoryId, existing.eventId);
+    }
+    if (input.images !== undefined && input.images.length === 0) {
+      throw new BadRequestError('Add at least one product image');
     }
 
     const updated = await this.products.update(id, {

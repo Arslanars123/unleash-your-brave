@@ -1,3 +1,4 @@
+import { formatUsDate } from '../../core/format-date.js';
 import { NotFoundError } from '../../core/errors/app-error.js';
 import { logger } from '../../core/logger.js';
 import type { PushNotificationService } from '../chat/push.service.js';
@@ -314,12 +315,7 @@ export class AnnouncementService {
     if (daysLeft < 0) return 0;
 
     const eventName = latest.name || 'Unleash Your Brave';
-    const eventDate = eventStart.toLocaleDateString('en-AU', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      timeZone: 'UTC',
-    });
+    const eventDate = formatUsDate(eventStart, { utc: true });
     const eventDayKey = startOfUtcDay(eventStart).toISOString().slice(0, 10);
     const todayKey = startOfUtcDay(today).toISOString().slice(0, 10);
     let created = 0;

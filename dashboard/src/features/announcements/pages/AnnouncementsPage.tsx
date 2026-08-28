@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Bell, Megaphone, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { announcementsApi } from '@/features/announcements/api/announcements-api';
 import { AnnouncementFormModal } from '@/features/announcements/components/AnnouncementFormModal';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { AnnouncementPayload, PublicAnnouncement } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -29,12 +30,12 @@ function audienceLabel(item: PublicAnnouncement): string {
 
 function whenLabel(item: PublicAnnouncement): string {
   if (item.status === 'scheduled' && item.scheduledAt) {
-    return `Scheduled ${new Date(item.scheduledAt).toLocaleString()}`;
+    return `Scheduled ${formatUsDateTime(item.scheduledAt)}`;
   }
   if (item.publishedAt) {
-    return new Date(item.publishedAt).toLocaleString();
+    return formatUsDateTime(item.publishedAt);
   }
-  return new Date(item.updatedAt).toLocaleString();
+  return formatUsDateTime(item.updatedAt);
 }
 
 export function AnnouncementsPage() {

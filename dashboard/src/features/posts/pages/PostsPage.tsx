@@ -4,6 +4,7 @@ import { Heart, Images, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-re
 import { postsApi } from '@/features/posts/api/posts-api';
 import { PostCommentsModal } from '@/features/posts/components/PostCommentsModal';
 import { PostFormModal } from '@/features/posts/components/PostFormModal';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type { PostPayload, PublicPost } from '@/shared/types/api';
@@ -206,10 +207,7 @@ export function PostsPage() {
                       {post.commentsEnabled ? 'Comments on' : 'Comments off'}
                     </span>
                     <span className="muted">
-                      {new Date(post.createdAt).toLocaleString(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })}
+                      {formatUsDateTime(post.createdAt)}
                     </span>
                   </div>
                   <div className="actions">

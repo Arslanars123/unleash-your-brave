@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { getHomePathForUser, useAuth } from '@/features/auth/context/AuthProvider';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -49,11 +49,13 @@ export function SetPasswordPage() {
   }
 
   return (
-    <div className="auth-shell">
-      <form className="auth-card" onSubmit={onSubmit} noValidate>
-        <BrandLogo height={200} />
-        <h1>Set your password</h1>
-        <p className="muted">Create a password for your portal account.</p>
+    <AuthLayout brandLine="One last step — lock in your password and step onto the floor.">
+      <form className="auth-form" onSubmit={onSubmit} noValidate>
+        <header className="auth-form-header">
+          <p className="auth-form-eyebrow">Almost there</p>
+          <h2>Set your password</h2>
+          <p className="muted">Create a password for your portal account.</p>
+        </header>
 
         <Input
           label="New password"
@@ -78,6 +80,6 @@ export function SetPasswordPage() {
           Save password
         </Button>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

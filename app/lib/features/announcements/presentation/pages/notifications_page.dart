@@ -6,6 +6,7 @@ import 'package:unleash_your_brave/core/responsive/responsive.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
+import 'package:unleash_your_brave/core/utils/datetime_format.dart';
 import 'package:unleash_your_brave/core/widgets/adaptive_page.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/core/widgets/subpage_app_bar.dart';
@@ -273,17 +274,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         .toList(growable: false);
   }
 
-  String _formatWhen(DateTime when) {
-    final local = when.toLocal();
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-    final minute = local.minute.toString().padLeft(2, '0');
-    final period = local.hour >= 12 ? 'PM' : 'AM';
-    return '${months[local.month - 1]} ${local.day}, $hour:$minute $period';
-  }
+  String _formatWhen(DateTime when) => formatUsDateTime(when);
 
   @override
   Widget build(BuildContext context) {

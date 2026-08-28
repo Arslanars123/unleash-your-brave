@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/features/auth/context/AuthProvider';
 import { sponsorsApi } from '@/features/sponsors/api/sponsors-api';
 import { SponsorFormModal } from '@/features/sponsors/components/SponsorFormModal';
+import { formatUsDate } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type { SponsorPayload } from '@/shared/types/api';
@@ -27,7 +28,7 @@ export function SponsorProfilePage() {
     () =>
       (linkedEventsQuery.data ?? []).map((event) => ({
         id: event.id,
-        label: `${event.name} · ${new Date(event.startDate).toLocaleDateString()} (${event.offerCount} offers)`,
+        label: `${event.name} · ${formatUsDate(event.startDate, { utc: true })} (${event.offerCount} offers)`,
       })),
     [linkedEventsQuery.data],
   );

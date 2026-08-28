@@ -1,3 +1,4 @@
+import 'package:unleash_your_brave/core/utils/datetime_format.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_day_entity.dart';
 
 class EventEntity {
@@ -47,36 +48,14 @@ class EventEntity {
   String get dateRangeLabel {
     final start = startDate.toUtc();
     final end = endDate.toUtc();
-    final startLabel = _formatDay(start);
-    final endLabel = _formatDay(end);
+    final startLabel = formatUsDate(start, utc: true);
+    final endLabel = formatUsDate(end, utc: true);
     if (start.year == end.year && start.month == end.month && start.day == end.day) {
       return startLabel;
     }
     if (start.year == end.year && start.month == end.month) {
-      return '${_monthName(start.month)} ${start.day}–${end.day}, ${start.year}';
+      return '${formatUsShortDate(start, utc: true)}–${end.day}, ${start.year}';
     }
     return '$startLabel – $endLabel';
-  }
-
-  static String _formatDay(DateTime date) {
-    return '${_monthName(date.month)} ${date.day}, ${date.year}';
-  }
-
-  static String _monthName(int month) {
-    const names = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return names[month - 1];
   }
 }

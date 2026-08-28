@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlaskConical } from 'lucide-react';
 import { clientTestingApi } from '@/features/client-testing/api/client-testing-api';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { Button } from '@/shared/ui/Button';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -74,7 +75,7 @@ export function ClientTestingPage() {
             </ul>
             {settingsQuery.data?.updatedAt ? (
               <p className="hint" style={{ marginBottom: 16 }}>
-                Last updated {new Date(settingsQuery.data.updatedAt).toLocaleString()}
+                Last updated {formatUsDateTime(settingsQuery.data.updatedAt)}
               </p>
             ) : null}
             <Button

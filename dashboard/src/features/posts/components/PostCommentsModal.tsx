@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { MessageCircle, Pencil, Trash2, X } from 'lucide-react';
 import { postsApi } from '@/features/posts/api/posts-api';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { PublicPost, PublicPostComment } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
@@ -179,10 +180,7 @@ export function PostCommentsModal({ open, post, onClose }: PostCommentsModalProp
                   <div className="feedback-list-header">
                     <strong>{comment.user?.name ?? 'Attendee'}</strong>
                     <span className="hint">
-                      {new Date(comment.updatedAt).toLocaleString(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })}
+                      {formatUsDateTime(comment.updatedAt)}
                     </span>
                   </div>
                   {comment.user?.email ? <p className="muted">{comment.user.email}</p> : null}

@@ -4,15 +4,19 @@ import { Link } from 'react-router-dom';
 import { CalendarDays, CalendarPlus, MapPin, Pencil, Trash2 } from 'lucide-react';
 import { eventsApi } from '@/features/events/api/events-api';
 import { EventFormModal } from '@/features/events/components/EventFormModal';
+import {
+  EventWizardModal,
+  type EventWizardResult,
+} from '@/features/events/components/EventWizardModal';
+import { sessionsApi } from '@/features/sessions/api/sessions-api';
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
-import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
+import { formatEditionRange, formatUsDate } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type {
   EventEditionStatus,
   EventPayload,
   PublicEvent,
-  ScheduleEventPayload,
 } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { useConfirm } from '@/shared/ui/ConfirmDialog';
@@ -20,15 +24,7 @@ import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
 function formatEventDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+  return formatUsDate(iso, { utc: true });
 }
 
 function statusLabel(status: EventEditionStatus): string {
@@ -88,13 +84,20 @@ export function EventsPage() {
   });
 
   const scheduleMutation = useMutation({
-    mutationFn: (payload: ScheduleEventPayload) => eventsApi.schedule(payload),
+    mutationFn: async ({ payload, sessions }: EventWizardResult) => {
+      const event = await eventsApi.schedule(payload);
+      for (const session of sessions) {
+        await sessionsApi.create({ ...session, eventId: event.id });
+      }
+      return event;
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['events'] }),
         queryClient.invalidateQueries({ queryKey: ['speakers'] }),
         queryClient.invalidateQueries({ queryKey: ['sessions'] }),
         queryClient.invalidateQueries({ queryKey: ['sponsors'] }),
+        queryClient.invalidateQueries({ queryKey: ['memberships'] }),
       ]);
       toast.success('New event edition scheduled');
       setScheduleOpen(false);
@@ -136,7 +139,7 @@ export function EventsPage() {
     await deleteMutation.mutateAsync(edition.id);
   }
 
-  async function handleEditSubmit(payload: EventPayload | ScheduleEventPayload) {
+  async function handleEditSubmit(payload: EventPayload) {
     const event = editingEvent;
     if (!event) return;
     const ok = await confirm({
@@ -150,19 +153,22 @@ export function EventsPage() {
       tone: 'primary',
     });
     if (!ok) return;
-    await updateMutation.mutateAsync({ id: event.id, payload: payload as EventPayload });
+    await updateMutation.mutateAsync({ id: event.id, payload });
   }
 
-  async function handleScheduleSubmit(payload: EventPayload | ScheduleEventPayload) {
+  async function handleWizardComplete(result: EventWizardResult) {
+    const sessionNote =
+      result.sessions.length > 0
+        ? ` ${result.sessions.length} session${result.sessions.length === 1 ? '' : 's'} will be created.`
+        : '';
     const ok = await confirm({
       title: 'Schedule new edition?',
-      message:
-        'Create a separate event edition with these dates? It must start after the previous edition ends. Attendees will get a push about the new dates unless you turned notifications off.',
+      message: `Create this event edition? Attendees will get a push about the new dates unless you turned notifications off.${sessionNote}`,
       confirmLabel: 'Schedule',
       tone: 'primary',
     });
     if (!ok) return;
-    await scheduleMutation.mutateAsync(payload as ScheduleEventPayload);
+    await scheduleMutation.mutateAsync(result);
   }
 
   const workspace = workspaceQuery.data;
@@ -327,17 +333,16 @@ export function EventsPage() {
             setEditOpen(false);
             setEditingEvent(null);
           }}
-          onSubmit={handleEditSubmit}
+          onSubmit={(payload) => handleEditSubmit(payload as EventPayload)}
         />
       ) : null}
 
-      <EventFormModal
+      <EventWizardModal
         open={scheduleOpen}
-        mode="schedule"
-        initialEvent={previousEditionForSchedule}
+        previousEvent={previousEditionForSchedule}
         loading={scheduleMutation.isPending}
         onClose={() => setScheduleOpen(false)}
-        onSubmit={handleScheduleSubmit}
+        onComplete={handleWizardComplete}
       />
     </div>
   );

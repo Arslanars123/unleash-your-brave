@@ -4,6 +4,7 @@ import { Handshake, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { eventsApi } from '@/features/events/api/events-api';
 import { sponsorsApi } from '@/features/sponsors/api/sponsors-api';
 import { SponsorFormModal } from '@/features/sponsors/components/SponsorFormModal';
+import { formatEditionRange } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type { PublicEvent, PublicSponsor, SponsorPayload } from '@/shared/types/api';
@@ -17,17 +18,7 @@ import { useToast } from '@/shared/ui/toast';
 const PER_PAGE = 20;
 
 function editionLabel(edition: PublicEvent): string {
-  const start = new Date(edition.startDate).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-  const end = new Date(edition.endDate).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-  return `${start} – ${end} (${edition.status})`;
+  return `${formatEditionRange(edition)} (${edition.status})`;
 }
 
 export function SponsorsPage() {

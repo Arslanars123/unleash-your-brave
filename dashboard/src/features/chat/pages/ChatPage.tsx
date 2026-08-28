@@ -12,14 +12,10 @@ import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
 
+import { formatUsDateTime } from '@/shared/lib/datetime';
+
 function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return formatUsDateTime(iso);
 }
 
 export function ChatPage() {

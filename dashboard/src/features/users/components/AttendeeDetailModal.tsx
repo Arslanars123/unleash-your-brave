@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Pencil, X } from 'lucide-react';
 import { MembershipRecordPanel } from '@/features/users/components/MembershipRecordPanel';
 import { usersApi } from '@/features/users/api/users-api';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 import type { PublicUser } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -14,9 +15,7 @@ function display(value: string | number | null | undefined): string {
 }
 
 function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString();
+  return formatUsDateTime(iso);
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {

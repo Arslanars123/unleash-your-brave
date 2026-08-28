@@ -16,6 +16,7 @@ import {
   useEditionScope,
 } from '@/features/events/hooks/useEditionScope';
 import { MembershipRecordPanel } from '@/features/users/components/MembershipRecordPanel';
+import { formatUsDateTime } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
 import type { CheckInScanResult, PublicCheckInForm } from '@/shared/types/api';
@@ -530,7 +531,7 @@ export function CheckInsPage() {
                       <dt>Checked in</dt>
                       <dd>
                         {scanDetail.checkIn.checkedInAt
-                          ? new Date(scanDetail.checkIn.checkedInAt).toLocaleString()
+                          ? formatUsDateTime(scanDetail.checkIn.checkedInAt)
                           : '—'}
                         {scanDetail.alreadyCheckedIn ? ' (already checked in)' : ''}
                       </dd>
@@ -698,7 +699,7 @@ export function CheckInsPage() {
                           </td>
                           <td>
                             {row.checkedIn && row.checkedInAt
-                              ? new Date(row.checkedInAt).toLocaleString()
+                              ? formatUsDateTime(row.checkedInAt)
                               : '—'}
                           </td>
                           <td className="actions">
@@ -809,7 +810,7 @@ export function CheckInsPage() {
                     <>
                       {' '}
                       Checked in at{' '}
-                      {new Date(alreadyCheckedInDialog.checkIn.checkedInAt).toLocaleString()}.
+                      {formatUsDateTime(alreadyCheckedInDialog.checkIn.checkedInAt)}.
                     </>
                   ) : null}
                 </p>

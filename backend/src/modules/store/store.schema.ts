@@ -106,7 +106,7 @@ export const createStoreProductSchema = z.object({
     .length(3)
     .optional()
     .default('USD'),
-  images: mediaListSchema.optional().default([]),
+  images: mediaListSchema.min(1, 'Add at least one product image'),
   stockQty: z.coerce.number().int().min(0).max(1_000_000).optional().default(0),
   lowStockThreshold: z.coerce.number().int().min(0).max(1_000_000).optional().default(5),
   isActive: z.boolean().optional().default(true),
@@ -123,7 +123,7 @@ export const updateStoreProductSchema = z
     price: z.coerce.number().min(0).max(1_000_000).optional(),
     compareAtPrice: z.coerce.number().min(0).max(1_000_000).nullable().optional(),
     currency: z.string().trim().toUpperCase().length(3).optional(),
-    images: mediaListSchema.optional(),
+    images: mediaListSchema.min(1, 'Add at least one product image').optional(),
     stockQty: z.coerce.number().int().min(0).max(1_000_000).optional(),
     lowStockThreshold: z.coerce.number().int().min(0).max(1_000_000).optional(),
     isActive: z.boolean().optional(),

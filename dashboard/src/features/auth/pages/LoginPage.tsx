@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { getHomePathForUser, useAuth } from '@/features/auth/context/AuthProvider';
 import { getApiErrorMessage } from '@/shared/api/client';
-import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
 import { useConfirm } from '@/shared/ui/ConfirmDialog';
 import { Input } from '@/shared/ui/Input';
@@ -11,8 +11,7 @@ import { useToast } from '@/shared/ui/toast';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const INVITE_ALREADY_USED =
-  'already used your invite';
+const INVITE_ALREADY_USED = 'already used your invite';
 
 interface FieldErrors {
   email?: string;
@@ -99,13 +98,15 @@ export function LoginPage() {
   }
 
   return (
-    <div className="auth-shell">
-      <form className="auth-card" onSubmit={onSubmit} noValidate>
-        <BrandLogo height={200} />
-        <h1>Portal sign in</h1>
-        <p className="muted">
-          Use your email with your password, or your invite code the first time you sign in.
-        </p>
+    <AuthLayout>
+      <form className="auth-form" onSubmit={onSubmit} noValidate>
+        <header className="auth-form-header">
+          <p className="auth-form-eyebrow">Welcome back</p>
+          <h2>Sign in</h2>
+          <p className="muted">
+            Use your email and password — or your invite code the first time you join.
+          </p>
+        </header>
 
         <Input
           label="Email"
@@ -132,18 +133,16 @@ export function LoginPage() {
           }}
         />
 
-        <p className="hint">
-          <Link to="/forgot-password">Forgot password?</Link>
-        </p>
+        <div className="auth-form-row">
+          <Link className="auth-text-link" to="/forgot-password">
+            Forgot password?
+          </Link>
+        </div>
 
         <Button type="submit" loading={loading}>
-          Sign in
+          Continue
         </Button>
-
-        <p className="hint">
-          Demo — Admin: admin@unleashyourbrave.com / Admin123!
-        </p>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

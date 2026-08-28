@@ -13,6 +13,7 @@ import 'package:unleash_your_brave/core/responsive/responsive.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
+import 'package:unleash_your_brave/core/utils/datetime_format.dart';
 import 'package:unleash_your_brave/core/utils/app_toast.dart';
 import 'package:unleash_your_brave/core/widgets/adaptive_page.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
@@ -699,11 +700,5 @@ class _QrCard extends StatelessWidget {
     );
   }
 
-  String _format(DateTime when) {
-    final local = when.toLocal();
-    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-    final minute = local.minute.toString().padLeft(2, '0');
-    final period = local.hour >= 12 ? 'PM' : 'AM';
-    return '${local.day}/${local.month}/${local.year}, $hour:$minute $period';
-  }
+  String _format(DateTime when) => formatUsDateTime(when);
 }

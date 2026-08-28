@@ -10,6 +10,7 @@ import {
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { eventsApi } from '@/features/events/api/events-api';
 import { getApiErrorMessage } from '@/shared/api/client';
+import { formatEditionRange, formatUsDateTime } from '@/shared/lib/datetime';
 import type { CouponPayload, PublicCoupon, PublicEvent } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { useConfirm } from '@/shared/ui/ConfirmDialog';
@@ -76,21 +77,8 @@ export function CouponsPage() {
 
   const eventNameById = useMemo(() => {
     const map = new Map<string, string>();
-    const formatDate = (iso: string) => {
-      const date = new Date(iso);
-      if (Number.isNaN(date.getTime())) return '';
-      return date.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        timeZone: 'UTC',
-      });
-    };
     for (const event of eventById.values()) {
-      const start = formatDate(event.startDate);
-      const end = formatDate(event.endDate);
-      const range = start && end ? `${start} – ${end}` : start || end;
-      map.set(event.id, range ? `${event.name} (${range})` : event.name);
+      map.set(event.id, `${event.name} (${formatEditionRange(event)})`);
     }
     return map;
   }, [eventById]);
@@ -313,7 +301,7 @@ export function CouponsPage() {
                     )}
                     {coupon.expiresAt ? (
                       <div className="hint">
-                        Exp {new Date(coupon.expiresAt).toLocaleString()}
+                        Exp {formatUsDateTime(coupon.expiresAt)}
                       </div>
                     ) : null}
                   </td>
