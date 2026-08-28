@@ -529,7 +529,7 @@ export class UserService {
   }
 
   /**
-   * Admin adds an existing attendee account to another event (one account per email).
+   * Admin registers an existing login (member, speaker, or sponsor) for another event.
    */
   private async addExistingMemberToEvent(
     existing: User,
@@ -543,10 +543,8 @@ export class UserService {
     if (!this.membershipService || !this.purchases || !this.events) {
       throw new BadRequestError('Attendee invite is not configured');
     }
-    if (existing.role !== 'member' && !existing.membershipId) {
-      throw new ConflictError(
-        `This email is already used by a ${existing.role} account`,
-      );
+    if (existing.role === 'admin') {
+      throw new ConflictError('This email is already used by an admin account');
     }
 
     await this.events.requireEvent(eventId);
