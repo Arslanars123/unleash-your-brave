@@ -237,7 +237,7 @@ export class CheckInService {
             scannedBy: input.adminUserId,
             expiresAt: new Date(Date.now() + PENDING_SCAN_TTL_MS),
           });
-          void this.notifyAttendeeFormRequired(userId, event.name);
+          void this.notifyAttendeeFormRequired(userId, event.name, eventId);
           return this.toFormRequiredScanResult(user, eventId, activeForm, true);
         }
         // Manual check-in: admin completes the form on the dashboard.
@@ -613,7 +613,7 @@ export class CheckInService {
       membershipNameAtCheckIn = membership?.name ?? null;
     }
 
-    return this.checkIns.create({
+    const created = await this.checkIns.create({
       eventId,
       userId: user.id,
       checkedInAt: new Date(),
@@ -621,6 +621,9 @@ export class CheckInService {
       membershipIdAtCheckIn: user.membershipId ?? null,
       membershipNameAtCheckIn,
     });
+
+    void this.notifyAttendeeCheckedIn(user.id, eventId);
+    return created;
   }
 
   private async toIdleScanResult(
@@ -692,6 +695,7 @@ export class CheckInService {
   private async notifyAttendeeFormRequired(
     userId: string,
     eventName: string,
+    eventId: string,
   ): Promise<void> {
     if (!this.push) return;
     try {
@@ -701,11 +705,35 @@ export class CheckInService {
         body: `Staff scanned your QR for ${eventName}. Open Check-in in the app to finish.`,
         data: {
           type: 'checkin.form_required',
+          eventId,
           eventName,
         },
       });
     } catch {
       // Push is best-effort; polling on the QR page is the source of truth.
+    }
+  }
+
+  private async notifyAttendeeCheckedIn(
+    userId: string,
+    eventId: string,
+  ): Promise<void> {
+    if (!this.push) return;
+    try {
+      const event = await this.events.getById(eventId);
+      const eventName = event?.name ?? 'your event';
+      await this.push.notifyUsers({
+        userIds: [userId],
+        title: 'You are checked in',
+        body: `Check-in complete for ${eventName}.`,
+        data: {
+          type: 'checkin.completed',
+          eventId,
+          eventName,
+        },
+      });
+    } catch {
+      // Polling on the QR page is the fallback.
     }
   }
 
