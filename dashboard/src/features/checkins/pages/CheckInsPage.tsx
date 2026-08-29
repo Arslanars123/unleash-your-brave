@@ -1,21 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ClipboardList, QrCode, UserCheck, UserX, X } from 'lucide-react';
+import { ClipboardList, QrCode, UserCheck, X } from 'lucide-react';
 import { CheckInFormEditorModal } from '@/features/checkin-forms/components/CheckInFormEditorModal';
 import {
   CheckInFormGateModal,
   type CheckInFormGateValues,
 } from '@/features/checkin-forms/components/CheckInFormGateModal';
 import { checkInsApi } from '@/features/checkins/api/checkins-api';
+import { CheckInScanDetailsModal } from '@/features/checkins/components/CheckInScanDetailsModal';
 import { CheckInScanner } from '@/features/checkins/components/CheckInScanner';
-import { CheckInFormSubmissionPanel } from '@/features/checkins/components/CheckInFormSubmissionPanel';
 import { clientTestingApi } from '@/features/client-testing/api/client-testing-api';
 import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
 import {
   formatEditionRange,
   useEditionScope,
 } from '@/features/events/hooks/useEditionScope';
-import { MembershipRecordPanel } from '@/features/users/components/MembershipRecordPanel';
 import { formatUsDateTime } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { resolveMediaUrl } from '@/shared/lib/media';
@@ -54,12 +53,10 @@ export function CheckInsPage() {
   const [token, setToken] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [scanDetail, setScanDetail] = useState<CheckInScanResult | null>(null);
+  const [scanDetailsOpen, setScanDetailsOpen] = useState(false);
   const [scannerResetKey, setScannerResetKey] = useState(0);
-  /** Blocks camera/manual scan until admin dismisses the already-checked-in dialog. */
+  /** Blocks camera/manual scan until admin dismisses the scan details dialog. */
   const [scanHold, setScanHold] = useState(false);
-  const [alreadyCheckedInDialog, setAlreadyCheckedInDialog] = useState<CheckInScanResult | null>(
-    null,
-  );
   const [formEditorOpen, setFormEditorOpen] = useState(false);
   const [pendingFormScan, setPendingFormScan] = useState<PendingFormScan | null>(null);
   const [awaitingAttendee, setAwaitingAttendee] = useState<AwaitingAttendeeForm | null>(null);
@@ -96,21 +93,26 @@ export function CheckInsPage() {
     setPage(1);
     setSearch('');
     setScanHold(false);
-    setAlreadyCheckedInDialog(null);
+    setScanDetailsOpen(false);
     setAwaitingAttendee(null);
     setPendingFormScan(null);
     pendingPayloadRef.current = null;
   }, [eventId]);
 
   function resumeScanning() {
-    setAlreadyCheckedInDialog(null);
+    setScanDetailsOpen(false);
     setAwaitingAttendee(null);
     setScanHold(false);
     setScannerResetKey((value) => value + 1);
   }
 
-  function applyScanSuccess(result: CheckInScanResult) {
+  function openScanDetails(result: CheckInScanResult) {
+    if (!result.checkIn || !result.membership) return;
     setScanDetail(result);
+    setScanDetailsOpen(true);
+  }
+
+  function applyScanSuccess(result: CheckInScanResult, options?: { holdScanner?: boolean }) {
     setPendingFormScan(null);
     setAwaitingAttendee(null);
     pendingPayloadRef.current = null;
@@ -118,11 +120,12 @@ export function CheckInsPage() {
     if (result.alreadyCheckedIn) {
       const message = `${name} was already checked in`;
       setLastResult(message);
-      setAlreadyCheckedInDialog(result);
-      setScanHold(true);
+      openScanDetails(result);
+      if (options?.holdScanner) setScanHold(true);
       setToken('');
       return;
     }
+    openScanDetails(result);
     const message = `Checked in ${name}`;
     setLastResult(message);
     toast.success(message);
@@ -161,6 +164,7 @@ export function CheckInsPage() {
         setPendingFormScan(null);
         setAwaitingAttendee(null);
         pendingPayloadRef.current = null;
+        openScanDetails(result);
         const message = `Checked in ${result.user.name}`;
         setLastResult(message);
         toast.success(message);
@@ -237,7 +241,7 @@ export function CheckInsPage() {
         return;
       }
 
-      applyScanSuccess(result);
+      applyScanSuccess(result, { holdScanner: variables.source === 'qr' });
     },
     onError: (error, variables) => {
       if (variables.poll) return;
@@ -312,7 +316,6 @@ export function CheckInsPage() {
   const stats = listQuery.data?.stats;
   const checkedIn = stats?.checkedInCount ?? 0;
   const attendees = stats?.attendeeCount ?? 0;
-  const membership = scanDetail?.membership;
   const editionStatus = selectedEdition?.status;
   // CLIENT_TESTING_MODE — remove `|| (clientTestingEnabled && …)` when deleting feature.
   const checkInOpen =
@@ -514,66 +517,6 @@ export function CheckInsPage() {
                 </Button>
               </form>
               {lastResult ? <p className="hint">{lastResult}</p> : null}
-
-              {scanDetail && membership && scanDetail.checkIn ? (
-                <div className="attendee-detail-section" style={{ marginTop: 16 }}>
-                  <h3 style={{ marginTop: 0 }}>Last scan details</h3>
-                  <dl className="attendee-detail-grid" style={{ marginBottom: 12 }}>
-                    <div className="attendee-detail-row">
-                      <dt>Name</dt>
-                      <dd>{scanDetail.user.name}</dd>
-                    </div>
-                    <div className="attendee-detail-row">
-                      <dt>Email</dt>
-                      <dd>{scanDetail.user.email}</dd>
-                    </div>
-                    <div className="attendee-detail-row">
-                      <dt>Checked in</dt>
-                      <dd>
-                        {scanDetail.checkIn.checkedInAt
-                          ? formatUsDateTime(scanDetail.checkIn.checkedInAt)
-                          : '—'}
-                        {scanDetail.alreadyCheckedIn ? ' (already checked in)' : ''}
-                      </dd>
-                    </div>
-                    <div className="attendee-detail-row">
-                      <dt>Membership at check-in</dt>
-                      <dd>{membership.membershipNameAtCheckIn ?? '—'}</dd>
-                    </div>
-                    {membership.qrStatusLabel ? (
-                      <div className="attendee-detail-row">
-                        <dt>QR eligibility</dt>
-                        <dd>
-                          {membership.qrStatusLabel}
-                          {membership.qrDeniedReason === 'renewal_payment_required' ? (
-                            <span className="hint" style={{ display: 'block', marginTop: 4 }}>
-                              Recurring payment still pending — QR not valid for this / next event
-                              under the current access rule.
-                            </span>
-                          ) : null}
-                        </dd>
-                      </div>
-                    ) : null}
-                  </dl>
-                  <MembershipRecordPanel
-                    summary={membership}
-                    sourceLabel={
-                      scanDetail.user.ghlContactId
-                        ? 'GoHighLevel webhook'
-                        : 'Manual / admin / Stripe'
-                    }
-                    productTitle={scanDetail.user.title}
-                    preferredEventId={eventId ?? scanDetail.eventId}
-                    eventOnly
-                  />
-                  {scanDetail.formSubmission ? (
-                    <CheckInFormSubmissionPanel
-                      form={scanDetail.form}
-                      submission={scanDetail.formSubmission}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
             </section>
           ) : (
             <section className="panel" style={{ marginBottom: 20 }}>
@@ -785,47 +728,20 @@ export function CheckInsPage() {
         />
       ) : null}
 
-      {alreadyCheckedInDialog ? (
-        <div
-          className="modal-backdrop confirm-backdrop"
-          role="presentation"
-          onClick={resumeScanning}
-        >
-          <div
-            className="modal-panel confirm-panel"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="already-checked-in-title"
-            aria-describedby="already-checked-in-message"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="confirm-body">
-              <div className="confirm-icon confirm-icon-primary" aria-hidden>
-                <UserX size={22} />
-              </div>
-              <div className="confirm-copy">
-                <h2 id="already-checked-in-title">Already checked in</h2>
-                <p id="already-checked-in-message" className="muted">
-                  <strong>{alreadyCheckedInDialog.user.name}</strong> (
-                  {alreadyCheckedInDialog.user.email}) is already checked in for this event.
-                  {alreadyCheckedInDialog.checkIn?.checkedInAt ? (
-                    <>
-                      {' '}
-                      Checked in at{' '}
-                      {formatUsDateTime(alreadyCheckedInDialog.checkIn.checkedInAt)}.
-                    </>
-                  ) : null}
-                </p>
-              </div>
-            </div>
-            <div className="modal-actions confirm-actions">
-              <Button type="button" onClick={resumeScanning} autoFocus>
-                <QrCode size={16} />
-                Scan new
-              </Button>
-            </div>
-          </div>
-        </div>
+      {scanDetailsOpen && scanDetail ? (
+        <CheckInScanDetailsModal
+          open
+          result={scanDetail}
+          preferredEventId={eventId ?? scanDetail.eventId}
+          onClose={() => {
+            if (scanHold) {
+              resumeScanning();
+            } else {
+              setScanDetailsOpen(false);
+            }
+          }}
+          onScanNew={scanHold ? resumeScanning : undefined}
+        />
       ) : null}
     </div>
   );
