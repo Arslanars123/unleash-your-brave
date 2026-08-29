@@ -103,6 +103,34 @@ export class UserService {
     );
   }
 
+  /** Drop speaker portal access when the speaker profile is deleted. */
+  async clearSpeakerPortalLink(speakerId: string): Promise<void> {
+    const user = await this.users.findBySpeakerId(speakerId);
+    if (!user || user.speakerId !== speakerId) return;
+
+    const nextRole =
+      user.role === 'admin' ? 'admin' : user.sponsorId ? 'sponsor' : 'member';
+
+    await this.users.update(user.id, {
+      speakerId: null,
+      role: nextRole,
+    });
+  }
+
+  /** Drop sponsor portal access when the sponsor profile is deleted. */
+  async clearSponsorPortalLink(sponsorId: string): Promise<void> {
+    const user = await this.users.findBySponsorId(sponsorId);
+    if (!user || user.sponsorId !== sponsorId) return;
+
+    const nextRole =
+      user.role === 'admin' ? 'admin' : user.speakerId ? 'speaker' : 'member';
+
+    await this.users.update(user.id, {
+      sponsorId: null,
+      role: nextRole,
+    });
+  }
+
   /** Clears attendee membership fields without deleting the login account. */
   async stripAttendeeData(userId: string): Promise<PublicUser> {
     const user = await this.requireUser(userId);

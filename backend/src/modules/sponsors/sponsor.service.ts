@@ -211,6 +211,7 @@ export class SponsorService {
   }
 
   async delete(id: string): Promise<void> {
+    await this.users.clearSponsorPortalLink(id);
     if (!(await this.sponsors.delete(id))) {
       throw new NotFoundError('Sponsor');
     }

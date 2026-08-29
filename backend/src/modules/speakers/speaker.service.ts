@@ -133,6 +133,7 @@ export class SpeakerService {
   }
 
   async delete(id: string): Promise<void> {
+    await this.users.clearSpeakerPortalLink(id);
     if (!(await this.speakers.delete(id))) {
       throw new NotFoundError('Speaker');
     }
