@@ -9,6 +9,7 @@ import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
 import { AttendeeDeleteModal } from '@/features/users/components/AttendeeDeleteModal';
 import { AttendeeDetailModal } from '@/features/users/components/AttendeeDetailModal';
 import { AttendeeFormModal } from '@/features/users/components/AttendeeFormModal';
+import { ATTENDEE_UI } from '@/features/users/attendee-ui-flags';
 import { useAttendeeRealtime } from '@/features/users/hooks/useAttendeeRealtime';
 import { getApiErrorMessage } from '@/shared/api/client';
 import type { CreateUserPayload, PublicUser, UpdateUserPayload, UserStatus } from '@/shared/types/api';
@@ -315,8 +316,8 @@ export function UsersPage() {
                   <th>Title</th>
                   <th>Email</th>
                   <th>VIP</th>
-                  <th>Points</th>
-                  <th>Status</th>
+                  {ATTENDEE_UI.showPoints ? <th>Points</th> : null}
+                  {ATTENDEE_UI.showStatus ? <th>Status</th> : null}
                   <th />
                 </tr>
               </thead>
@@ -338,7 +339,7 @@ export function UsersPage() {
                         )}
                         <div>
                           <strong>{user.fullName || user.name}</strong>
-                          {user.profileCompleted ? (
+                          {ATTENDEE_UI.showProfileCompleted && user.profileCompleted ? (
                             <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
                               Profile complete
                             </p>
@@ -349,10 +350,12 @@ export function UsersPage() {
                     <td>{user.title || '—'}</td>
                     <td>{user.email}</td>
                     <td>{user.isVip ? 'Yes' : '—'}</td>
-                    <td>{user.points ?? 0}</td>
-                    <td>
-                      <span className={`badge status-${user.status}`}>{user.status}</span>
-                    </td>
+                    {ATTENDEE_UI.showPoints ? <td>{user.points ?? 0}</td> : null}
+                    {ATTENDEE_UI.showStatus ? (
+                      <td>
+                        <span className={`badge status-${user.status}`}>{user.status}</span>
+                      </td>
+                    ) : null}
                     <td className="actions">
                       <Button variant="secondary" onClick={() => openView(user)}>
                         <Eye size={14} />
@@ -362,13 +365,15 @@ export function UsersPage() {
                         <Pencil size={14} />
                         Edit
                       </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={statusMutation.isPending}
-                        onClick={() => void handleStatusToggle(user)}
-                      >
-                        {user.status === 'active' ? 'Suspend' : 'Activate'}
-                      </Button>
+                      {ATTENDEE_UI.showSuspendAction ? (
+                        <Button
+                          variant="secondary"
+                          disabled={statusMutation.isPending}
+                          onClick={() => void handleStatusToggle(user)}
+                        >
+                          {user.status === 'active' ? 'Suspend' : 'Activate'}
+                        </Button>
+                      ) : null}
                       <Button
                         variant="danger"
                         disabled={deleteMutation.isPending}

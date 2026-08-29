@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pencil, X } from 'lucide-react';
 import { MembershipRecordPanel } from '@/features/users/components/MembershipRecordPanel';
+import { ATTENDEE_UI } from '@/features/users/attendee-ui-flags';
 import { usersApi } from '@/features/users/api/users-api';
 import { formatEditionRange, formatUsDateTime } from '@/shared/lib/datetime';
 import type { AttendeeEventRecord, PublicUser } from '@/shared/types/api';
@@ -169,14 +170,18 @@ export function AttendeeDetailModal({
           <section className="attendee-detail-section">
             <h3>Account</h3>
             <dl className="attendee-detail-grid">
-              <DetailRow label="Status" value={user.status} />
+              {ATTENDEE_UI.showStatus ? <DetailRow label="Status" value={user.status} /> : null}
               <DetailRow label="Role" value={user.role} />
               <DetailRow label="VIP" value={user.isVip ? 'Yes' : 'No'} />
-              <DetailRow label="Points" value={String(user.points ?? 0)} />
-              <DetailRow
-                label="Profile completed"
-                value={user.profileCompleted ? 'Yes' : 'No'}
-              />
+              {ATTENDEE_UI.showPoints ? (
+                <DetailRow label="Points" value={String(user.points ?? 0)} />
+              ) : null}
+              {ATTENDEE_UI.showProfileCompleted ? (
+                <DetailRow
+                  label="Profile completed"
+                  value={user.profileCompleted ? 'Yes' : 'No'}
+                />
+              ) : null}
               <DetailRow
                 label="Must change password"
                 value={user.mustChangePassword ? 'Yes' : 'No'}

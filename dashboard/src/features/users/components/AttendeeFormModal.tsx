@@ -14,6 +14,7 @@ import { Input } from '@/shared/ui/Input';
 import { MediaImageField, type MediaImageFieldHandle } from '@/shared/ui/MediaImageField';
 import { TextArea } from '@/shared/ui/TextArea';
 import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
+import { ATTENDEE_UI } from '@/features/users/attendee-ui-flags';
 
 export interface AttendeeFormValues {
   email: string;
@@ -560,36 +561,42 @@ export function AttendeeFormModal({
             <span>is_vip</span>
           </label>
 
-          <Input
-            label="points"
-            name="points"
-            type="number"
-            min={0}
-            value={values.points}
-            error={errors.points}
-            onChange={(e) => update('points', e.target.value)}
-          />
-
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={values.profileCompleted}
-              onChange={(e) => update('profileCompleted', e.target.checked)}
+          {ATTENDEE_UI.showPoints ? (
+            <Input
+              label="points"
+              name="points"
+              type="number"
+              min={0}
+              value={values.points}
+              error={errors.points}
+              onChange={(e) => update('points', e.target.value)}
             />
-            <span>profile_completed</span>
-          </label>
+          ) : null}
 
-          <label className="field">
-            <span className="field-label">status</span>
-            <select
-              className="field-input"
-              value={values.status}
-              onChange={(e) => update('status', e.target.value as AttendeeFormValues['status'])}
-            >
-              <option value="active">active</option>
-              <option value="suspended">suspended</option>
-            </select>
-          </label>
+          {ATTENDEE_UI.showProfileCompleted ? (
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={values.profileCompleted}
+                onChange={(e) => update('profileCompleted', e.target.checked)}
+              />
+              <span>profile_completed</span>
+            </label>
+          ) : null}
+
+          {ATTENDEE_UI.showStatus ? (
+            <label className="field">
+              <span className="field-label">status</span>
+              <select
+                className="field-input"
+                value={values.status}
+                onChange={(e) => update('status', e.target.value as AttendeeFormValues['status'])}
+              >
+                <option value="active">active</option>
+                <option value="suspended">suspended</option>
+              </select>
+            </label>
+          ) : null}
 
           <div className="modal-actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={loading || committingPhoto}>
