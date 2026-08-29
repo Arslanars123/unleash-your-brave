@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { env } from '../../config/env.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
+import { formatEditionRange } from '../../core/format-date.js';
 import type { MembershipPurchase } from '../checkout/purchase.types.js';
 import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
 import type { PushNotificationService } from '../chat/push.service.js';
@@ -28,6 +29,16 @@ const PASSWORD_SALT_ROUNDS = 12;
 
 function randomSecretPassword(): string {
   return randomBytes(24).toString('base64url');
+}
+
+function eventLabelForEmail(event: {
+  name: string;
+  startDate: Date | string;
+  endDate: Date | string;
+} | null | undefined): string {
+  if (!event) return 'your event';
+  const range = formatEditionRange(event.startDate, event.endDate);
+  return `${event.name} (${range})`;
 }
 
 /** Short typed invite code for first login (email). */
@@ -651,7 +662,7 @@ export class UserService {
     });
     if (!updated) throw new NotFoundError('User');
 
-    const eventName = event?.name ?? 'your event';
+    const eventName = eventLabelForEmail(event);
     void this.notifyAttendeeAddedToEvent(updated, eventName, eventId, membership.name);
 
     this.realtimeHub?.publish({
@@ -837,7 +848,7 @@ export class UserService {
       inviteCode,
       expiresAt,
       dualAccess: false,
-      eventName: event?.name ?? undefined,
+      eventName: event ? eventLabelForEmail(event) : undefined,
       membershipName: membership.name,
       isAttendee: true,
     });

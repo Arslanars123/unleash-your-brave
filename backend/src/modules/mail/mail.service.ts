@@ -81,13 +81,21 @@ export class MailService {
     const accessLabel = accessParts.length > 0 ? joinNatural(accessParts) : '';
 
     const subject = hasEvent
-      ? `You're registered for ${input.eventName} — your login code`
+      ? membershipLabel
+        ? `${membershipLabel} for ${input.eventName} — your login code`
+        : `You're registered for ${input.eventName} — your login code`
       : `Your ${env.appName} login code`;
+
+    const membershipForEventLine =
+      hasEvent && membershipLabel
+        ? `You have the ${membershipLabel} membership for ${input.eventName}.`
+        : hasEvent
+          ? `You've been registered as an attendee for ${input.eventName}.`
+          : '';
 
     const introLines = hasEvent
       ? [
-          `You've been registered as an attendee for ${input.eventName}.`,
-          ...(membershipLabel ? [`Membership for this event: ${membershipLabel}.`] : []),
+          membershipForEventLine,
           ...(accessLabel
             ? [
                 `This email has ${accessLabel} access on one account.`,
@@ -167,13 +175,12 @@ export class MailService {
     const eventLabel = input.eventName?.trim();
 
     const subject = eventLabel
-      ? `You're registered for ${eventLabel} — use your existing password`
+      ? `${membershipLabel} for ${eventLabel} — use your existing password`
       : `Your ${env.appName} membership is ready — use your existing password`;
 
     const accessLines: string[] = [];
     if (eventLabel) {
-      accessLines.push(`You've been registered as an attendee for ${eventLabel}.`);
-      accessLines.push(`Membership for this event: ${membershipLabel}.`);
+      accessLines.push(`You have the ${membershipLabel} membership for ${eventLabel}.`);
     } else {
       accessLines.push(`Your ${membershipLabel} membership is now active on your existing account.`);
     }

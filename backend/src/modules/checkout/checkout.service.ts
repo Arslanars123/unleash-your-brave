@@ -894,7 +894,7 @@ export class CheckoutService {
         inviteCode: upsert.inviteCode,
         expiresAt: new Date(Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000),
         dualAccess: Boolean(upsert.user.speakerId || upsert.user.sponsorId),
-        eventName: event.name,
+        eventName: `${event.name} (${formatEditionRange(event.startDate, event.endDate)})`,
         membershipName: membership.name,
         isSpeaker: Boolean(upsert.user.speakerId) || upsert.user.role === 'speaker',
         isSponsor: Boolean(upsert.user.sponsorId) || upsert.user.role === 'sponsor',
@@ -908,7 +908,7 @@ export class CheckoutService {
         role: upsert.user.role,
         speakerId: upsert.user.speakerId,
         sponsorId: upsert.user.sponsorId,
-        eventName: event.name,
+        eventName: `${event.name} (${formatEditionRange(event.startDate, event.endDate)})`,
       });
     }
 
