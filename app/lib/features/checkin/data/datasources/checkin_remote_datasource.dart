@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:unleash_your_brave/core/auth/session_invalidation.dart';
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/core/network/dio_client.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/checkin_form_entity.dart';
@@ -61,6 +62,9 @@ class CheckInRemoteDataSource {
         );
       }).toList(growable: false);
     } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        SessionInvalidation.instance.notify();
+      }
       throwMappedDioError(error);
     }
   }

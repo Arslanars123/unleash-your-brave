@@ -23,6 +23,7 @@ import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dar
 import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/checkin_form_entity.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/checkin_qr_entity.dart';
+import 'package:unleash_your_brave/features/checkin/presentation/attendee_access_refresh.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/check_in_status_refresh.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/widgets/checkin_waiver_form.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
@@ -67,6 +68,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
   CheckInFormEntity? _pendingForm;
   Timer? _statusPoll;
   StreamSubscription<String?>? _refreshSub;
+  StreamSubscription<String?>? _accessSub;
   /// Only accept door scans that happen after this screen is ready.
   DateTime? _listenFrom;
 
@@ -84,6 +86,11 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
       if (!mounted) return;
       if (!_matchesEventScope(eventId)) return;
       unawaited(_refreshCheckInStatus());
+    });
+    _accessSub = AttendeeAccessRefresh.instance.stream.listen((eventId) {
+      if (!mounted) return;
+      if (!_matchesEventScope(eventId)) return;
+      unawaited(_load());
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
@@ -115,6 +122,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refreshSub?.cancel();
+    _accessSub?.cancel();
     _stopStatusPoll();
     super.dispose();
   }
@@ -162,6 +170,17 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
         return;
       }
       setState(() => _pendingForm = pending.form);
+    } on ServerException catch (error) {
+      if (error.statusCode == 403) {
+        if (!mounted) return;
+        setState(() {
+          _qr = null;
+          _pendingForm = null;
+          _error = error.message;
+          _needsPurchase = _isPurchaseRequiredError(error);
+        });
+        _stopStatusPoll();
+      }
     } catch (_) {
       // Soft-fail; polling retries on the next tick.
     }

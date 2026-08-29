@@ -76,7 +76,11 @@ class AuthRepositoryImpl implements AuthRepository {
         final user = await _remote.me();
         await _local.cacheUser(user);
         return Right(user);
-      } on ServerException {
+      } on ServerException catch (error) {
+        if (error.statusCode == 401 || error.statusCode == 404) {
+          await _local.clear();
+          return Left(AuthFailure(error.message));
+        }
         final cached = await _local.readCachedUser();
         if (cached != null) return Right(cached);
         rethrow;

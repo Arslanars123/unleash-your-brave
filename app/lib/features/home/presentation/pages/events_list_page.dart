@@ -16,6 +16,7 @@ import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/core/widgets/subpage_app_bar.dart';
 import 'package:unleash_your_brave/features/auth/domain/entities/user_entity.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:unleash_your_brave/features/checkin/presentation/attendee_access_refresh.dart';
 import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/event_booking_entity.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
@@ -52,6 +53,7 @@ class _EventsListPageState extends State<EventsListPage> {
   List<EventEntity> _available = const [];
   List<EventEntity> _previous = const [];
   bool _purchasing = false;
+  StreamSubscription<String?>? _accessSub;
 
   bool get _isDiscover => widget.initialFocus == 'discover';
   bool get _isPrevious => widget.initialFocus == 'previous';
@@ -59,7 +61,17 @@ class _EventsListPageState extends State<EventsListPage> {
   @override
   void initState() {
     super.initState();
+    _accessSub = AttendeeAccessRefresh.instance.stream.listen((eventId) {
+      if (!mounted) return;
+      unawaited(_load());
+    });
     unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _accessSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

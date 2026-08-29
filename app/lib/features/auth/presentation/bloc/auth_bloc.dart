@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:unleash_your_brave/core/error/failures.dart';
 import 'package:unleash_your_brave/core/usecase/usecase.dart';
 import 'package:unleash_your_brave/features/auth/domain/entities/user_entity.dart';
 import 'package:unleash_your_brave/features/auth/domain/usecases/change_password_usecase.dart';
@@ -31,6 +32,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthUserUpdated>(_onUserUpdated);
     on<AuthRefreshRequested>(_onRefresh);
     on<AuthLogoutRequested>(_onLogout);
+    on<AuthSessionInvalidated>(_onSessionInvalidated);
   }
 
   final LoginUseCase _loginUseCase;
@@ -106,11 +108,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     final result = await _getCurrentUserUseCase(const NoParams());
     result.fold(
-      (_) {
-        // Keep the existing session if refresh fails (offline, etc.).
+      (failure) async {
+        if (failure is AuthFailure) {
+          await _logoutUseCase(const NoParams());
+          emit(const AuthUnauthenticated());
+        }
       },
       (user) => emit(AuthAuthenticated(user)),
     );
+  }
+
+  Future<void> _onSessionInvalidated(
+    AuthSessionInvalidated event,
+    Emitter<AuthState> emit,
+  ) async {
+    await _logoutUseCase(const NoParams());
+    emit(const AuthUnauthenticated());
   }
 
   Future<void> _onLogout(AuthLogoutRequested event, Emitter<AuthState> emit) async {

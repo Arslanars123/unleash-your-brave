@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unleash_your_brave/app/router/app_router.dart';
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/features/chat/domain/repositories/chat_repository.dart';
+import 'package:unleash_your_brave/core/auth/session_invalidation.dart';
+import 'package:unleash_your_brave/features/checkin/presentation/attendee_access_refresh.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/check_in_status_refresh.dart';
 import 'package:unleash_your_brave/firebase_options.dart';
 
@@ -247,12 +249,13 @@ class PushNotificationService {
   Future<void> _showForegroundNotification(RemoteMessage message) async {
     if (!isEnabled) return;
 
-    _handleCheckInRefresh(message.data);
+    _handleAccessRefresh(message.data);
 
     final notification = message.notification;
     final type = message.data['type'] as String?;
     final isAnnouncement = type == 'announcement';
     final isCheckIn = type == 'checkin.completed' || type == 'checkin.form_required';
+    final isAttendeeAccess = type == 'attendee.event_removed' || type == 'attendee.event_added';
     final title = notification?.title ??
         (message.data['title'] as String?) ??
         (isCheckIn
@@ -268,7 +271,7 @@ class PushNotificationService {
                 ? 'Open notifications'
                 : 'Open the group chat');
 
-    final channel = isAnnouncement || isCheckIn
+    final channel = isAnnouncement || isCheckIn || isAttendeeAccess
         ? _announcementsChannel
         : _androidChannel;
 
@@ -292,13 +295,17 @@ class PushNotificationService {
               ? (message.data['announcementId'] as String? ?? 'announcement')
               : isCheckIn
                   ? (message.data['eventId'] as String? ?? 'checkin')
-                  : (message.data['groupId'] as String? ?? 'chat'),
+                  : isAttendeeAccess
+                      ? (message.data['eventId'] as String? ?? 'attendee_access')
+                      : (message.data['groupId'] as String? ?? 'chat'),
         ),
         iOS: DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
-          threadIdentifier: isAnnouncement || isCheckIn ? 'announcements' : 'chat',
+          threadIdentifier: isAnnouncement || isCheckIn || isAttendeeAccess
+              ? 'announcements'
+              : 'chat',
         ),
       ),
       payload: jsonEncodePayload(message.data),
@@ -310,16 +317,27 @@ class PushNotificationService {
   }
 
   void _handleMessageOpen(RemoteMessage message) {
-    _handleCheckInRefresh(message.data);
+    _handleAccessRefresh(message.data);
     _navigateFromData(message.data);
   }
 
-  void _handleCheckInRefresh(Map<String, dynamic> data) {
+  void _handleAccessRefresh(Map<String, dynamic> data) {
     final type = data['type'];
     if (type == 'checkin.completed' || type == 'checkin.form_required') {
       CheckInStatusRefresh.instance.notify(
         eventId: data['eventId'] as String?,
       );
+      return;
+    }
+    if (type == 'attendee.event_removed' || type == 'attendee.event_added') {
+      final eventId = data['eventId'] as String?;
+      if (type == 'attendee.event_removed' &&
+          (eventId == null || eventId.isEmpty)) {
+        SessionInvalidation.instance.notify();
+      } else {
+        AttendeeAccessRefresh.instance.notify(eventId: eventId);
+        CheckInStatusRefresh.instance.notify(eventId: eventId);
+      }
     }
   }
 

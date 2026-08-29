@@ -66,3 +66,8 @@ final class AuthRefreshRequested extends AuthEvent {
 final class AuthLogoutRequested extends AuthEvent {
   const AuthLogoutRequested();
 }
+
+/// Account deleted or tokens rejected — clear session and return to sign-in.
+final class AuthSessionInvalidated extends AuthEvent {
+  const AuthSessionInvalidated();
+}

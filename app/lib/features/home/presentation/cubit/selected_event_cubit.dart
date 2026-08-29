@@ -140,6 +140,17 @@ class SelectedEventCubit extends Cubit<SelectedEventState> {
     await ensureReady(force: true);
   }
 
+  /// Re-resolve the active edition after attendee access changes.
+  Future<void> onAttendeeAccessChanged({String? eventId}) async {
+    if (eventId != null &&
+        eventId.isNotEmpty &&
+        state.eventId != null &&
+        state.eventId != eventId) {
+      return;
+    }
+    await ensureReady(force: true);
+  }
+
   Future<void> selectEvent(String eventId) async {
     final id = eventId.trim();
     if (id.isEmpty) return;

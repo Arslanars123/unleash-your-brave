@@ -288,6 +288,7 @@ export async function createContainer() {
     checkInForms: checkInFormRepository,
     pendingScans: checkInPendingScanRepository,
     storeOrders: storeOrderRepository,
+    push: pushNotificationService,
   });
   const postService = new PostService(postRepository, userRepository);
   const chatHub = new ChatHub();

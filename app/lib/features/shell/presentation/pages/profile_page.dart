@@ -16,6 +16,7 @@ import 'package:unleash_your_brave/core/widgets/adaptive_page.dart';
 import 'package:unleash_your_brave/core/widgets/app_circle_avatar.dart';
 import 'package:unleash_your_brave/features/auth/domain/entities/user_entity.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:unleash_your_brave/features/checkin/presentation/attendee_access_refresh.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
@@ -327,11 +328,23 @@ class _MembershipSectionState extends State<_MembershipSection>
   String? _catalogEventId;
   String? _catalogEventName;
   Timer? _catalogPoll;
+  StreamSubscription<String?>? _accessSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _accessSub = AttendeeAccessRefresh.instance.stream.listen((eventId) {
+      if (!mounted) return;
+      if (eventId != null &&
+          eventId.isNotEmpty &&
+          _catalogEventId != null &&
+          _catalogEventId!.isNotEmpty &&
+          _catalogEventId != eventId) {
+        return;
+      }
+      unawaited(_load(silent: true));
+    });
     _load();
     _catalogPoll = Timer.periodic(const Duration(seconds: 12), (_) {
       if (!mounted || _loading) return;
@@ -341,6 +354,7 @@ class _MembershipSectionState extends State<_MembershipSection>
 
   @override
   void dispose() {
+    _accessSub?.cancel();
     _catalogPoll?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

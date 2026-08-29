@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:unleash_your_brave/core/auth/session_invalidation.dart';
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
 import 'package:unleash_your_brave/core/network/token_storage.dart';
@@ -40,6 +41,8 @@ class DioClient {
               } catch (_) {
                 // Fall through to original error handling.
               }
+            } else {
+              SessionInvalidation.instance.notify();
             }
           }
           handler.next(error);

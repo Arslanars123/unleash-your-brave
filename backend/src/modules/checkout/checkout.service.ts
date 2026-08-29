@@ -15,6 +15,7 @@ import type { Membership } from '../memberships/membership.types.js';
 import { toPublicMembership } from '../memberships/membership.mapper.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { MembershipService } from '../memberships/membership.service.js';
+import type { PushNotificationService } from '../chat/push.service.js';
 import type { RealtimeHub } from '../realtime/realtime.hub.js';
 import type { CheckInFormRepository } from '../checkin-forms/checkin-form.repository.js';
 import type { CheckInPendingScanRepository } from '../checkins/checkin-pending-scan.repository.js';
@@ -64,6 +65,7 @@ export class CheckoutService {
   private checkInForms?: CheckInFormRepository;
   private pendingScans?: CheckInPendingScanRepository;
   private storeOrders?: StoreOrderRepository;
+  private push?: PushNotificationService;
 
   constructor(
     private readonly purchases: MembershipPurchaseRepository,
@@ -83,11 +85,13 @@ export class CheckoutService {
     checkInForms: CheckInFormRepository;
     pendingScans: CheckInPendingScanRepository;
     storeOrders: StoreOrderRepository;
+    push?: PushNotificationService;
   }): void {
     this.checkIns = deps.checkIns;
     this.checkInForms = deps.checkInForms;
     this.pendingScans = deps.pendingScans;
     this.storeOrders = deps.storeOrders;
+    this.push = deps.push;
   }
 
   private requireStripe(): Stripe {
@@ -669,6 +673,8 @@ export class CheckoutService {
       type: 'attendee.upserted',
       payload: { id: userId, eventId, removedFromEvent: true },
     });
+
+    await this.notifyAttendeeAccessRevoked(userId, eventId);
   }
 
   async removeAttendeeCompletely(userId: string): Promise<void> {
@@ -686,6 +692,7 @@ export class CheckoutService {
         type: 'attendee.upserted',
         payload: { id: userId, attendeeRemoved: true },
       });
+      await this.notifyAttendeeAccessRevoked(userId, null);
       return;
     }
 
@@ -697,6 +704,38 @@ export class CheckoutService {
       type: 'attendee.deleted',
       payload: { id: userId },
     });
+    await this.notifyAttendeeAccessRevoked(userId, null);
+  }
+
+  private async notifyAttendeeAccessRevoked(
+    userId: string,
+    eventId: string | null,
+  ): Promise<void> {
+    if (!this.push) return;
+    try {
+      if (eventId) {
+        const event = await this.events.getById(eventId);
+        await this.push.notifyUsers({
+          userIds: [userId],
+          title: `Removed from ${event.name}`,
+          body: `Your attendee access for this event has been removed. Open the app to see your updated bookings.`,
+          data: {
+            type: 'attendee.event_removed',
+            eventId,
+            eventName: event.name,
+          },
+        });
+        return;
+      }
+      await this.push.notifyUsers({
+        userIds: [userId],
+        title: 'Attendee access updated',
+        body: 'Your event bookings were updated. Open the app to see your current access.',
+        data: { type: 'attendee.event_removed' },
+      });
+    } catch {
+      // Push is best-effort.
+    }
   }
 
   private async fulfillCheckoutSession(session: Stripe.Checkout.Session): Promise<void> {
