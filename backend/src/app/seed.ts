@@ -11,8 +11,21 @@ import { logger } from '../core/logger.js';
 import { ConflictError } from '../core/errors/app-error.js';
 
 /**
+ * Ensures the platform admin exists (production bootstrap only).
+ */
+export async function ensureBootstrapAdmin(userService: UserService): Promise<void> {
+  await ensureUser(userService, {
+    email: 'admin@unleashyourbrave.com',
+    name: 'Platform Admin',
+    password: 'Admin123!',
+    role: 'admin',
+  });
+}
+
+/**
  * Seeds demo accounts + sample event edition with speakers/sessions/sponsors.
  * Safe to call on every boot — existing emails are skipped independently.
+ * Development / local only — not used in production.
  */
 export async function seedDemoData(
   userService: UserService,

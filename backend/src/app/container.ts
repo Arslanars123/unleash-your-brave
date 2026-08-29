@@ -102,7 +102,8 @@ import { MongoMembershipRepository } from '../db/repositories/mongo-membership.r
 import { MongoMembershipPurchaseRepository } from '../db/repositories/mongo-membership-purchase.repository.js';
 import { MongoUserRepository } from '../db/repositories/mongo-user.repository.js';
 import { logger } from '../core/logger.js';
-import { seedDemoData } from './seed.js';
+import { env } from '../config/env.js';
+import { seedDemoData, ensureBootstrapAdmin } from './seed.js';
 
 /**
  * Manual composition root. Persistence is MongoDB via repository adapters.
@@ -340,19 +341,23 @@ export async function createContainer() {
   const uploadController = new UploadController(mediaStorage);
 
   try {
-    await seedDemoData(
-      userService,
-      eventService,
-      speakerService,
-      sessionService,
-      sponsorService,
-      membershipService,
-      sessionFeedbackService,
-      announcementService,
-      postService,
-    );
+    if (env.nodeEnv === 'production') {
+      await ensureBootstrapAdmin(userService);
+    } else {
+      await seedDemoData(
+        userService,
+        eventService,
+        speakerService,
+        sessionService,
+        sponsorService,
+        membershipService,
+        sessionFeedbackService,
+        announcementService,
+        postService,
+      );
+    }
   } catch (error) {
-    logger.warn({ err: error }, 'Demo seed skipped — server will continue without re-seeding');
+    logger.warn({ err: error }, 'Bootstrap seed skipped — server will continue');
   }
 
   await chatService.ensureGroup();
