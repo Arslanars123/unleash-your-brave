@@ -5,6 +5,9 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { TextArea } from '@/shared/ui/TextArea';
 
+/** UI flag — recurring memberships still work in API/data when enabled here. */
+const SHOW_RENEWABLE_MEMBERSHIP_UI = false;
+
 export interface MembershipFormValues {
   name: string;
   price: string;
@@ -268,12 +271,18 @@ export function MembershipFormModal({
               }
             >
               <option value="one_time">One-time (event pass)</option>
-              <option value="renewable">Recurring / renewable</option>
+              {SHOW_RENEWABLE_MEMBERSHIP_UI || values.billingKind === 'renewable' ? (
+                <option value="renewable">Recurring / renewable</option>
+              ) : null}
             </select>
-            <p className="hint">
-              Renewable memberships expire after the duration below. Attendees get a renewal
-              reminder, and check-in QR stays active only while the period is paid.
-            </p>
+            {SHOW_RENEWABLE_MEMBERSHIP_UI || values.billingKind === 'renewable' ? (
+              <p className="hint">
+                Renewable memberships expire after the duration below. Attendees get a renewal
+                reminder, and check-in QR stays active only while the period is paid.
+              </p>
+            ) : (
+              <p className="hint">One-time pass for this event edition.</p>
+            )}
           </label>
           {values.billingKind === 'renewable' ? (
             <Input

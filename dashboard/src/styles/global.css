@@ -656,12 +656,14 @@ select.field-input::-ms-expand {
   position: sticky;
   top: 0;
   height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
   padding: 1.35rem 1rem;
   background: var(--sidebar);
   border-right: 1px solid var(--line);
+  overflow: hidden;
 }
 
 .sidebar-brand {
@@ -670,6 +672,7 @@ select.field-input::-ms-expand {
   align-items: flex-start;
   gap: 0.65rem;
   padding: 0.35rem 0.5rem 0.85rem;
+  flex-shrink: 0;
 }
 
 .sidebar-brand-logo {
@@ -712,6 +715,13 @@ select.field-input::-ms-expand {
   display: grid;
   gap: 0.15rem;
   padding: 0 0.15rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  padding-bottom: 0.35rem;
 }
 
 .sidebar-nav a {
@@ -2321,14 +2331,15 @@ td strong {
     bottom: 0;
     width: min(292px, 88vw);
     height: 100vh;
+    max-height: 100dvh;
     z-index: 50;
     transform: translateX(-105%);
     transition: transform 0.22s ease;
     flex-direction: column;
     align-items: stretch;
     flex-wrap: nowrap;
-    gap: 1rem;
-    overflow-y: auto;
+    gap: 0.75rem;
+    overflow: hidden;
     box-shadow: var(--shadow-lg);
   }
 
@@ -2343,6 +2354,7 @@ td strong {
     gap: 0.75rem;
     padding-bottom: 0.35rem;
     border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
   }
 
   .sidebar-close {
@@ -2365,6 +2377,9 @@ td strong {
   .sidebar-nav {
     grid-auto-flow: row;
     margin-left: 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .sidebar-footer {
