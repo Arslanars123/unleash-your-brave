@@ -206,7 +206,7 @@ export class SpeakerService {
     email: string,
     issueInvite: boolean,
   ): Promise<void> {
-    const { user, created, inviteCode } = await this.users.upsertPortalAccount({
+    const { user, inviteCode } = await this.users.upsertPortalAccount({
       email,
       name: speaker.name,
       role: 'speaker',
@@ -214,7 +214,7 @@ export class SpeakerService {
       issueInvite,
     });
 
-    if (created && inviteCode) {
+    if (inviteCode) {
       const expiresAt = new Date(
         Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
       );
@@ -224,13 +224,15 @@ export class SpeakerService {
         inviteCode,
         expiresAt,
         dualAccess: true,
+        isSpeaker: true,
+        isSponsor: Boolean(user.sponsorId),
       });
     } else if (issueInvite) {
       await this.mail.sendExistingAccountPortalAccess({
         to: email,
         name: speaker.name,
         portalRole: 'speaker',
-        mustChangePassword: user.mustChangePassword,
+        mustChangePassword: false,
       });
     }
   }

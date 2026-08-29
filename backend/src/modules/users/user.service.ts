@@ -230,6 +230,29 @@ export class UserService {
     const applyName = input.applyName !== false;
 
     if (existing) {
+      // Speakers/sponsors (and any account) may also buy membership.
+      // Re-issue invite only when they still need first-time password setup.
+      const needsAppInvite = existing.mustChangePassword;
+      let inviteCode: string | undefined;
+      let invitePatch: Partial<{
+        inviteCodeHash: string;
+        inviteCodeExpiresAt: Date;
+        mustChangePassword: boolean;
+        passwordHash: string;
+      }> = {};
+
+      if (needsAppInvite) {
+        inviteCode = generateInviteCode();
+        invitePatch = {
+          inviteCodeHash: await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS),
+          inviteCodeExpiresAt: new Date(
+            Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+          ),
+          mustChangePassword: true,
+          passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
+        };
+      }
+
       const updated = await this.users.update(existing.id, {
         ...(applyName
           ? {
@@ -241,9 +264,10 @@ export class UserService {
         ...(input.product?.trim() ? { title: input.product.trim() } : {}),
         ...(input.contactId?.trim() ? { ghlContactId: input.contactId.trim() } : {}),
         status: 'active',
+        ...invitePatch,
       });
       if (!updated) throw new NotFoundError('User');
-      return { user: toPublicUser(updated), created: false };
+      return { user: toPublicUser(updated), created: false, inviteCode };
     }
 
     const inviteCode = generateInviteCode();
@@ -389,7 +413,15 @@ export class UserService {
           ? 'sponsor'
           : existing.role;
 
-      // Existing logins keep their password — never re-issue an invite code.
+      // Password already set → keep it. Still needs setup → optional fresh invite.
+      const passwordAlreadySet = !existing.mustChangePassword;
+      const shouldIssueInvite = !passwordAlreadySet && Boolean(input.issueInvite);
+      let inviteCode: string | undefined;
+
+      if (shouldIssueInvite) {
+        inviteCode = generateInviteCode();
+      }
+
       const updated = await this.users.update(existing.id, {
         email,
         name: input.name.trim(),
@@ -397,9 +429,19 @@ export class UserService {
         speakerId: nextSpeakerId,
         sponsorId: nextSponsorId,
         status: 'active',
+        ...(shouldIssueInvite
+          ? {
+              inviteCodeHash: await bcrypt.hash(inviteCode!, PASSWORD_SALT_ROUNDS),
+              inviteCodeExpiresAt: new Date(
+                Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+              ),
+              mustChangePassword: true,
+              passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
+            }
+          : {}),
       });
       if (!updated) throw new NotFoundError('User');
-      return { user: toPublicUser(updated), created: false };
+      return { user: toPublicUser(updated), created: false, inviteCode };
     }
 
     const inviteCode = generateInviteCode();
@@ -650,18 +692,47 @@ export class UserService {
       }
     }
 
-    if (this.mail) {
-      await this.mail.sendExistingAccountMembershipAccess({
+    if (!this.mail) return;
+
+    const isSpeaker = Boolean(user.speakerId) || user.role === 'speaker';
+    const isSponsor = Boolean(user.sponsorId) || user.role === 'sponsor';
+
+    // Password not set yet → re-issue invite code with clear event/membership copy.
+    if (user.mustChangePassword) {
+      const inviteCode = generateInviteCode();
+      const expiresAt = new Date(
+        Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
+      );
+      await this.users.update(user.id, {
+        inviteCodeHash: await bcrypt.hash(inviteCode, PASSWORD_SALT_ROUNDS),
+        inviteCodeExpiresAt: expiresAt,
+        mustChangePassword: true,
+        passwordHash: await bcrypt.hash(randomSecretPassword(), PASSWORD_SALT_ROUNDS),
+      });
+
+      await this.mail.sendInviteCode({
         to: user.email,
         name: user.name,
-        membershipName,
-        role: user.role,
-        speakerId: user.speakerId,
-        sponsorId: user.sponsorId,
+        inviteCode,
+        expiresAt,
+        dualAccess: isSpeaker || isSponsor,
         eventName,
-        mustChangePassword: user.mustChangePassword,
+        membershipName,
+        isSpeaker,
+        isSponsor,
       });
+      return;
     }
+
+    await this.mail.sendExistingAccountMembershipAccess({
+      to: user.email,
+      name: user.name,
+      membershipName,
+      role: user.role,
+      speakerId: user.speakerId,
+      sponsorId: user.sponsorId,
+      eventName,
+    });
   }
 
   /**
@@ -686,6 +757,7 @@ export class UserService {
     await this.events.requireEvent(eventId);
     await this.membershipService.assertLinkedToEvent(membershipId, eventId);
     const membership = await this.membershipService.requireMembership(membershipId);
+    const event = await this.events.getById(eventId);
 
     const inviteCode = generateInviteCode();
     const expiresAt = new Date(
@@ -761,6 +833,8 @@ export class UserService {
       inviteCode,
       expiresAt,
       dualAccess: false,
+      eventName: event?.name ?? undefined,
+      membershipName: membership.name,
     });
 
     return this.linkPortalProfilesByEmail(created.id, created.email);

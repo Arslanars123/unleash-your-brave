@@ -894,6 +894,10 @@ export class CheckoutService {
         inviteCode: upsert.inviteCode,
         expiresAt: new Date(Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000),
         dualAccess: Boolean(upsert.user.speakerId || upsert.user.sponsorId),
+        eventName: event.name,
+        membershipName: membership.name,
+        isSpeaker: Boolean(upsert.user.speakerId) || upsert.user.role === 'speaker',
+        isSponsor: Boolean(upsert.user.sponsorId) || upsert.user.role === 'sponsor',
       });
     } else if (!upsert.created) {
       await this.mail.sendExistingAccountMembershipAccess({
@@ -903,7 +907,7 @@ export class CheckoutService {
         role: upsert.user.role,
         speakerId: upsert.user.speakerId,
         sponsorId: upsert.user.sponsorId,
-        mustChangePassword: upsert.user.mustChangePassword,
+        eventName: event.name,
       });
     }
 

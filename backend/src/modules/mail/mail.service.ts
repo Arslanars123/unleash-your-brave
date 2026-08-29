@@ -60,27 +60,58 @@ export class MailService {
     expiresAt: Date;
     /** Speaker/sponsor (or dual) accounts — same code unlocks app + dashboard. */
     dualAccess?: boolean;
+    eventName?: string;
+    membershipName?: string;
+    /** Existing portal roles on this account (for clearer copy). */
+    isSpeaker?: boolean;
+    isSponsor?: boolean;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
     const expiresLabel = input.expiresAt.toUTCString();
-    const subject = `Your ${env.appName} login code`;
-    const setupLines = input.dualAccess
+    const hasEvent = Boolean(input.eventName?.trim());
+    const membershipLabel = input.membershipName?.trim() || '';
+    const portalParts: string[] = [];
+    if (input.isSpeaker) portalParts.push('speaker');
+    if (input.isSponsor) portalParts.push('sponsor');
+    const portalLabel = portalParts.join(' and ');
+
+    const subject = hasEvent
+      ? `You're registered for ${input.eventName} — your login code`
+      : `Your ${env.appName} login code`;
+
+    const introLines = hasEvent
       ? [
-          'Use this code to finish setting up your password.',
-          'The same email and password will work for both the mobile app and the speaker/sponsor dashboard, with the access roles assigned to your account.',
+          `You've been registered as an attendee for ${input.eventName}.`,
+          ...(membershipLabel ? [`Membership for this event: ${membershipLabel}.`] : []),
+          ...(portalLabel
+            ? [
+                `This email already has ${portalLabel} access. Use the code below to set your password — the same login will work for the mobile app and the ${portalLabel} dashboard.`,
+              ]
+            : [
+                'Use the one-time login code below to open the app, set your password, and access your booking.',
+              ]),
         ]
-      : [
-          'Open the app, sign in with your email and this code, then set your own password.',
-          'If you also have dashboard access, the same password will work there too.',
-        ];
+      : input.dualAccess || portalLabel
+        ? [
+            `Welcome to ${env.appName}.`,
+            ...(portalLabel
+              ? [`You have ${portalLabel} dashboard access on this account.`]
+              : []),
+            'Use this code to finish setting up your password.',
+            'The same email and password will work for both the mobile app and the speaker/sponsor dashboard.',
+          ]
+        : [
+            `Welcome to ${env.appName}.`,
+            'Open the app, sign in with your email and this code, then set your own password.',
+            'If you also have dashboard access, the same password will work there too.',
+          ];
 
     const text = [
       `Hi ${input.name},`,
       '',
-      `Welcome to ${env.appName}.`,
+      ...introLines,
       '',
       `Your one-time login code is: ${input.inviteCode}`,
       '',
-      ...setupLines,
       `This code expires on ${expiresLabel}.`,
       '',
       'Any previous unused login code for this email is no longer valid.',
@@ -90,10 +121,9 @@ export class MailService {
 
     const html = `
       <p>Hi ${escapeHtml(input.name)},</p>
-      <p>Welcome to <strong>${escapeHtml(env.appName)}</strong>.</p>
+      ${introLines.map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
       <p>Your one-time login code is:</p>
       <p style="font-size:24px;font-weight:700;letter-spacing:2px">${escapeHtml(input.inviteCode)}</p>
-      ${setupLines.map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
       <p>This code expires on ${escapeHtml(expiresLabel)}.</p>
       <p>Any previous unused login code for this email is no longer valid.</p>
       <p>If you did not expect this email, you can ignore it.</p>
@@ -102,6 +132,9 @@ export class MailService {
     return this.send({ to: input.to, subject, text, html });
   }
 
+  /**
+   * Existing account already has a password — tell them about new attendee/event access.
+   */
   async sendExistingAccountMembershipAccess(input: {
     to: string;
     name: string;
@@ -110,54 +143,56 @@ export class MailService {
     speakerId?: string | null;
     sponsorId?: string | null;
     eventName?: string;
+    /** @deprecated Prefer invite-code emails when password is not set yet. */
     mustChangePassword?: boolean;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
-    const parts: string[] = [];
-    if (input.speakerId || input.role === 'speaker') parts.push('speaker');
-    if (input.sponsorId || input.role === 'sponsor') parts.push('sponsor');
-    const roleLabel =
-      parts.length > 0 ? parts.join(' and ') : input.role === 'member' ? 'attendee' : 'account';
+    const isSpeaker = Boolean(input.speakerId) || input.role === 'speaker';
+    const isSponsor = Boolean(input.sponsorId) || input.role === 'sponsor';
+    const portalParts: string[] = [];
+    if (isSpeaker) portalParts.push('speaker');
+    if (isSponsor) portalParts.push('sponsor');
+    const portalLabel = portalParts.join(' and ');
+    const membershipLabel = input.membershipName.trim() || 'your membership';
+    const eventLabel = input.eventName?.trim();
 
-    const registrationLine = input.eventName
-      ? `You've been registered for ${input.eventName} on your existing ${roleLabel} account.`
-      : `Your ${input.membershipName} membership is now active on your existing ${roleLabel} account.`;
+    const subject = eventLabel
+      ? `You're registered for ${eventLabel} — use your existing password`
+      : `Your ${env.appName} membership is ready — use your existing password`;
 
-    const subject = input.eventName
-      ? `You're registered for ${input.eventName} — use your existing login`
-      : `Your ${env.appName} membership is ready — use your existing login`;
+    const accessLines: string[] = [];
+    if (eventLabel) {
+      accessLines.push(`You've been registered as an attendee for ${eventLabel}.`);
+      accessLines.push(`Membership for this event: ${membershipLabel}.`);
+    } else {
+      accessLines.push(`Your ${membershipLabel} membership is now active on your existing account.`);
+    }
 
-    const loginLines = input.mustChangePassword
-      ? [
-          'You do not need a new invitation code.',
-          'If you have not set a password yet, open the app or dashboard and choose Forgot password with this email to create one.',
-          'If you already have a password, sign in with the same email and password you use today.',
-        ]
-      : [
-          'You do not need a new invitation code.',
-          'Sign in to the mobile app with the same email address and password you already use.',
-          parts.length > 0
-            ? `That login also continues to work for your ${roleLabel} dashboard access.`
-            : 'The same login works for the app and dashboard when you have dashboard access.',
-        ];
+    if (portalLabel) {
+      accessLines.push(
+        `You already have ${portalLabel} access on this email. You can use the same email and password for the mobile app (attendee) and the ${portalLabel} dashboard.`,
+      );
+    } else {
+      accessLines.push(
+        'Sign in to the mobile app with the same email address and password you already use.',
+      );
+    }
+
+    accessLines.push('You do not need a new invitation code.');
+    accessLines.push(
+      'If you forgot your password, use Forgot password in the app or dashboard.',
+    );
 
     const text = [
       `Hi ${input.name},`,
       '',
-      registrationLine,
-      '',
-      ...loginLines,
-      '',
-      'If you forgot your password, use Forgot password in the app or dashboard.',
+      ...accessLines,
       '',
       'If you did not expect this email, you can ignore it.',
     ].join('\n');
 
     const html = `
       <p>Hi ${escapeHtml(input.name)},</p>
-      <p>${escapeHtml(registrationLine)}</p>
-      <p><strong>You do not need a new invitation code.</strong></p>
-      ${loginLines.slice(1).map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
-      <p>If you forgot your password, use Forgot password in the app or dashboard.</p>
+      ${accessLines.map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
       <p>If you did not expect this email, you can ignore it.</p>
     `;
 
@@ -175,9 +210,9 @@ export class MailService {
 
     const loginLines = input.mustChangePassword
       ? [
-          'You do not need a new invitation code.',
-          'If you have not set a password yet, open the app or dashboard and choose Forgot password with this email to create one.',
-          'If you already have a password, sign in with the same email and password you use today.',
+          'You already have an account on this email, but a password has not been set yet.',
+          'Use Forgot password with this email in the app or dashboard to create your password, then sign in.',
+          'After that, the same login works for attendee (app) and dashboard access.',
         ]
       : [
           'You do not need a new invitation code.',
@@ -198,8 +233,7 @@ export class MailService {
     const html = `
       <p>Hi ${escapeHtml(input.name)},</p>
       <p>You now have <strong>${escapeHtml(roleLabel)}</strong> access on your existing account.</p>
-      <p><strong>You do not need a new invitation code.</strong></p>
-      ${loginLines.slice(1).map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
+      ${loginLines.map((line) => `<p>${escapeHtml(line)}</p>`).join('\n')}
       <p>If you forgot your password, use Forgot password in the app or dashboard.</p>
     `;
 

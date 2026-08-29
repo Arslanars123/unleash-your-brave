@@ -51,6 +51,9 @@ export class GhlWebhookService {
           inviteCode,
           expiresAt,
           dualAccess: Boolean(user.speakerId || user.sponsorId),
+          membershipName: payload.product?.trim() || undefined,
+          isSpeaker: Boolean(user.speakerId) || user.role === 'speaker',
+          isSponsor: Boolean(user.sponsorId) || user.role === 'sponsor',
         });
         inviteEmailSent = result.sent;
         if (!result.sent && env.nodeEnv !== 'production') {
@@ -71,7 +74,6 @@ export class GhlWebhookService {
           role: user.role,
           speakerId: user.speakerId,
           sponsorId: user.sponsorId,
-          mustChangePassword: user.mustChangePassword,
         });
       } catch (error) {
         logger.error({ err: error, email: user.email }, 'Failed to send existing-account access email');
