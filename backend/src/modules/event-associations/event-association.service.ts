@@ -61,7 +61,12 @@ export class EventAssociationService {
     }
     if (input.sponsorIds) {
       await this.assertSponsorsExist(input.sponsorIds);
+      const previouslyLinked = await this.associations.listEntityIds(eventId, 'sponsor');
       await this.associations.setLinks(eventId, 'sponsor', input.sponsorIds);
+      const newlyLinked = input.sponsorIds.filter((id) => !previouslyLinked.includes(id));
+      for (const sponsorId of newlyLinked) {
+        void this.sponsors?.notifyAssignedToEvent(sponsorId, eventId);
+      }
     }
     if (input.membershipIds) {
       await this.assertMembershipsExist(input.membershipIds);
@@ -85,7 +90,11 @@ export class EventAssociationService {
   async linkSponsor(eventId: string, sponsorId: string): Promise<void> {
     await this.events.requireEvent(eventId);
     await this.assertSponsorsExist([sponsorId]);
+    const alreadyLinked = await this.associations.isLinked(eventId, 'sponsor', sponsorId);
     await this.associations.link(eventId, 'sponsor', sponsorId);
+    if (!alreadyLinked) {
+      void this.sponsors?.notifyAssignedToEvent(sponsorId, eventId);
+    }
   }
 
   /** Event IDs this sponsor is linked to (for portal offer editing). */
@@ -123,7 +132,11 @@ export class EventAssociationService {
   ): Promise<void> {
     await this.events.requireEvent(eventId);
     await this.assertSponsorsExist([sponsorId]);
+    const alreadyLinked = await this.associations.isLinked(eventId, 'sponsor', sponsorId);
     await this.associations.link(eventId, 'sponsor', sponsorId, offersJson);
+    if (!alreadyLinked) {
+      void this.sponsors?.notifyAssignedToEvent(sponsorId, eventId);
+    }
   }
 
   async linkMembership(eventId: string, membershipId: string): Promise<void> {

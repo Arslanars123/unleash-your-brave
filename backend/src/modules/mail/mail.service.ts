@@ -346,6 +346,97 @@ export class MailService {
     return this.send({ to: input.to, subject, text, html });
   }
 
+  async sendSpeakerSessionAssigned(input: {
+    to: string;
+    name: string;
+    eventName: string;
+    sessionName: string;
+    sessionDescription?: string;
+    dayLabel?: string;
+    startTime?: string;
+    endTime?: string;
+    location?: string;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const eventLabel = input.eventName.trim();
+    const sessionLabel = input.sessionName.trim();
+    const subject = `You've been assigned to "${sessionLabel}" — ${eventLabel}`;
+
+    const detailLines: string[] = [
+      `You've been assigned as a speaker to a session for ${eventLabel}.`,
+      '',
+      `Session: ${sessionLabel}`,
+    ];
+    if (input.sessionDescription?.trim()) {
+      detailLines.push(`Description: ${input.sessionDescription.trim()}`);
+    }
+    if (input.dayLabel?.trim()) {
+      detailLines.push(`Day: ${input.dayLabel.trim()}`);
+    }
+    if (input.startTime?.trim() || input.endTime?.trim()) {
+      const time =
+        input.startTime?.trim() && input.endTime?.trim()
+          ? `${input.startTime.trim()} – ${input.endTime.trim()}`
+          : input.startTime?.trim() || input.endTime?.trim() || '';
+      if (time) detailLines.push(`Time: ${time}`);
+    }
+    if (input.location?.trim()) {
+      detailLines.push(`Location: ${input.location.trim()}`);
+    }
+    detailLines.push(
+      '',
+      'Sign in to the speaker dashboard with your email to review this session.',
+      'If you have not set a password yet, use the invite code from your earlier email, or Forgot password.',
+    );
+
+    const text = [`Hi ${input.name},`, '', ...detailLines].join('\n');
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>You've been assigned as a speaker to a session for <strong>${escapeHtml(eventLabel)}</strong>.</p>
+      <p><strong>Session:</strong> ${escapeHtml(sessionLabel)}</p>
+      ${input.sessionDescription?.trim() ? `<p><strong>Description:</strong> ${escapeHtml(input.sessionDescription.trim())}</p>` : ''}
+      ${input.dayLabel?.trim() ? `<p><strong>Day:</strong> ${escapeHtml(input.dayLabel.trim())}</p>` : ''}
+      ${
+        input.startTime?.trim() || input.endTime?.trim()
+          ? `<p><strong>Time:</strong> ${escapeHtml(
+              [input.startTime?.trim(), input.endTime?.trim()].filter(Boolean).join(' – '),
+            )}</p>`
+          : ''
+      }
+      ${input.location?.trim() ? `<p><strong>Location:</strong> ${escapeHtml(input.location.trim())}</p>` : ''}
+      <p>Sign in to the speaker dashboard with your email to review this session.</p>
+      <p>If you have not set a password yet, use the invite code from your earlier email, or Forgot password.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
+
+  async sendSponsorEventAssigned(input: {
+    to: string;
+    name: string;
+    eventName: string;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const eventLabel = input.eventName.trim();
+    const subject = `You're a sponsor for ${eventLabel}`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `You've been added as a sponsor for ${eventLabel}.`,
+      '',
+      'Sign in to the sponsor dashboard with your email to manage your sponsorship for this event.',
+      'If you have not set a password yet, use the invite code from your earlier email, or Forgot password.',
+      '',
+      'If you did not expect this email, you can ignore it.',
+    ].join('\n');
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>You've been added as a sponsor for <strong>${escapeHtml(eventLabel)}</strong>.</p>
+      <p>Sign in to the sponsor dashboard with your email to manage your sponsorship for this event.</p>
+      <p>If you have not set a password yet, use the invite code from your earlier email, or Forgot password.</p>
+      <p>If you did not expect this email, you can ignore it.</p>
+    `;
+    return this.send({ to: input.to, subject, text, html });
+  }
+
   async sendMembershipRenewalReminder(input: {
     to: string;
     name: string;

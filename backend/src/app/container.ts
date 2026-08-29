@@ -191,6 +191,7 @@ export async function createContainer() {
     membershipRepository,
     effectiveAccessService,
     eventAssociationService,
+    mailService,
   );
   eventAssociationService.setCatalogServices({
     speakers: speakerService,

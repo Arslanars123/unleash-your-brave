@@ -1,8 +1,11 @@
 import type { EffectiveAccessService } from '../access/access.service.js';
 import { randomUUID } from 'node:crypto';
 import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import { formatEditionRange } from '../../core/format-date.js';
+import { logger } from '../../core/logger.js';
 import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventService } from '../events/event.service.js';
+import type { MailService } from '../mail/mail.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
 import type { UserRepository } from '../users/user.repository.js';
@@ -60,6 +63,7 @@ export class SessionService {
     private readonly memberships?: MembershipRepository,
     private readonly access?: EffectiveAccessService,
     private readonly associations?: EventAssociationService,
+    private readonly mail?: MailService,
   ) {}
 
   async list(
@@ -175,6 +179,10 @@ export class SessionService {
       feedbackEnabled: kind === 'session' ? (input.feedbackEnabled ?? true) : false,
     });
 
+    if (speakerId) {
+      void this.notifySpeakerSessionAssigned(created, speakerId);
+    }
+
     return this.toPublic(created);
   }
 
@@ -237,6 +245,15 @@ export class SessionService {
     });
 
     if (!updated) throw new NotFoundError('Session');
+
+    const speakerNewlyAssigned =
+      Boolean(speakerId) &&
+      (input.speakerId !== undefined || input.kind !== undefined) &&
+      speakerId !== existing.speakerId;
+    if (speakerNewlyAssigned && speakerId) {
+      void this.notifySpeakerSessionAssigned(updated, speakerId);
+    }
+
     return this.toPublic(updated);
   }
 
@@ -368,6 +385,42 @@ export class SessionService {
     if (speaker.eventId === eventId) return;
     if (this.associations) {
       await this.associations.linkSpeaker(eventId, speakerId);
+    }
+  }
+
+  private async notifySpeakerSessionAssigned(
+    session: Session,
+    speakerId: string,
+  ): Promise<void> {
+    if (!this.mail) return;
+    try {
+      const speaker = await this.speakers.findById(speakerId);
+      const email = speaker?.email?.trim().toLowerCase();
+      if (!speaker || !email) return;
+
+      const event = await this.events.getById(session.eventId);
+      const eventLabel = `${event.name} (${formatEditionRange(event.startDate, event.endDate)})`;
+      const day = event.days.find((d) => d.dayNumber === session.eventDayNumber);
+      const dayLabel = day
+        ? `${day.label || `Day ${day.dayNumber}`} (${formatEditionRange(day.date, day.date)})`
+        : `Day ${session.eventDayNumber}`;
+
+      await this.mail.sendSpeakerSessionAssigned({
+        to: email,
+        name: speaker.name,
+        eventName: eventLabel,
+        sessionName: session.name,
+        sessionDescription: session.description,
+        dayLabel,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        location: session.location || session.address,
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, sessionId: session.id, speakerId },
+        'Failed to send speaker session assignment email',
+      );
     }
   }
 

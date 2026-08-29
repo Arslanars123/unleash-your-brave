@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { env } from '../../config/env.js';
 import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import { formatEditionRange } from '../../core/format-date.js';
+import { logger } from '../../core/logger.js';
 import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
@@ -214,6 +216,26 @@ export class SponsorService {
     await this.users.clearSponsorPortalLink(id);
     if (!(await this.sponsors.delete(id))) {
       throw new NotFoundError('Sponsor');
+    }
+  }
+
+  /** Email when this sponsor is newly linked to an event edition. */
+  async notifyAssignedToEvent(sponsorId: string, eventId: string): Promise<void> {
+    try {
+      const sponsor = await this.sponsors.findById(sponsorId);
+      const email = sponsor?.email?.trim().toLowerCase();
+      if (!sponsor || !email) return;
+      const event = await this.events.getById(eventId);
+      await this.mail.sendSponsorEventAssigned({
+        to: email,
+        name: sponsor.name,
+        eventName: `${event.name} (${formatEditionRange(event.startDate, event.endDate)})`,
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, sponsorId, eventId },
+        'Failed to send sponsor event assignment email',
+      );
     }
   }
 
