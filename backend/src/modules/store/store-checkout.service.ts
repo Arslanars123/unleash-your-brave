@@ -52,11 +52,15 @@ function toPublicStoreOrder(order: StoreOrder): PublicStoreOrder {
     unitPrice: order.unitPrice,
     totalPrice: order.totalPrice,
     currency: order.currency,
+    deliveryAddress: order.deliveryAddress ?? '',
+    contactPhone: order.contactPhone ?? '',
     paymentStatus: order.paymentStatus,
+    fulfillmentStatus: order.fulfillmentStatus ?? 'pending',
     inventoryAdjusted: order.inventoryAdjusted,
     stripeCheckoutSessionId: order.stripeCheckoutSessionId,
     stripePaymentIntentId: order.stripePaymentIntentId,
     purchasedAt: order.purchasedAt.toISOString(),
+    completedAt: order.completedAt ? order.completedAt.toISOString() : null,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
   };
@@ -140,6 +144,8 @@ export class StoreCheckoutService {
 
     const names = splitDisplayName(user.name || user.email);
     const email = user.email.trim().toLowerCase();
+    const deliveryAddress = input.deliveryAddress.trim();
+    const contactPhone = input.contactPhone.trim();
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -177,6 +183,8 @@ export class StoreCheckoutService {
         email,
         firstName: names.firstName,
         lastName: names.lastName,
+        deliveryAddress,
+        contactPhone,
       },
     });
 
@@ -219,6 +227,31 @@ export class StoreCheckoutService {
   async listMyOrders(userId: string): Promise<PublicStoreOrder[]> {
     const items = await this.orders.listByUserId(userId);
     return items.map(toPublicStoreOrder);
+  }
+
+  async getOrderById(id: string): Promise<PublicStoreOrder> {
+    const order = await this.orders.findById(id);
+    if (!order) throw new NotFoundError('Store order');
+    return toPublicStoreOrder(order);
+  }
+
+  async updateOrder(id: string, input: { fulfillmentStatus?: 'completed' }): Promise<PublicStoreOrder> {
+    const existing = await this.orders.findById(id);
+    if (!existing) throw new NotFoundError('Store order');
+
+    if (input.fulfillmentStatus === 'completed') {
+      if (existing.fulfillmentStatus === 'completed') {
+        return toPublicStoreOrder(existing);
+      }
+      const updated = await this.orders.update(id, {
+        fulfillmentStatus: 'completed',
+        completedAt: new Date(),
+      });
+      if (!updated) throw new NotFoundError('Store order');
+      return toPublicStoreOrder(updated);
+    }
+
+    throw new BadRequestError('Unsupported order update');
   }
 
   async listPaidBuyerIdsForEvent(eventId: string): Promise<string[]> {
@@ -312,12 +345,16 @@ export class StoreCheckoutService {
         unitPrice: unitPrice || product?.price || 0,
         totalPrice,
         currency: (session.currency || env.stripe.currency).toUpperCase(),
+        deliveryAddress: metadata.deliveryAddress?.trim() || '',
+        contactPhone: metadata.contactPhone?.trim() || '',
         paymentStatus: 'paid',
+        fulfillmentStatus: 'pending',
         inventoryAdjusted,
         stripeCheckoutSessionId: session.id,
         stripePaymentIntentId: paymentIntentId,
         stripeCustomerId: customerId,
         purchasedAt: new Date(),
+        completedAt: null,
       });
     } catch (error) {
       const duplicate = await this.orders.findByStripeCheckoutSessionId(session.id);

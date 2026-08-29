@@ -4,4 +4,5 @@ export const ATTENDEE_UI = {
   showStatus: false,
   showProfileCompleted: false,
   showSuspendAction: false,
+  showIsVip: false,
 } as const;

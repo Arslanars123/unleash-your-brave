@@ -52,11 +52,19 @@ export class InMemoryStoreOrderRepository implements StoreOrderRepository {
     const filtered = [...this.items.values()]
       .filter((item) => {
         if (query.eventId && item.eventId !== query.eventId) return false;
+        if (query.fulfillmentStatus === 'pending') {
+          const status = item.fulfillmentStatus ?? 'pending';
+          if (status !== 'pending') return false;
+        } else if (query.fulfillmentStatus === 'completed') {
+          if (item.fulfillmentStatus !== 'completed') return false;
+        }
         if (!search) return true;
         return (
           item.productName.toLowerCase().includes(search) ||
           item.email.toLowerCase().includes(search) ||
-          item.sku.toLowerCase().includes(search)
+          item.sku.toLowerCase().includes(search) ||
+          (item.contactPhone ?? '').toLowerCase().includes(search) ||
+          (item.deliveryAddress ?? '').toLowerCase().includes(search)
         );
       })
       .sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime());
@@ -121,6 +129,10 @@ export class InMemoryStoreOrderRepository implements StoreOrderRepository {
       id: randomUUID(),
       ...data,
       email: data.email.trim().toLowerCase(),
+      deliveryAddress: data.deliveryAddress ?? '',
+      contactPhone: data.contactPhone ?? '',
+      fulfillmentStatus: data.fulfillmentStatus ?? 'pending',
+      completedAt: data.completedAt ?? null,
       createdAt: now,
       updatedAt: now,
     };

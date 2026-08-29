@@ -41,6 +41,8 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
   String? _errorMessage;
   bool _isOffline = false;
   int _quantity = 1;
+  final _deliveryAddressController = TextEditingController();
+  final _contactPhoneController = TextEditingController();
 
   static const _maxQuantityPerCheckout = 20;
 
@@ -49,6 +51,13 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
     super.initState();
     _product = widget.initialProduct;
     unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _deliveryAddressController.dispose();
+    _contactPhoneController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -131,11 +140,24 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
       return;
     }
 
+    final deliveryAddress = _deliveryAddressController.text.trim();
+    final contactPhone = _contactPhoneController.text.trim();
+    if (deliveryAddress.length < 5) {
+      AppToast.error('Enter your delivery address');
+      return;
+    }
+    if (contactPhone.length < 6) {
+      AppToast.error('Enter a contact phone number');
+      return;
+    }
+
     setState(() => _paying = true);
     try {
       final session = await sl<StoreRemoteDataSource>().createCheckoutSession(
         productId: product.id,
         quantity: _quantity,
+        deliveryAddress: deliveryAddress,
+        contactPhone: contactPhone,
         successUrl: ApiConstants.checkoutSuccessUrl,
         cancelUrl: ApiConstants.checkoutCancelUrl,
         expectedPrice: product.price,
@@ -400,6 +422,83 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
                               ? AppColors.textSecondary
                               : AppColors.textPrimary,
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _ReviewCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'DELIVERY DETAILS',
+                        style: AppTypography.microLabel.copyWith(
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Delivery address',
+                        style: AppTypography.caption.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _deliveryAddressController,
+                        minLines: 2,
+                        maxLines: 4,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: 'Street, city, postcode',
+                          filled: true,
+                          fillColor: AppColors.bgMaroon,
+                          border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderSubtle),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderSubtle),
+                          ),
+                        ),
+                        style: AppTypography.body,
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Contact phone',
+                        style: AppTypography.caption.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _contactPhoneController,
+                        keyboardType: TextInputType.phone,
+                        textCapitalization: TextCapitalization.none,
+                        decoration: InputDecoration(
+                          hintText: 'Mobile number for delivery',
+                          filled: true,
+                          fillColor: AppColors.bgMaroon,
+                          border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderSubtle),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderSubtle),
+                          ),
+                        ),
+                        style: AppTypography.body,
                       ),
                     ],
                   ),

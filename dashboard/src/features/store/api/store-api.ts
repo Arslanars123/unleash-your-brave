@@ -2,10 +2,12 @@ import { apiClient } from '@/shared/api/client';
 import type {
   PaginationMeta,
   PublicStoreCategory,
+  PublicStoreOrder,
   PublicStoreProduct,
   StoreCategoryPayload,
   StoreProductPayload,
   SuccessEnvelope,
+  UpdateStoreOrderPayload,
 } from '@/shared/types/api';
 
 export interface ListStoreParams {
@@ -90,5 +92,39 @@ export const storeApi = {
 
   async removeProduct(id: string): Promise<void> {
     await apiClient.delete(`/store/products/${id}`);
+  },
+
+  async listOrders(params: {
+    page?: number;
+    perPage?: number;
+    eventId?: string;
+    search?: string;
+    fulfillmentStatus?: 'pending' | 'completed';
+  } = {}) {
+    const { data } = await apiClient.get<SuccessEnvelope<PublicStoreOrder[]>>('/store/orders', {
+      params,
+    });
+    return {
+      items: data.data,
+      meta: (data.meta ?? {
+        page: 1,
+        perPage: 20,
+        total: data.data.length,
+        totalPages: 1,
+      }) as PaginationMeta,
+    };
+  },
+
+  async getOrder(id: string): Promise<PublicStoreOrder> {
+    const { data } = await apiClient.get<SuccessEnvelope<PublicStoreOrder>>(`/store/orders/${id}`);
+    return data.data;
+  },
+
+  async markOrderCompleted(id: string): Promise<PublicStoreOrder> {
+    const { data } = await apiClient.patch<SuccessEnvelope<PublicStoreOrder>>(
+      `/store/orders/${id}`,
+      { fulfillmentStatus: 'completed' } satisfies UpdateStoreOrderPayload,
+    );
+    return data.data;
   },
 };

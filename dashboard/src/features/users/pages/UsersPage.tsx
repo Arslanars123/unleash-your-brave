@@ -315,7 +315,7 @@ export function UsersPage() {
                   <th>Name</th>
                   <th>Title</th>
                   <th>Email</th>
-                  <th>VIP</th>
+                  {ATTENDEE_UI.showIsVip ? <th>VIP</th> : null}
                   {ATTENDEE_UI.showPoints ? <th>Points</th> : null}
                   {ATTENDEE_UI.showStatus ? <th>Status</th> : null}
                   <th />
@@ -349,7 +349,7 @@ export function UsersPage() {
                     </td>
                     <td>{user.title || '—'}</td>
                     <td>{user.email}</td>
-                    <td>{user.isVip ? 'Yes' : '—'}</td>
+                    {ATTENDEE_UI.showIsVip ? <td>{user.isVip ? 'Yes' : '—'}</td> : null}
                     {ATTENDEE_UI.showPoints ? <td>{user.points ?? 0}</td> : null}
                     {ATTENDEE_UI.showStatus ? (
                       <td>

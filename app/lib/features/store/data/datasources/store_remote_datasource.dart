@@ -79,6 +79,8 @@ class StoreRemoteDataSource {
 
   Future<StoreCheckoutSessionResult> createCheckoutSession({
     required String productId,
+    required String deliveryAddress,
+    required String contactPhone,
     int quantity = 1,
     String? successUrl,
     String? cancelUrl,
@@ -90,6 +92,8 @@ class StoreRemoteDataSource {
         data: {
           'productId': productId,
           'quantity': quantity,
+          'deliveryAddress': deliveryAddress,
+          'contactPhone': contactPhone,
           if (successUrl != null) 'successUrl': successUrl,
           if (cancelUrl != null) 'cancelUrl': cancelUrl,
           if (expectedPrice != null) 'expectedPrice': expectedPrice,

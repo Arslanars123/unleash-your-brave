@@ -942,3 +942,36 @@ export interface StoreProductPayload {
   sortOrder?: number;
 }
 
+export type StoreFulfillmentStatus = 'pending' | 'completed';
+
+export interface PublicStoreOrder {
+  id: string;
+  eventId: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  currency: string;
+  deliveryAddress: string;
+  contactPhone: string;
+  paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
+  fulfillmentStatus: StoreFulfillmentStatus;
+  inventoryAdjusted: boolean;
+  stripeCheckoutSessionId: string;
+  stripePaymentIntentId: string | null;
+  purchasedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateStoreOrderPayload {
+  fulfillmentStatus: 'completed';
+}
+

@@ -12,8 +12,10 @@ import {
   listStoreProductsQuerySchema,
   storeCategoryIdParamSchema,
   storeCheckoutSessionIdParamSchema,
+  storeOrderIdParamSchema,
   storeProductIdParamSchema,
   updateStoreCategorySchema,
+  updateStoreOrderSchema,
   updateStoreProductSchema,
 } from './store.schema.js';
 
@@ -107,6 +109,20 @@ export function createStoreRouter(controller: StoreController): Router {
     authorize('admin'),
     validate({ query: listStoreOrdersQuerySchema }),
     asyncHandler(controller.listOrders),
+  );
+  router.get(
+    '/orders/:id',
+    authenticate,
+    authorize('admin'),
+    validate({ params: storeOrderIdParamSchema }),
+    asyncHandler(controller.getOrderById),
+  );
+  router.patch(
+    '/orders/:id',
+    authenticate,
+    authorize('admin'),
+    validate({ params: storeOrderIdParamSchema, body: updateStoreOrderSchema }),
+    asyncHandler(controller.updateOrder),
   );
 
   return router;

@@ -22,6 +22,7 @@ import { SessionsPage } from '@/features/sessions/pages/SessionsPage';
 import { SpeakersPage } from '@/features/speakers/pages/SpeakersPage';
 import { SponsorsPage } from '@/features/sponsors/pages/SponsorsPage';
 import { StorePage } from '@/features/store/pages/StorePage';
+import { OrdersPage } from '@/features/store/pages/OrdersPage';
 import { MembershipsPage } from '@/features/memberships/pages/MembershipsPage';
 import { EventAccessPage } from '@/features/access/pages/EventAccessPage';
 import { CouponsPage } from '@/features/coupons/pages/CouponsPage';
@@ -61,6 +62,7 @@ export function AppRouter() {
               <Route path="coupons" element={<CouponsPage />} />
               <Route path="sponsors" element={<SponsorsPage />} />
               <Route path="store" element={<StorePage />} />
+              <Route path="orders" element={<OrdersPage />} />
               <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="announcements/countdown" element={<CountdownSettingsPage />} />
               <Route path="posts" element={<PostsPage />} />

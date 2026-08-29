@@ -59,7 +59,22 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
         containsCi('productName', search),
         containsCi('email', search),
         containsCi('sku', search),
+        containsCi('contactPhone', search),
+        containsCi('deliveryAddress', search),
       ];
+    }
+    if (query.fulfillmentStatus === 'pending') {
+      filter.$and = [
+        ...(Array.isArray(filter.$and) ? filter.$and : []),
+        {
+          $or: [
+            { fulfillmentStatus: 'pending' },
+            { fulfillmentStatus: { $exists: false } },
+          ],
+        },
+      ];
+    } else if (query.fulfillmentStatus === 'completed') {
+      filter.fulfillmentStatus = 'completed';
     }
 
     const total = await this.collection.countDocuments(filter);
@@ -147,6 +162,10 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
       id: randomUUID(),
       ...data,
       email: data.email.trim().toLowerCase(),
+      deliveryAddress: data.deliveryAddress ?? '',
+      contactPhone: data.contactPhone ?? '',
+      fulfillmentStatus: data.fulfillmentStatus ?? 'pending',
+      completedAt: data.completedAt ?? null,
       createdAt: now,
       updatedAt: now,
     };

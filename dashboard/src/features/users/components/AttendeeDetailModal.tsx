@@ -172,7 +172,9 @@ export function AttendeeDetailModal({
             <dl className="attendee-detail-grid">
               {ATTENDEE_UI.showStatus ? <DetailRow label="Status" value={user.status} /> : null}
               <DetailRow label="Role" value={user.role} />
-              <DetailRow label="VIP" value={user.isVip ? 'Yes' : 'No'} />
+              {ATTENDEE_UI.showIsVip ? (
+                <DetailRow label="VIP" value={user.isVip ? 'Yes' : 'No'} />
+              ) : null}
               {ATTENDEE_UI.showPoints ? (
                 <DetailRow label="Points" value={String(user.points ?? 0)} />
               ) : null}

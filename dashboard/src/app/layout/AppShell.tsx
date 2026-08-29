@@ -22,6 +22,7 @@ import {
   UserRound,
   Users,
   ShoppingBag,
+  PackageCheck,
   X,
 } from 'lucide-react';
 import { announcementsApi } from '@/features/announcements/api/announcements-api';
@@ -137,6 +138,10 @@ export function AppShell() {
               <NavLink to="/store">
                 <ShoppingBag size={18} />
                 Store
+              </NavLink>
+              <NavLink to="/orders">
+                <PackageCheck size={18} />
+                Orders
               </NavLink>
               <NavLink to="/announcements">
                 <Megaphone size={18} />

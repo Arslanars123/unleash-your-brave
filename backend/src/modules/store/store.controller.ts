@@ -97,4 +97,15 @@ export class StoreController {
   listMyOrders = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.checkout.listMyOrders(req.auth!.userId));
   };
+
+  getOrderById = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(res, await this.checkout.getOrderById(req.params.id as string));
+  };
+
+  updateOrder = async (req: Request, res: Response): Promise<void> => {
+    sendSuccess(
+      res,
+      await this.checkout.updateOrder(req.params.id as string, req.body as { fulfillmentStatus?: 'completed' }),
+    );
+  };
 }

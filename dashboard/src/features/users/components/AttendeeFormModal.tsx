@@ -552,14 +552,16 @@ export function AttendeeFormModal({
             placeholder="https://..."
           />
 
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={values.isVip}
-              onChange={(e) => update('isVip', e.target.checked)}
-            />
-            <span>is_vip</span>
-          </label>
+          {ATTENDEE_UI.showIsVip ? (
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={values.isVip}
+                onChange={(e) => update('isVip', e.target.checked)}
+              />
+              <span>is_vip</span>
+            </label>
+          ) : null}
 
           {ATTENDEE_UI.showPoints ? (
             <Input

@@ -137,10 +137,32 @@ export const updateStoreProductSchema = z
 export const createStoreCheckoutSessionSchema = z.object({
   productId: z.string().uuid('Product is required'),
   quantity: z.coerce.number().int().min(1).max(100).optional().default(1),
+  deliveryAddress: z
+    .string()
+    .trim()
+    .min(5, 'Delivery address is required')
+    .max(500, 'Delivery address is too long'),
+  contactPhone: z
+    .string()
+    .trim()
+    .min(6, 'Contact phone is required')
+    .max(30, 'Contact phone is too long'),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
   expectedPrice: z.number().finite().min(0).optional(),
 });
+
+export const storeOrderIdParamSchema = z.object({
+  id: z.string().uuid('Expected a valid order id'),
+});
+
+export const updateStoreOrderSchema = z
+  .object({
+    fulfillmentStatus: z.enum(['completed']),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'Provide at least one field to update',
+  });
 
 export const storeCheckoutSessionIdParamSchema = z.object({
   id: z.string().min(1),
@@ -151,4 +173,5 @@ export const listStoreOrdersQuerySchema = z.object({
   perPage: z.coerce.number().int().min(1).max(100).default(20),
   eventId: z.string().uuid().optional(),
   search: z.string().trim().min(1).optional(),
+  fulfillmentStatus: z.enum(['pending', 'completed']).optional(),
 });
