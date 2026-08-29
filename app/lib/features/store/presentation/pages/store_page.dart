@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
@@ -11,9 +10,6 @@ import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/core/widgets/suggest_search_field.dart';
-import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
-import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
-import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/store/data/datasources/store_remote_datasource.dart';
 import 'package:unleash_your_brave/features/store/domain/entities/store_entity.dart';
 import 'package:unleash_your_brave/features/store/presentation/widgets/store_product_card.dart';
@@ -31,13 +27,11 @@ class _StorePageState extends State<StorePage> {
   final _searchController = TextEditingController();
 
   _LoadStatus _status = _LoadStatus.loading;
-  EventEntity? _event;
   List<StoreCategoryEntity> _categories = const [];
   List<StoreProductEntity> _products = const [];
   String? _errorMessage;
   String _searchQuery = '';
   String? _selectedCategoryId;
-  String? _boundEventId;
 
   @override
   void initState() {
@@ -76,7 +70,6 @@ class _StorePageState extends State<StorePage> {
       if (id.isEmpty || name.isEmpty || byId.containsKey(id)) continue;
       byId[id] = StoreCategoryEntity(
         id: id,
-        eventId: product.eventId,
         name: name,
         description: '',
         image: '',
@@ -88,17 +81,8 @@ class _StorePageState extends State<StorePage> {
     return byId.values.toList(growable: false);
   }
 
-  Future<String> _resolveEventId() async {
-    final cubit = context.read<SelectedEventCubit>();
-    await cubit.ensureReady();
-    final id = cubit.state.eventId;
-    if (id != null && id.isNotEmpty) return id;
-    final event = await sl<EventsRemoteDataSource>().getCurrent();
-    return event.id;
-  }
-
   Future<void> _load({required bool isRefresh}) async {
-    final hadContent = _event != null;
+    final hadContent = _products.isNotEmpty || _categories.isNotEmpty;
     setState(() {
       _status = isRefresh && hadContent
           ? _LoadStatus.refreshing
@@ -107,17 +91,13 @@ class _StorePageState extends State<StorePage> {
     });
 
     try {
-      final eventId = await _resolveEventId();
-      final event = await sl<EventsRemoteDataSource>().getById(eventId);
       final remote = sl<StoreRemoteDataSource>();
       final results = await Future.wait([
-        remote.listCategories(eventId: event.id),
-        remote.listProducts(eventId: event.id),
+        remote.listCategories(),
+        remote.listProducts(),
       ]);
       if (!mounted) return;
       setState(() {
-        _boundEventId = event.id;
-        _event = event;
         _categories = results[0] as List<StoreCategoryEntity>;
         _products = results[1] as List<StoreProductEntity>;
         _status = _LoadStatus.success;
@@ -178,16 +158,7 @@ class _StorePageState extends State<StorePage> {
   Widget build(BuildContext context) {
     final sidePad = context.pagePadding.left;
 
-    return BlocListener<SelectedEventCubit, SelectedEventState>(
-      listenWhen: (prev, next) =>
-          next.eventId != null &&
-          next.eventId!.isNotEmpty &&
-          prev.eventId != next.eventId,
-      listener: (context, state) {
-        if (state.eventId == _boundEventId) return;
-        unawaited(_load(isRefresh: false));
-      },
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.bgBase,
       appBar: AppBar(
         backgroundColor: AppColors.bgBase,
@@ -230,7 +201,6 @@ class _StorePageState extends State<StorePage> {
           _LoadStatus.refreshing || _LoadStatus.success => _buildBody(sidePad),
         },
       ),
-    ),
     );
   }
 

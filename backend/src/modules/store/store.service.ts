@@ -1,5 +1,4 @@
 import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
-import type { EventService } from '../events/event.service.js';
 import { toPublicStoreCategory, toPublicStoreProduct } from './store.mapper.js';
 import type {
   PaginatedResult,
@@ -23,23 +22,20 @@ export class StoreService {
   constructor(
     private readonly categories: StoreCategoryRepository,
     private readonly products: StoreProductRepository,
-    private readonly events: EventService,
   ) {}
 
   async listCategories(
     query: ListStoreCategoriesQuery,
   ): Promise<PaginatedResult<PublicStoreCategory>> {
     const { items, total } = await this.categories.list(query);
-    const counts = query.eventId
-      ? await this.products.countByEventCategories(query.eventId)
-      : new Map<string, number>();
+    const mapped = await Promise.all(
+      items.map(async (category) => {
+        const productCount = await this.products.countByCategory(category.id);
+        return toPublicStoreCategory(category, productCount);
+      }),
+    );
 
-    return {
-      items: items.map((category) =>
-        toPublicStoreCategory(category, counts.get(category.id) ?? 0),
-      ),
-      total,
-    };
+    return { items: mapped, total };
   }
 
   async getCategoryById(id: string): Promise<PublicStoreCategory> {
@@ -49,9 +45,7 @@ export class StoreService {
   }
 
   async createCategory(input: CreateStoreCategoryInput): Promise<PublicStoreCategory> {
-    await this.events.requireEvent(input.eventId);
     const created = await this.categories.create({
-      eventId: input.eventId,
       name: input.name.trim(),
       description: input.description ?? '',
       image: input.image ?? '',
@@ -94,17 +88,15 @@ export class StoreService {
   }
 
   async createProduct(input: CreateStoreProductInput): Promise<PublicStoreProduct> {
-    await this.events.requireEvent(input.eventId);
     const categoryId = input.categoryId ?? null;
     if (categoryId) {
-      await this.assertCategoryForEvent(categoryId, input.eventId);
+      await this.assertCategoryExists(categoryId);
     }
     if (!input.images?.length) {
       throw new BadRequestError('Add at least one product image');
     }
 
     const created = await this.products.create({
-      eventId: input.eventId,
       categoryId,
       name: input.name.trim(),
       description: input.description ?? '',
@@ -125,10 +117,8 @@ export class StoreService {
   }
 
   async updateProduct(id: string, input: UpdateStoreProductInput): Promise<PublicStoreProduct> {
-    const existing = await this.requireProduct(id);
-
     if (input.categoryId !== undefined && input.categoryId) {
-      await this.assertCategoryForEvent(input.categoryId, existing.eventId);
+      await this.assertCategoryExists(input.categoryId);
     }
     if (input.images !== undefined && input.images.length === 0) {
       throw new BadRequestError('Add at least one product image');
@@ -204,11 +194,8 @@ export class StoreService {
     };
   }
 
-  private async assertCategoryForEvent(categoryId: string, eventId: string): Promise<void> {
+  private async assertCategoryExists(categoryId: string): Promise<void> {
     const category = await this.categories.findById(categoryId);
     if (!category) throw new BadRequestError('Selected category was not found');
-    if (category.eventId !== eventId) {
-      throw new BadRequestError('Category must belong to the same event edition');
-    }
   }
 }

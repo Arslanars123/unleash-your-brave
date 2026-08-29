@@ -36,7 +36,6 @@ export const listStoreCategoriesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   perPage: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().trim().min(1).optional(),
-  eventId: z.string().uuid().optional(),
   activeOnly: z
     .enum(['true', 'false'])
     .optional()
@@ -47,7 +46,6 @@ export const listStoreProductsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   perPage: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().min(1).optional(),
-  eventId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   featured: z
     .enum(['true', 'false'])
@@ -64,7 +62,6 @@ export const listStoreProductsQuerySchema = z.object({
 });
 
 export const createStoreCategorySchema = z.object({
-  eventId: z.string().uuid('Event is required'),
   name: z.string().trim().min(2, 'Category name is required').max(120),
   description: z.string().trim().max(2000).optional().default(''),
   image: optionalMedia,
@@ -92,7 +89,6 @@ export const updateStoreCategorySchema = z
   });
 
 export const createStoreProductSchema = z.object({
-  eventId: z.string().uuid('Event is required'),
   categoryId: z.string().uuid().nullable().optional().default(null),
   name: z.string().trim().min(2, 'Product name is required').max(160),
   description: z.string().trim().max(8000).optional().default(''),
@@ -171,7 +167,6 @@ export const storeCheckoutSessionIdParamSchema = z.object({
 export const listStoreOrdersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   perPage: z.coerce.number().int().min(1).max(100).default(20),
-  eventId: z.string().uuid().optional(),
   search: z.string().trim().min(1).optional(),
   fulfillmentStatus: z.enum(['pending', 'completed']).optional(),
 });

@@ -6,7 +6,6 @@ import {
   NotFoundError,
 } from '../../core/errors/app-error.js';
 import { logger } from '../../core/logger.js';
-import type { EventService } from '../events/event.service.js';
 import type { UserRepository } from '../users/user.repository.js';
 import type { StoreOrderRepository } from './store-order.repository.js';
 import type {
@@ -40,7 +39,6 @@ function splitDisplayName(fullName: string): { firstName: string; lastName: stri
 function toPublicStoreOrder(order: StoreOrder): PublicStoreOrder {
   return {
     id: order.id,
-    eventId: order.eventId,
     userId: order.userId,
     email: order.email,
     firstName: order.firstName,
@@ -73,7 +71,6 @@ export class StoreCheckoutService {
     private readonly orders: StoreOrderRepository,
     private readonly products: StoreProductRepository,
     private readonly users: UserRepository,
-    private readonly events: EventService,
   ) {}
 
   private requireStripe(): Stripe {
@@ -97,7 +94,6 @@ export class StoreCheckoutService {
     if (!user) throw new NotFoundError('User');
 
     const product = await this.requireActiveProduct(input.productId);
-    const event = await this.events.requireEvent(product.eventId);
     const quantity = Math.max(1, Math.floor(input.quantity ?? 1));
 
     if (quantity > 20) {
@@ -161,9 +157,7 @@ export class StoreCheckoutService {
             unit_amount: unitAmount,
             product_data: {
               name: product.name,
-              description:
-                product.description?.trim() ||
-                `${env.appName} store — ${event.name}`,
+              description: product.description?.trim() || `${env.appName} store`,
               ...(product.images?.[0] ? { images: [product.images[0]] } : {}),
             },
           },
@@ -177,8 +171,6 @@ export class StoreCheckoutService {
         quantity: String(quantity),
         unitPrice: String(product.price),
         totalPrice: String(totalPrice),
-        eventId: event.id,
-        eventName: event.name,
         userId: user.id,
         email,
         firstName: names.firstName,
@@ -201,7 +193,6 @@ export class StoreCheckoutService {
       unitPrice: product.price,
       totalPrice,
       currency,
-      eventId: event.id,
     };
   }
 
@@ -254,10 +245,6 @@ export class StoreCheckoutService {
     throw new BadRequestError('Unsupported order update');
   }
 
-  async listPaidBuyerIdsForEvent(eventId: string): Promise<string[]> {
-    return this.orders.listPaidUserIdsByEvent(eventId);
-  }
-
   async fulfillCheckoutSession(session: Stripe.Checkout.Session): Promise<void> {
     const existing = await this.orders.findByStripeCheckoutSessionId(session.id);
     if (existing) {
@@ -296,11 +283,6 @@ export class StoreCheckoutService {
     }
 
     const product = await this.products.findById(productId);
-    const eventId = metadata.eventId?.trim() || product?.eventId;
-    if (!eventId) {
-      logger.error({ sessionId: session.id, productId }, 'Store session missing eventId');
-      throw new BadRequestError('Store checkout session is missing eventId');
-    }
 
     const paymentIntentId =
       typeof session.payment_intent === 'string'
@@ -327,7 +309,6 @@ export class StoreCheckoutService {
 
     try {
       await this.orders.create({
-        eventId,
         userId,
         email,
         firstName:

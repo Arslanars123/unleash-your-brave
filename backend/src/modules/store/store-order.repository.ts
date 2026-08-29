@@ -6,24 +6,11 @@ import type {
 } from './store-order.types.js';
 import type { PaginatedResult } from './store.repository.js';
 
-export interface StoreOrderEventSummary {
-  orderCount: number;
-  unitsSold: number;
-  revenue: number;
-  uniqueBuyers: number;
-  currency: string;
-}
-
 export interface StoreOrderRepository {
   findById(id: string): Promise<StoreOrder | null>;
   findByStripeCheckoutSessionId(stripeCheckoutSessionId: string): Promise<StoreOrder | null>;
   list(query: ListStoreOrdersQuery): Promise<PaginatedResult<StoreOrder>>;
   listByUserId(userId: string): Promise<StoreOrder[]>;
-  /** Distinct user ids with a paid store order for the event. */
-  listPaidUserIdsByEvent(eventId: string): Promise<string[]>;
-  deleteByUserId(userId: string): Promise<number>;
-  deleteByUserAndEvent(userId: string, eventId: string): Promise<number>;
-  summarizePaidForEvent(eventId: string): Promise<StoreOrderEventSummary>;
   create(data: CreateStoreOrderInput): Promise<StoreOrder>;
   update(
     id: string,
@@ -51,7 +38,6 @@ export class InMemoryStoreOrderRepository implements StoreOrderRepository {
     const search = query.search?.toLowerCase();
     const filtered = [...this.items.values()]
       .filter((item) => {
-        if (query.eventId && item.eventId !== query.eventId) return false;
         if (query.fulfillmentStatus === 'pending') {
           const status = item.fulfillmentStatus ?? 'pending';
           if (status !== 'pending') return false;
@@ -76,51 +62,6 @@ export class InMemoryStoreOrderRepository implements StoreOrderRepository {
     return [...this.items.values()]
       .filter((item) => item.userId === userId)
       .sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime());
-  }
-
-  async listPaidUserIdsByEvent(eventId: string): Promise<string[]> {
-    return [
-      ...new Set(
-        [...this.items.values()]
-          .filter((item) => item.eventId === eventId && item.paymentStatus === 'paid')
-          .map((item) => item.userId),
-      ),
-    ];
-  }
-
-  async deleteByUserId(userId: string): Promise<number> {
-    let count = 0;
-    for (const [id, item] of this.items) {
-      if (item.userId === userId) {
-        this.items.delete(id);
-        count += 1;
-      }
-    }
-    return count;
-  }
-
-  async deleteByUserAndEvent(userId: string, eventId: string): Promise<number> {
-    let count = 0;
-    for (const [id, item] of this.items) {
-      if (item.userId === userId && item.eventId === eventId) {
-        this.items.delete(id);
-        count += 1;
-      }
-    }
-    return count;
-  }
-
-  async summarizePaidForEvent(eventId: string) {
-    const paid = [...this.items.values()].filter(
-      (item) => item.eventId === eventId && item.paymentStatus === 'paid',
-    );
-    return {
-      orderCount: paid.length,
-      unitsSold: paid.reduce((sum, item) => sum + (item.quantity || 0), 0),
-      revenue: Math.round(paid.reduce((sum, item) => sum + (item.totalPrice || 0), 0) * 100) / 100,
-      uniqueBuyers: new Set(paid.map((item) => item.userId).filter(Boolean)).size,
-      currency: (paid[0]?.currency || 'usd').toLowerCase(),
-    };
   }
 
   async create(data: CreateStoreOrderInput): Promise<StoreOrder> {

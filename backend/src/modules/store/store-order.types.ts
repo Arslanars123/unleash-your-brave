@@ -6,7 +6,6 @@ export type StoreFulfillmentStatus = (typeof STORE_FULFILLMENT_STATUSES)[number]
 
 export interface StoreOrder {
   id: string;
-  eventId: string;
   userId: string;
   email: string;
   firstName: string;
@@ -34,7 +33,6 @@ export interface StoreOrder {
 
 export interface PublicStoreOrder {
   id: string;
-  eventId: string;
   userId: string;
   email: string;
   firstName: string;
@@ -60,7 +58,6 @@ export interface PublicStoreOrder {
 }
 
 export interface CreateStoreOrderInput {
-  eventId: string;
   userId: string;
   email: string;
   firstName: string;
@@ -103,13 +100,11 @@ export interface CreateStoreCheckoutSessionResult {
   unitPrice: number;
   totalPrice: number;
   currency: string;
-  eventId: string;
 }
 
 export interface ListStoreOrdersQuery {
   page: number;
   perPage: number;
-  eventId?: string;
   search?: string;
   fulfillmentStatus?: StoreFulfillmentStatus;
 }

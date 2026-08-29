@@ -10,14 +10,12 @@ class StoreRemoteDataSource {
   final DioClient _dioClient;
 
   Future<List<StoreCategoryModel>> listCategories({
-    required String eventId,
     int perPage = 100,
   }) async {
     try {
       final response = await _dioClient.client.get(
         ApiConstants.storeCategories,
         queryParameters: {
-          'eventId': eventId,
           'perPage': perPage,
           'activeOnly': 'true',
         },
@@ -35,7 +33,6 @@ class StoreRemoteDataSource {
   }
 
   Future<List<StoreProductModel>> listProducts({
-    required String eventId,
     String? categoryId,
     String? search,
     bool? featured,
@@ -45,7 +42,6 @@ class StoreRemoteDataSource {
       final response = await _dioClient.client.get(
         ApiConstants.storeProducts,
         queryParameters: {
-          'eventId': eventId,
           'perPage': perPage,
           'activeOnly': 'true',
           if (categoryId != null && categoryId.isNotEmpty) 'categoryId': categoryId,
@@ -110,7 +106,6 @@ class StoreRemoteDataSource {
         unitPrice: (data['unitPrice'] as num?)?.toDouble() ?? 0,
         totalPrice: (data['totalPrice'] as num?)?.toDouble() ?? 0,
         currency: data['currency'] as String? ?? 'usd',
-        eventId: data['eventId'] as String? ?? '',
       );
     } on DioException catch (error) {
       throwMappedDioError(error);

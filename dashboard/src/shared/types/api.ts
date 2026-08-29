@@ -885,7 +885,6 @@ export interface PostCommentPayload {
 
 export interface PublicStoreCategory {
   id: string;
-  eventId: string;
   name: string;
   description: string;
   image: string;
@@ -897,7 +896,6 @@ export interface PublicStoreCategory {
 }
 
 export interface StoreCategoryPayload {
-  eventId?: string;
   name: string;
   description?: string;
   image?: string;
@@ -907,7 +905,6 @@ export interface StoreCategoryPayload {
 
 export interface PublicStoreProduct {
   id: string;
-  eventId: string;
   categoryId: string | null;
   categoryName: string | null;
   name: string;
@@ -930,7 +927,6 @@ export interface PublicStoreProduct {
 }
 
 export interface StoreProductPayload {
-  eventId?: string;
   categoryId?: string | null;
   name: string;
   description?: string;
@@ -950,7 +946,6 @@ export type StoreFulfillmentStatus = 'pending' | 'completed';
 
 export interface PublicStoreOrder {
   id: string;
-  eventId: string;
   userId: string;
   email: string;
   firstName: string;

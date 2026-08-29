@@ -25,7 +25,6 @@ export class MongoStoreCategoryRepository implements StoreCategoryRepository {
 
   async list(query: ListStoreCategoriesQuery): Promise<PaginatedResult<StoreCategory>> {
     const filter: Filter<MongoDoc<StoreCategory>> = {};
-    if (query.eventId) filter.eventId = query.eventId;
     if (query.activeOnly) filter.isActive = true;
     if (query.search?.trim()) {
       const search = query.search.trim();
@@ -84,7 +83,6 @@ export class MongoStoreProductRepository implements StoreProductRepository {
 
   async list(query: ListStoreProductsQuery): Promise<PaginatedResult<StoreProduct>> {
     const filter: Filter<MongoDoc<StoreProduct>> = {};
-    if (query.eventId) filter.eventId = query.eventId;
     if (query.categoryId) filter.categoryId = query.categoryId;
     if (query.featured !== undefined) filter.featured = query.featured;
     if (query.activeOnly) filter.isActive = true;
@@ -117,16 +115,6 @@ export class MongoStoreProductRepository implements StoreProductRepository {
 
   async countByCategory(categoryId: string): Promise<number> {
     return this.collection.countDocuments({ categoryId });
-  }
-
-  async countByEventCategories(eventId: string): Promise<Map<string, number>> {
-    const rows = await this.collection
-      .aggregate<{ _id: string; count: number }>([
-        { $match: { eventId, categoryId: { $type: 'string' } } },
-        { $group: { _id: '$categoryId', count: { $sum: 1 } } },
-      ])
-      .toArray();
-    return new Map(rows.map((row) => [row._id, row.count]));
   }
 
   async create(data: Omit<StoreProduct, 'id' | 'createdAt' | 'updatedAt'>): Promise<StoreProduct> {

@@ -11,7 +11,6 @@ export function toPublicStoreCategory(
 ): PublicStoreCategory {
   return {
     id: category.id,
-    eventId: category.eventId,
     name: category.name,
     description: category.description,
     image: category.image,
@@ -34,7 +33,6 @@ export function toPublicStoreProduct(
 
   return {
     id: product.id,
-    eventId: product.eventId,
     categoryId: product.categoryId ?? null,
     categoryName,
     name: product.name,

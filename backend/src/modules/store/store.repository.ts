@@ -26,7 +26,6 @@ export interface StoreProductRepository {
   findById(id: string): Promise<StoreProduct | null>;
   list(query: ListStoreProductsQuery): Promise<PaginatedResult<StoreProduct>>;
   countByCategory(categoryId: string): Promise<number>;
-  countByEventCategories(eventId: string): Promise<Map<string, number>>;
   create(data: Omit<StoreProduct, 'id' | 'createdAt' | 'updatedAt'>): Promise<StoreProduct>;
   update(
     id: string,
@@ -49,7 +48,6 @@ export class InMemoryStoreCategoryRepository implements StoreCategoryRepository 
     const search = query.search?.toLowerCase();
     const filtered = [...this.items.values()]
       .filter((item) => {
-        if (query.eventId && item.eventId !== query.eventId) return false;
         if (query.activeOnly && !item.isActive) return false;
         if (!search) return true;
         return (
@@ -102,7 +100,6 @@ export class InMemoryStoreProductRepository implements StoreProductRepository {
     const search = query.search?.toLowerCase();
     const filtered = [...this.items.values()]
       .filter((item) => {
-        if (query.eventId && item.eventId !== query.eventId) return false;
         if (query.categoryId && item.categoryId !== query.categoryId) return false;
         if (query.featured !== undefined && item.featured !== query.featured) return false;
         if (query.activeOnly && !item.isActive) return false;
@@ -121,15 +118,6 @@ export class InMemoryStoreProductRepository implements StoreProductRepository {
 
   async countByCategory(categoryId: string): Promise<number> {
     return [...this.items.values()].filter((item) => item.categoryId === categoryId).length;
-  }
-
-  async countByEventCategories(eventId: string): Promise<Map<string, number>> {
-    const counts = new Map<string, number>();
-    for (const item of this.items.values()) {
-      if (item.eventId !== eventId || !item.categoryId) continue;
-      counts.set(item.categoryId, (counts.get(item.categoryId) ?? 0) + 1);
-    }
-    return counts;
   }
 
   async create(data: Omit<StoreProduct, 'id' | 'createdAt' | 'updatedAt'>): Promise<StoreProduct> {

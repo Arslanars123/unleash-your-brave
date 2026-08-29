@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import { UnauthorizedError } from '../../core/errors/app-error.js';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
-import type { StoreCheckoutService } from '../store/store-checkout.service.js';
 import type { UserService } from './user.service.js';
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from './user.types.js';
 
@@ -10,7 +9,6 @@ export class UserController {
   constructor(
     private readonly service: UserService,
     private readonly checkout: CheckoutService,
-    private readonly storeCheckout: StoreCheckoutService,
   ) {}
 
   list = async (req: Request, res: Response): Promise<void> => {
@@ -96,16 +94,9 @@ export class UserController {
   };
 
   /**
-   * Attendees for an edition = paid membership purchasers + paid store buyers
-   * for that edition only. Do not include “current plan holders” — shared
-   * membership tiers are linked to multiple editions, so that incorrectly
-   * pulls in purchasers from other events.
+   * Attendees for an edition = paid membership purchasers for that edition only.
    */
   private async resolveAttendeeIdsForEvent(eventId: string): Promise<string[]> {
-    const [purchasers, buyers] = await Promise.all([
-      this.checkout.listPaidPurchaserIdsForEvent(eventId),
-      this.storeCheckout.listPaidBuyerIdsForEvent(eventId),
-    ]);
-    return [...new Set([...purchasers, ...buyers])];
+    return this.checkout.listPaidPurchaserIdsForEvent(eventId);
   }
 }

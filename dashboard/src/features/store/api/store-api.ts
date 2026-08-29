@@ -14,7 +14,6 @@ export interface ListStoreParams {
   page?: number;
   perPage?: number;
   search?: string;
-  eventId?: string;
   categoryId?: string;
   featured?: boolean;
   activeOnly?: boolean;
@@ -97,7 +96,6 @@ export const storeApi = {
   async listOrders(params: {
     page?: number;
     perPage?: number;
-    eventId?: string;
     search?: string;
     fulfillmentStatus?: 'pending' | 'completed';
   } = {}) {

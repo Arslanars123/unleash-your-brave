@@ -3,7 +3,6 @@ import 'package:unleash_your_brave/features/store/domain/entities/store_entity.d
 class StoreCategoryModel extends StoreCategoryEntity {
   const StoreCategoryModel({
     required super.id,
-    required super.eventId,
     required super.name,
     required super.description,
     required super.image,
@@ -14,8 +13,7 @@ class StoreCategoryModel extends StoreCategoryEntity {
 
   factory StoreCategoryModel.fromJson(Map<String, dynamic> json) {
     return StoreCategoryModel(
-      id: json['id'] as String,
-      eventId: json['eventId'] as String? ?? '',
+      id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       description: json['description'] as String? ?? '',
       image: json['image'] as String? ?? '',
@@ -29,7 +27,6 @@ class StoreCategoryModel extends StoreCategoryEntity {
 class StoreProductModel extends StoreProductEntity {
   const StoreProductModel({
     required super.id,
-    required super.eventId,
     super.categoryId,
     super.categoryName,
     required super.name,
@@ -50,12 +47,13 @@ class StoreProductModel extends StoreProductEntity {
   });
 
   factory StoreProductModel.fromJson(Map<String, dynamic> json) {
-    final imagesJson = json['images'];
-    final stockQty = (json['stockQty'] as num?)?.toInt() ?? 0;
-    final inStock = json['inStock'] as bool? ?? stockQty > 0;
+    final imagesRaw = json['images'];
+    final images = imagesRaw is List
+        ? imagesRaw.whereType<String>().toList(growable: false)
+        : const <String>[];
+
     return StoreProductModel(
-      id: json['id'] as String,
-      eventId: json['eventId'] as String? ?? '',
+      id: json['id'] as String? ?? '',
       categoryId: json['categoryId'] as String?,
       categoryName: json['categoryName'] as String?,
       name: json['name'] as String? ?? '',
@@ -63,14 +61,12 @@ class StoreProductModel extends StoreProductEntity {
       sku: json['sku'] as String? ?? '',
       price: (json['price'] as num?)?.toDouble() ?? 0,
       compareAtPrice: (json['compareAtPrice'] as num?)?.toDouble(),
-      currency: json['currency'] as String? ?? 'USD',
-      images: imagesJson is List
-          ? imagesJson.whereType<String>().toList(growable: false)
-          : const [],
+      currency: json['currency'] as String? ?? 'usd',
+      images: images,
       trackInventory: json['trackInventory'] as bool? ?? true,
-      stockQty: stockQty,
+      stockQty: (json['stockQty'] as num?)?.toInt() ?? 0,
       lowStockThreshold: (json['lowStockThreshold'] as num?)?.toInt() ?? 5,
-      inStock: inStock,
+      inStock: json['inStock'] as bool? ?? false,
       isLowStock: json['isLowStock'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
       featured: json['featured'] as bool? ?? false,

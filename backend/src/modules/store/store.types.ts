@@ -1,6 +1,5 @@
 export interface StoreCategory {
   id: string;
-  eventId: string;
   name: string;
   description: string;
   image: string;
@@ -12,7 +11,6 @@ export interface StoreCategory {
 
 export interface PublicStoreCategory {
   id: string;
-  eventId: string;
   name: string;
   description: string;
   image: string;
@@ -24,7 +22,6 @@ export interface PublicStoreCategory {
 }
 
 export interface CreateStoreCategoryInput {
-  eventId: string;
   name: string;
   description?: string;
   image?: string;
@@ -44,14 +41,12 @@ export interface ListStoreCategoriesQuery {
   page: number;
   perPage: number;
   search?: string;
-  eventId?: string;
   /** When true, only active categories (mobile storefront). */
   activeOnly?: boolean;
 }
 
 export interface StoreProduct {
   id: string;
-  eventId: string;
   categoryId: string | null;
   name: string;
   description: string;
@@ -72,7 +67,6 @@ export interface StoreProduct {
 
 export interface PublicStoreProduct {
   id: string;
-  eventId: string;
   categoryId: string | null;
   categoryName: string | null;
   name: string;
@@ -96,7 +90,6 @@ export interface PublicStoreProduct {
 }
 
 export interface CreateStoreProductInput {
-  eventId: string;
   categoryId?: string | null;
   name: string;
   description?: string;
@@ -132,7 +125,6 @@ export interface ListStoreProductsQuery {
   page: number;
   perPage: number;
   search?: string;
-  eventId?: string;
   categoryId?: string;
   featured?: boolean;
   activeOnly?: boolean;

@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Package, Pencil, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
-import { EditionSwitcher } from '@/features/events/components/EditionSwitcher';
-import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { storeApi } from '@/features/store/api/store-api';
 import { CategoryFormModal } from '@/features/store/components/CategoryFormModal';
 import { ProductFormModal } from '@/features/store/components/ProductFormModal';
@@ -49,30 +47,26 @@ export function StorePage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
-  const { eventId, isPastEdition, workspaceQuery } = useEditionScope();
 
   const categoriesQuery = useQuery({
-    queryKey: ['store', 'categories', eventId],
-    queryFn: () => storeApi.listCategories({ eventId, perPage: 100 }),
-    enabled: Boolean(eventId),
+    queryKey: ['store', 'categories'],
+    queryFn: () => storeApi.listCategories({ perPage: 100 }),
   });
 
   const productsQuery = useQuery({
-    queryKey: ['store', 'products', eventId, search, page, categoryFilter],
+    queryKey: ['store', 'products', search, page, categoryFilter],
     queryFn: () =>
       storeApi.listProducts({
-        eventId,
         search: search || undefined,
         page,
         perPage: PER_PAGE,
         categoryId: categoryFilter || undefined,
       }),
-    enabled: Boolean(eventId),
   });
 
   useEffect(() => {
     setPage(1);
-  }, [eventId, categoryFilter]);
+  }, [categoryFilter]);
 
   function applySearch(next: string) {
     setSearch(next);
@@ -161,8 +155,7 @@ export function StorePage() {
       await updateCategoryMutation.mutateAsync({ id: editingCategory.id, payload });
       return;
     }
-    if (!eventId) return toast.error('Schedule an event before managing the store');
-    await createCategoryMutation.mutateAsync({ ...payload, eventId });
+    await createCategoryMutation.mutateAsync(payload);
   }
 
   async function handleProductSubmit(payload: StoreProductPayload) {
@@ -177,8 +170,7 @@ export function StorePage() {
       await updateProductMutation.mutateAsync({ id: editingProduct.id, payload });
       return;
     }
-    if (!eventId) return toast.error('Schedule an event before managing the store');
-    await createProductMutation.mutateAsync({ ...payload, eventId });
+    await createProductMutation.mutateAsync(payload);
   }
 
   async function handleDeleteCategory(category: PublicStoreCategory) {
@@ -204,10 +196,7 @@ export function StorePage() {
   }
 
   const categories = categoriesQuery.data?.items ?? [];
-  const canEdit = Boolean(eventId);
-  const bootstrapLoading =
-    workspaceQuery.isLoading ||
-    (Boolean(eventId) && (categoriesQuery.isLoading || productsQuery.isLoading));
+  const loading = categoriesQuery.isLoading || productsQuery.isLoading;
   const categorySaving = createCategoryMutation.isPending || updateCategoryMutation.isPending;
   const productSaving = createProductMutation.isPending || updateProductMutation.isPending;
 
@@ -218,39 +207,33 @@ export function StorePage() {
           <span className="page-kicker">Commerce</span>
           <h1>Store</h1>
           <p className="muted">
-            {isPastEdition
-              ? 'Catalog for a past edition — still editable by admins.'
-              : 'Categories and products for the selected event. Changes sync to the mobile app.'}
+            Global product catalog — shared across all events and synced to the mobile app.
           </p>
         </div>
-        {canEdit ? (
-          <div className="page-header-actions">
-            {tab === 'categories' ? (
-              <Button
-                onClick={() => {
-                  setEditingCategory(null);
-                  setCategoryModalOpen(true);
-                }}
-              >
-                <Plus size={16} />
-                Add category
-              </Button>
-            ) : (
-              <Button
-                onClick={() => {
-                  setEditingProduct(null);
-                  setProductModalOpen(true);
-                }}
-              >
-                <Plus size={16} />
-                Add product
-              </Button>
-            )}
-          </div>
-        ) : null}
+        <div className="page-header-actions">
+          {tab === 'categories' ? (
+            <Button
+              onClick={() => {
+                setEditingCategory(null);
+                setCategoryModalOpen(true);
+              }}
+            >
+              <Plus size={16} />
+              Add category
+            </Button>
+          ) : (
+            <Button
+              onClick={() => {
+                setEditingProduct(null);
+                setProductModalOpen(true);
+              }}
+            >
+              <Plus size={16} />
+              Add product
+            </Button>
+          )}
+        </div>
       </header>
-
-      <EditionSwitcher />
 
       <div className="toolbar" style={{ gap: 8 }}>
         <Button
@@ -276,13 +259,10 @@ export function StorePage() {
             placeholder="Product name, SKU, or description"
             value={search}
             onChange={applySearch}
-            disabled={!eventId}
             loadSuggestions={async (draft) => {
-              if (!eventId) return [];
               const result = await storeApi.listProducts({
                 search: draft,
                 perPage: 6,
-                eventId,
               });
               return result.items.map((product) => ({
                 id: product.id,
@@ -297,7 +277,6 @@ export function StorePage() {
               className="field-input"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              disabled={!eventId}
             >
               <option value="">All categories</option>
               {categories.map((category) => (
@@ -319,28 +298,23 @@ export function StorePage() {
         </div>
       ) : null}
 
-      {bootstrapLoading ? <Spinner /> : null}
-      {!bootstrapLoading && !eventId ? (
-        <p className="form-error">Schedule an event before managing the store.</p>
-      ) : null}
+      {loading ? <Spinner /> : null}
 
-      {eventId && tab === 'categories' && categoriesQuery.data ? (
+      {!loading && tab === 'categories' && categoriesQuery.data ? (
         categories.length === 0 ? (
           <div className="empty-state">
             <ShoppingBag size={28} />
             <h2>No categories yet</h2>
             <p className="muted">Create categories to organize products in the app.</p>
-            {canEdit ? (
-              <Button
-                onClick={() => {
-                  setEditingCategory(null);
-                  setCategoryModalOpen(true);
-                }}
-              >
-                <Plus size={16} />
-                Add category
-              </Button>
-            ) : null}
+            <Button
+              onClick={() => {
+                setEditingCategory(null);
+                setCategoryModalOpen(true);
+              }}
+            >
+              <Plus size={16} />
+              Add category
+            </Button>
           </div>
         ) : (
           <div className="table-wrap">
@@ -409,23 +383,21 @@ export function StorePage() {
         )
       ) : null}
 
-      {eventId && tab === 'products' && productsQuery.data ? (
+      {!loading && tab === 'products' && productsQuery.data ? (
         productsQuery.data.items.length === 0 ? (
           <div className="empty-state">
             <Package size={28} />
             <h2>No products yet</h2>
             <p className="muted">Add products with price, images, and inventory.</p>
-            {canEdit ? (
-              <Button
-                onClick={() => {
-                  setEditingProduct(null);
-                  setProductModalOpen(true);
-                }}
-              >
-                <Plus size={16} />
-                Add product
-              </Button>
-            ) : null}
+            <Button
+              onClick={() => {
+                setEditingProduct(null);
+                setProductModalOpen(true);
+              }}
+            >
+              <Plus size={16} />
+              Add product
+            </Button>
           </div>
         ) : (
           <div className="table-wrap">

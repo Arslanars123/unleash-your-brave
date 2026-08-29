@@ -25,16 +25,16 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
       { unique: true, name: 'store_orders_stripe_session_unique' },
     );
     await this.collection.createIndex(
-      { eventId: 1, purchasedAt: -1 },
-      { name: 'store_orders_event_purchased' },
-    );
-    await this.collection.createIndex(
       { userId: 1, purchasedAt: -1 },
       { name: 'store_orders_user_purchased' },
     );
     await this.collection.createIndex(
       { productId: 1, purchasedAt: -1 },
       { name: 'store_orders_product_purchased' },
+    );
+    await this.collection.createIndex(
+      { purchasedAt: -1 },
+      { name: 'store_orders_purchased' },
     );
   }
 
@@ -52,7 +52,6 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
 
   async list(query: ListStoreOrdersQuery): Promise<PaginatedResult<StoreOrder>> {
     const filter: Filter<MongoDoc<StoreOrder>> = {};
-    if (query.eventId) filter.eventId = query.eventId;
     if (query.search?.trim()) {
       const search = query.search.trim();
       filter.$or = [
@@ -94,66 +93,6 @@ export class MongoStoreOrderRepository implements StoreOrderRepository {
       .sort({ purchasedAt: -1 })
       .toArray();
     return fromDocs<StoreOrder>(docs);
-  }
-
-  async listPaidUserIdsByEvent(eventId: string): Promise<string[]> {
-    const docs = await this.collection
-      .find({ eventId, paymentStatus: 'paid', userId: { $type: 'string' } })
-      .project({ userId: 1 })
-      .toArray();
-    return [...new Set(docs.map((doc) => String(doc.userId)).filter(Boolean))];
-  }
-
-  async deleteByUserId(userId: string): Promise<number> {
-    const result = await this.collection.deleteMany({ userId });
-    return result.deletedCount;
-  }
-
-  async deleteByUserAndEvent(userId: string, eventId: string): Promise<number> {
-    const result = await this.collection.deleteMany({ userId, eventId });
-    return result.deletedCount;
-  }
-
-  async summarizePaidForEvent(eventId: string) {
-    const [row] = await this.collection
-      .aggregate<{
-        orderCount: number;
-        unitsSold: number;
-        revenue: number;
-        uniqueBuyers: string[];
-        currency: string | null;
-      }>([
-        { $match: { eventId, paymentStatus: 'paid' } },
-        {
-          $group: {
-            _id: null,
-            orderCount: { $sum: 1 },
-            unitsSold: { $sum: '$quantity' },
-            revenue: { $sum: '$totalPrice' },
-            uniqueBuyers: { $addToSet: '$userId' },
-            currency: { $first: '$currency' },
-          },
-        },
-      ])
-      .toArray();
-
-    if (!row) {
-      return {
-        orderCount: 0,
-        unitsSold: 0,
-        revenue: 0,
-        uniqueBuyers: 0,
-        currency: 'usd',
-      };
-    }
-
-    return {
-      orderCount: row.orderCount ?? 0,
-      unitsSold: row.unitsSold ?? 0,
-      revenue: Math.round((row.revenue ?? 0) * 100) / 100,
-      uniqueBuyers: (row.uniqueBuyers ?? []).filter(Boolean).length,
-      currency: (row.currency || 'usd').toLowerCase(),
-    };
   }
 
   async create(data: CreateStoreOrderInput): Promise<StoreOrder> {

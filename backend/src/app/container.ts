@@ -213,13 +213,11 @@ export async function createContainer() {
   const storeService = new StoreService(
     storeCategoryRepository,
     storeProductRepository,
-    eventService,
   );
   const storeCheckoutService = new StoreCheckoutService(
     storeOrderRepository,
     storeProductRepository,
     userRepository,
-    eventService,
   );
   const pushNotificationService = new PushNotificationService(deviceTokenRepository);
   const membershipLifecycleService = new MembershipLifecycleService(
@@ -307,7 +305,6 @@ export async function createContainer() {
   const userController = new UserController(
     userService,
     checkoutService,
-    storeCheckoutService,
   );
   const authController = new AuthController(authService);
   const eventController = new EventController(
@@ -316,7 +313,6 @@ export async function createContainer() {
     new EventOverviewService(
       eventService,
       membershipPurchaseRepository,
-      storeOrderRepository,
       checkInService,
     ),
   );

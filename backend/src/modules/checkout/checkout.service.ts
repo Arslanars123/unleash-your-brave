@@ -697,7 +697,6 @@ export class CheckoutService {
     await this.checkIns?.deleteByEventAndUser(eventId, userId);
     await this.checkInForms?.deleteSubmissionByEventAndUser(eventId, userId);
     await this.pendingScans?.deleteByEventAndUser(eventId, userId);
-    await this.storeOrders?.deleteByUserAndEvent(userId, eventId);
 
     this.realtimeHub.publish({
       type: 'attendee.upserted',
@@ -708,7 +707,6 @@ export class CheckoutService {
     if (remaining.length === 0) {
       await this.checkIns?.deleteByUserId(userId);
       await this.checkInForms?.deleteSubmissionsByUserId(userId);
-      await this.storeOrders?.deleteByUserId(userId);
       await this.revokeAttendeeAccount(userId);
       return;
     }
@@ -723,7 +721,6 @@ export class CheckoutService {
     await this.purchases.deleteByUserId(userId);
     await this.checkIns?.deleteByUserId(userId);
     await this.checkInForms?.deleteSubmissionsByUserId(userId);
-    await this.storeOrders?.deleteByUserId(userId);
 
     await this.revokeAttendeeAccount(userId);
   }

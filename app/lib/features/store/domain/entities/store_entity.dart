@@ -1,7 +1,6 @@
 class StoreCategoryEntity {
   const StoreCategoryEntity({
     required this.id,
-    required this.eventId,
     required this.name,
     required this.description,
     required this.image,
@@ -11,7 +10,6 @@ class StoreCategoryEntity {
   });
 
   final String id;
-  final String eventId;
   final String name;
   final String description;
   final String image;
@@ -23,7 +21,6 @@ class StoreCategoryEntity {
 class StoreProductEntity {
   const StoreProductEntity({
     required this.id,
-    required this.eventId,
     this.categoryId,
     this.categoryName,
     required this.name,
@@ -44,7 +41,6 @@ class StoreProductEntity {
   });
 
   final String id;
-  final String eventId;
   final String? categoryId;
   final String? categoryName;
   final String name;
@@ -86,7 +82,6 @@ class StoreCheckoutSessionResult {
     required this.unitPrice,
     required this.totalPrice,
     required this.currency,
-    required this.eventId,
   });
 
   final String sessionId;
@@ -97,7 +92,6 @@ class StoreCheckoutSessionResult {
   final double unitPrice;
   final double totalPrice;
   final String currency;
-  final String eventId;
 }
 
 class StoreOrderEntity {

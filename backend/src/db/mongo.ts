@@ -63,14 +63,14 @@ async function ensureIndexes(database: Db): Promise<void> {
       { key: { name: 1 }, name: 'sponsors_name' },
     ]),
     database.collection('store_categories').createIndexes([
-      { key: { eventId: 1, sortOrder: 1 }, name: 'store_categories_event_sort' },
-      { key: { eventId: 1, isActive: 1 }, name: 'store_categories_event_active' },
+      { key: { sortOrder: 1 }, name: 'store_categories_sort' },
+      { key: { isActive: 1 }, name: 'store_categories_active' },
     ]),
     database.collection('store_products').createIndexes([
-      { key: { eventId: 1, sortOrder: 1 }, name: 'store_products_event_sort' },
-      { key: { eventId: 1, categoryId: 1 }, name: 'store_products_event_category' },
-      { key: { eventId: 1, isActive: 1 }, name: 'store_products_event_active' },
-      { key: { eventId: 1, featured: 1 }, name: 'store_products_event_featured' },
+      { key: { sortOrder: 1 }, name: 'store_products_sort' },
+      { key: { categoryId: 1 }, name: 'store_products_category' },
+      { key: { isActive: 1 }, name: 'store_products_active' },
+      { key: { featured: 1 }, name: 'store_products_featured' },
     ]),
     database.collection('store_orders').createIndexes([
       {
@@ -78,9 +78,9 @@ async function ensureIndexes(database: Db): Promise<void> {
         unique: true,
         name: 'store_orders_stripe_session_unique',
       },
-      { key: { eventId: 1, purchasedAt: -1 }, name: 'store_orders_event_purchased' },
       { key: { userId: 1, purchasedAt: -1 }, name: 'store_orders_user_purchased' },
       { key: { productId: 1, purchasedAt: -1 }, name: 'store_orders_product_purchased' },
+      { key: { purchasedAt: -1 }, name: 'store_orders_purchased' },
     ]),
     database.collection('memberships').createIndexes([
       { key: { eventId: 1 }, name: 'memberships_eventId' },
