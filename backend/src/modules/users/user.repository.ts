@@ -116,7 +116,8 @@ export class InMemoryUserRepository implements UserRepository {
           return false;
         }
         if (query.attendeesOnly) {
-          if (user.role !== 'member' && !user.membershipId) return false;
+          // When userIds come from event purchases, include speakers/sponsors too.
+          if (!idSet && user.role !== 'member' && !user.membershipId) return false;
         } else if (query.role && user.role !== query.role) {
           return false;
         }

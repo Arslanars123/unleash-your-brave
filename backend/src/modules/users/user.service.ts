@@ -623,10 +623,13 @@ export class UserService {
       name: input.name.trim(),
       firstName,
       lastName,
+      membershipId: membership.id,
+      membershipStatus: period.membershipStatus,
+      membershipExpiresAt: period.periodEnd,
       ...(input.photoUrl !== undefined ? { photoUrl: input.photoUrl } : {}),
       ...(input.title !== undefined
         ? { title: input.title.trim() || membership.name }
-        : {}),
+        : { title: existing.title?.trim() || membership.name }),
       ...(input.business !== undefined ? { business: input.business } : {}),
       ...(input.industry !== undefined ? { industry: input.industry } : {}),
       ...(input.location !== undefined ? { location: input.location } : {}),

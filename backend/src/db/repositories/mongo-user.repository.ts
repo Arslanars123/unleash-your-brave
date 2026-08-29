@@ -57,7 +57,11 @@ export class MongoUserRepository implements UserRepository {
       }
     }
     if (query.attendeesOnly) {
-      filter.$or = [{ role: 'member' }, { membershipId: { $ne: null } }];
+      // Edition purchase scoping already defines who belongs on the list
+      // (including speakers/sponsors who also bought a ticket).
+      if (!query.userIds?.length) {
+        filter.$or = [{ role: 'member' }, { membershipId: { $ne: null } }];
+      }
     } else if (query.role) {
       filter.role = query.role;
     }
