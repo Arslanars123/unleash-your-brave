@@ -184,10 +184,10 @@ class _CountdownUnit extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.bgMaroon,
         borderRadius: BorderRadius.circular(AppTheme.radiusStat),
-        border: Border.all(color: const Color(0x33E91E63)),
+        border: Border.all(color: const Color(0x33DB457B)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x22E91E63),
+            color: Color(0x22DB457B),
             blurRadius: 12,
             spreadRadius: 0,
           ),

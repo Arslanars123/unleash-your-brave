@@ -16,12 +16,12 @@
   --line-strong: #ddd6ce;
 
   /* Brand — official hot pink from Unleash Your Brave wordmark */
-  --brand: #e91e63;
-  --brand-hover: #d81b60;
-  --brand-press: #c2185b;
-  --brand-soft: #fce4ec;
+  --brand: #db457b;
+  --brand-hover: #c93e70;
+  --brand-press: #b83664;
+  --brand-soft: #fce8f0;
   --brand-ink: #ffffff;
-  --brand-glow: rgba(233, 30, 99, 0.18);
+  --brand-glow: rgba(219, 69, 123, 0.18);
 
   /* Semantic */
   --success: #15803d;
@@ -67,8 +67,8 @@ body,
 
 body {
   background:
-    radial-gradient(900px 420px at 100% -5%, rgba(233, 30, 99, 0.07), transparent 55%),
-    radial-gradient(700px 380px at 0% 100%, rgba(233, 30, 99, 0.04), transparent 50%),
+    radial-gradient(900px 420px at 100% -5%, rgba(219, 69, 123, 0.07), transparent 55%),
+    radial-gradient(700px 380px at 0% 100%, rgba(219, 69, 123, 0.04), transparent 50%),
     linear-gradient(180deg, var(--bg-tint) 0%, var(--bg) 42%, var(--bg) 100%);
 }
 
@@ -347,7 +347,7 @@ select.field-input::-ms-expand {
   padding: clamp(2rem, 4vw, 3.5rem);
   color: #ffffff;
   background:
-    linear-gradient(155deg, rgba(233, 30, 99, 0.18) 0%, transparent 42%),
+    linear-gradient(155deg, rgba(219, 69, 123, 0.18) 0%, transparent 42%),
     linear-gradient(340deg, #121212 0%, #000000 48%, #0a0a0a 100%);
 }
 
@@ -370,7 +370,7 @@ select.field-input::-ms-expand {
   height: 280px;
   top: -8%;
   right: -6%;
-  background: rgba(233, 30, 99, 0.45);
+  background: rgba(219, 69, 123, 0.45);
 }
 
 .auth-orb-b {
@@ -461,7 +461,7 @@ select.field-input::-ms-expand {
   place-items: center;
   padding: clamp(1.5rem, 4vw, 3rem);
   background:
-    radial-gradient(640px 320px at 100% 0%, rgba(233, 30, 99, 0.07), transparent 55%),
+    radial-gradient(640px 320px at 100% 0%, rgba(219, 69, 123, 0.07), transparent 55%),
     linear-gradient(180deg, #fffaf8 0%, #f7f5f3 55%, #f3efeb 100%);
 }
 
@@ -556,8 +556,8 @@ select.field-input::-ms-expand {
 
 .auth-form .field input:focus,
 .auth-form form .field input:focus {
-  border-color: rgba(233, 30, 99, 0.45);
-  box-shadow: 0 0 0 4px rgba(233, 30, 99, 0.12);
+  border-color: rgba(219, 69, 123, 0.45);
+  box-shadow: 0 0 0 4px rgba(219, 69, 123, 0.12);
 }
 
 /* Legacy class names kept as aliases for any stray references */
@@ -567,7 +567,7 @@ select.field-input::-ms-expand {
   place-items: center;
   padding: 1.75rem;
   background:
-    radial-gradient(800px 420px at 85% 0%, rgba(233, 30, 99, 0.1), transparent 55%),
+    radial-gradient(800px 420px at 85% 0%, rgba(219, 69, 123, 0.1), transparent 55%),
     linear-gradient(165deg, #fffaf8 0%, #f7f5f3 55%, #f3efeb 100%);
 }
 
@@ -1787,7 +1787,7 @@ td strong {
 }
 
 .template-token-chip:hover {
-  border-color: rgba(233, 30, 99, 0.4);
+  border-color: rgba(219, 69, 123, 0.4);
   color: var(--brand);
 }
 
@@ -2515,8 +2515,8 @@ td strong {
 }
 
 .membership-summary-card-accent {
-  border-color: color-mix(in srgb, var(--accent, #e91e63) 35%, var(--line));
-  background: color-mix(in srgb, var(--accent, #e91e63) 8%, #fff);
+  border-color: color-mix(in srgb, var(--accent, #db457b) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent, #db457b) 8%, #fff);
 }
 
 .membership-summary-label {
@@ -2691,8 +2691,8 @@ td strong {
 }
 
 .purchase-ref-btn:hover {
-  border-color: color-mix(in srgb, var(--accent, #e91e63) 45%, var(--line));
-  color: var(--accent, #e91e63);
+  border-color: color-mix(in srgb, var(--accent, #db457b) 45%, var(--line));
+  color: var(--accent, #db457b);
 }
 
 .purchase-card-note {
@@ -3207,7 +3207,7 @@ td strong {
 
 .chat-admin-bubble.is-mine {
   background: var(--brand-soft);
-  border-color: rgba(233, 30, 99, 0.28);
+  border-color: rgba(219, 69, 123, 0.28);
   border-radius: 16px 16px 4px 16px;
 }
 
@@ -3309,8 +3309,8 @@ td strong {
 }
 
 .chat-role-pill.role-admin {
-  background: rgba(233, 30, 99, 0.12);
-  border-color: rgba(233, 30, 99, 0.3);
+  background: rgba(219, 69, 123, 0.12);
+  border-color: rgba(219, 69, 123, 0.3);
   color: var(--brand-press);
 }
 

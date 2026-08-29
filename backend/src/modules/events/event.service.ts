@@ -14,6 +14,7 @@ import {
   toPublicEvent,
   utcDayAfter,
 } from './event.mapper.js';
+import { assertEditionScheduleAllowed } from './event-schedule-validation.js';
 import type {
   CreateEventInput,
   Event,
@@ -250,16 +251,7 @@ export class EventService {
       days: input.days,
     });
 
-    if (previous) {
-      const previousEnd = startOfUtcDay(previous.endDate);
-      const newStart = startOfUtcDay(days[0]!.date);
-      if (newStart.getTime() <= previousEnd.getTime()) {
-        const after = utcDayAfter(previous.endDate).toISOString().slice(0, 10);
-        throw new BadRequestError(
-          `New event must start after the previous edition ends (${previousEnd.toISOString().slice(0, 10)}). Earliest allowed start date is ${after}.`,
-        );
-      }
-    }
+    assertEditionScheduleAllowed(null, days, items);
 
     const copy = Boolean(input.copyDetailsFromPrevious && previous);
     const pick = (override: string | undefined, previousValue: string): string => {
@@ -356,6 +348,11 @@ export class EventService {
       shouldRebuildDays && scheduleFingerprint(days) !== scheduleFingerprint(existing.days);
     const pausedChanged =
       input.paused !== undefined && Boolean(input.paused) !== Boolean(existing.paused);
+
+    if (shouldRebuildDays) {
+      const { items } = await this.events.list({ page: 1, perPage: 100 });
+      assertEditionScheduleAllowed(id, days, items);
+    }
 
     const updated = await this.events.update(id, {
       name: CANONICAL_EVENT_NAME,

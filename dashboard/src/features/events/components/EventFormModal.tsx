@@ -59,6 +59,7 @@ interface EventFormModalProps {
   open: boolean;
   mode: EventFormMode;
   initialEvent: PublicEvent | null;
+  otherEditions?: PublicEvent[];
   loading?: boolean;
   onClose: () => void;
   onSubmit: (result: EventEditResult) => Promise<void> | void;
@@ -68,6 +69,7 @@ export function EventFormModal({
   open,
   mode,
   initialEvent,
+  otherEditions = [],
   loading = false,
   onClose,
   onSubmit,
@@ -179,7 +181,11 @@ export function EventFormModal({
 
   function validateCurrentStep(): FieldErrors {
     if (step === 0) {
-      return validateEventForm(values, { mode, previousEvent: initialEvent });
+      return validateEventForm(values, {
+        mode,
+        editingEventId: initialEvent?.id ?? null,
+        otherEditions,
+      });
     }
     return {};
   }
@@ -202,7 +208,11 @@ export function EventFormModal({
 
   async function handleFinish() {
     setSubmitted(true);
-    const nextErrors = validateEventForm(values, { mode, previousEvent: initialEvent });
+    const nextErrors = validateEventForm(values, {
+      mode,
+      editingEventId: initialEvent?.id ?? null,
+      otherEditions,
+    });
     const waiverErrors = validateCheckInStep();
     setErrors(nextErrors);
     setCheckInFormErrors(waiverErrors);
@@ -289,6 +299,7 @@ export function EventFormModal({
             <EventFormDetailsStep
               mode={mode}
               initialEvent={initialEvent}
+              otherEditions={otherEditions}
               values={values}
               errors={errors}
               loading={busy}
@@ -298,7 +309,13 @@ export function EventFormModal({
               onChange={(next) => {
                 setValues(next);
                 if (submitted) {
-                  setErrors(validateEventForm(next, { mode, previousEvent: initialEvent }));
+                  setErrors(
+                    validateEventForm(next, {
+                      mode,
+                      editingEventId: initialEvent?.id ?? null,
+                      otherEditions,
+                    }),
+                  );
                 }
               }}
               onPendingCoverChange={handlePendingCoverChange}

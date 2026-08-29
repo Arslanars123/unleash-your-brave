@@ -9,10 +9,13 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { TextArea } from '@/shared/ui/TextArea';
 import {
+  addUtcDays,
   buildConsecutiveDays,
   dayAfterIso,
   formatUtcDateLabel,
+  getEditionScheduleBounds,
   newDayKey,
+  resolvedDays,
   type EventFormMode,
   type EventFormValues,
   type FieldErrors,
@@ -22,6 +25,7 @@ import {
 interface EventFormDetailsStepProps {
   mode: EventFormMode;
   initialEvent: PublicEvent | null;
+  otherEditions?: PublicEvent[];
   values: EventFormValues;
   errors: FieldErrors;
   loading?: boolean;
@@ -36,6 +40,7 @@ interface EventFormDetailsStepProps {
 export function EventFormDetailsStep({
   mode,
   initialEvent,
+  otherEditions = [],
   values,
   errors,
   loading = false,
@@ -49,6 +54,19 @@ export function EventFormDetailsStep({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isSchedule = mode === 'schedule';
   const showDetails = !isSchedule || !values.copyDetailsFromPrevious || !initialEvent;
+  const editingEventId = !isSchedule ? initialEvent?.id ?? null : null;
+  const dayDates = resolvedDays(values)
+    .map((day) => day.date)
+    .filter(Boolean);
+  const bounds = getEditionScheduleBounds(editingEventId, dayDates, otherEditions);
+  const minStart =
+    isSchedule && initialEvent
+      ? dayAfterIso(initialEvent.endDate)
+      : bounds.earliestStart ?? undefined;
+  const maxStart =
+    bounds.latestEnd && values.dayCount > 0
+      ? addUtcDays(bounds.latestEnd, -(values.dayCount - 1))
+      : undefined;
 
   function update<K extends keyof EventFormValues>(key: K, value: EventFormValues[K]) {
     onChange({ ...values, [key]: value });
@@ -225,7 +243,19 @@ export function EventFormDetailsStep({
             ? `Start on or after ${formatUtcDateLabel(`${dayAfterIso(initialEvent.endDate)}T00:00:00.000Z`)} (the day after the previous edition ends on ${formatUtcDateLabel(initialEvent.endDate)}).`
             : isSchedule
               ? 'Choose the dates for this new edition.'
-              : 'Adjust dates for this edition if needed.'}
+              : bounds.earliestStart || bounds.latestEnd
+                ? [
+                    'Dates must not overlap or touch another edition.',
+                    bounds.earliestStart
+                      ? `Earliest start: ${formatUtcDateLabel(`${bounds.earliestStart}T00:00:00.000Z`)}.`
+                      : null,
+                    bounds.latestEnd
+                      ? `Latest end: ${formatUtcDateLabel(`${bounds.latestEnd}T00:00:00.000Z`)}.`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                : 'Adjust dates for this edition if needed. Dates must not overlap another edition.'}
         </p>
 
         <div className="schedule-mode-toggle" role="group" aria-label="Schedule mode">
@@ -252,9 +282,8 @@ export function EventFormDetailsStep({
               type="date"
               name="consecutiveStart"
               requiredMark
-              min={
-                isSchedule && initialEvent ? dayAfterIso(initialEvent.endDate) : undefined
-              }
+              min={minStart}
+              max={maxStart}
               value={values.consecutiveStart}
               error={errors.consecutiveStart}
               onChange={(e) => updateConsecutiveStart(e.target.value)}
@@ -282,11 +311,8 @@ export function EventFormDetailsStep({
                   type="date"
                   name={`day-date-${index}`}
                   requiredMark
-                  min={
-                    isSchedule && initialEvent
-                      ? dayAfterIso(initialEvent.endDate)
-                      : undefined
-                  }
+                  min={minStart}
+                  max={bounds.latestEnd ?? undefined}
                   value={day.date}
                   error={errors[`day-${index}`]}
                   onChange={(e) => updateDay(index, { date: e.target.value })}

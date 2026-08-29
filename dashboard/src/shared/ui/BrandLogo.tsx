@@ -1,5 +1,5 @@
 /** Bump when wordmark assets change — busts CDN/browser cache for `/brand-logo*.png`. */
-const BRAND_LOGO_VERSION = '3';
+const BRAND_LOGO_VERSION = '4';
 
 interface BrandLogoProps {
   className?: string;

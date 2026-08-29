@@ -37,6 +37,93 @@ export interface EventFormValues {
 
 export type FieldErrors = Partial<Record<string, string>>;
 
+export type EditionScheduleBounds = {
+  previousEnd: string | null;
+  nextStart: string | null;
+  earliestStart: string | null;
+  latestEnd: string | null;
+};
+
+function isoDateKeyFromInput(dateValue: string): string {
+  return dateValue.slice(0, 10);
+}
+
+export function getEditionScheduleBounds(
+  editingEventId: string | null,
+  dayDates: string[],
+  otherEditions: PublicEvent[],
+): EditionScheduleBounds {
+  const sorted = [...dayDates].filter(Boolean).sort();
+  if (sorted.length === 0) {
+    return {
+      previousEnd: null,
+      nextStart: null,
+      earliestStart: null,
+      latestEnd: null,
+    };
+  }
+
+  const proposedStart = sorted[0]!;
+  const proposedEnd = sorted[sorted.length - 1]!;
+  const others = otherEditions.filter((edition) => edition.id !== editingEventId);
+
+  const previous =
+    others
+      .filter((edition) => toDateInput(edition.endDate) < proposedStart)
+      .sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null;
+
+  const next =
+    others
+      .filter((edition) => toDateInput(edition.startDate) > proposedEnd)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null;
+
+  return {
+    previousEnd: previous ? toDateInput(previous.endDate) : null,
+    nextStart: next ? toDateInput(next.startDate) : null,
+    earliestStart: previous ? dayAfterIso(previous.endDate) : null,
+    latestEnd: next ? addUtcDays(toDateInput(next.startDate), -1) : null,
+  };
+}
+
+function validateEditionSchedule(
+  dayDates: string[],
+  options: {
+    editingEventId?: string | null;
+    otherEditions?: PublicEvent[];
+  },
+): string | null {
+  const others = options.otherEditions ?? [];
+  const editingEventId = options.editingEventId ?? null;
+  const sorted = [...dayDates].filter(Boolean).sort();
+  if (sorted.length === 0) return null;
+
+  const proposedStart = sorted[0]!;
+  const proposedEnd = sorted[sorted.length - 1]!;
+  const proposedKeys = new Set(sorted.map(isoDateKeyFromInput));
+
+  for (const other of others) {
+    if (other.id === editingEventId) continue;
+    for (const day of other.days ?? []) {
+      const key = toDateInput(day.date);
+      if (proposedKeys.has(key)) {
+        return `${formatUtcDateLabel(`${key}T00:00:00.000Z`)} is already used by another edition (${formatUtcDateLabel(other.startDate)} – ${formatUtcDateLabel(other.endDate)}).`;
+      }
+    }
+  }
+
+  const bounds = getEditionScheduleBounds(editingEventId, sorted, others);
+
+  if (bounds.previousEnd && proposedStart <= bounds.previousEnd) {
+    return `Must start after the previous edition ends (${formatUtcDateLabel(`${bounds.previousEnd}T00:00:00.000Z`)}). Earliest: ${formatUtcDateLabel(`${bounds.earliestStart}T00:00:00.000Z`)}.`;
+  }
+
+  if (bounds.nextStart && proposedEnd >= bounds.nextStart) {
+    return `Must end before the next edition starts (${formatUtcDateLabel(`${bounds.nextStart}T00:00:00.000Z`)}). Latest: ${formatUtcDateLabel(`${bounds.latestEnd}T00:00:00.000Z`)}.`;
+  }
+
+  return null;
+}
+
 export function newDayKey(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -182,9 +269,17 @@ export function resolvedDays(values: EventFormValues): DayRow[] {
 
 export function validateEventForm(
   values: EventFormValues,
-  options?: { mode?: EventFormMode; previousEvent?: PublicEvent | null },
+  options?: {
+    mode?: EventFormMode;
+    previousEvent?: PublicEvent | null;
+    editingEventId?: string | null;
+    otherEditions?: PublicEvent[];
+  },
 ): FieldErrors {
   const errors: FieldErrors = {};
+  const dayDates = resolvedDays(values)
+    .map((day) => day.date)
+    .filter(Boolean);
 
   if (values.scheduleMode === 'consecutive') {
     if (!values.consecutiveStart) errors.consecutiveStart = 'Start date is required';
@@ -205,21 +300,39 @@ export function validateEventForm(
     });
   }
 
-  if (options?.mode === 'schedule' && options.previousEvent) {
-    const earliest = dayAfterIso(options.previousEvent.endDate);
-    const firstDay = resolvedDays(values)
-      .map((day) => day.date)
-      .filter(Boolean)
-      .sort()[0];
-    if (earliest && firstDay && firstDay <= toDateInput(options.previousEvent.endDate)) {
-      errors.consecutiveStart =
-        errors.consecutiveStart ||
-        `Must start after the previous edition ends (${formatUtcDateLabel(options.previousEvent.endDate)}). Earliest: ${formatUtcDateLabel(`${earliest}T00:00:00.000Z`)}.`;
-      if (values.scheduleMode === 'custom') {
-        errors.days =
-          errors.days ||
-          `All dates must be after ${formatUtcDateLabel(options.previousEvent.endDate)}.`;
+  const scheduleError = validateEditionSchedule(dayDates, {
+    editingEventId:
+      options?.mode === 'edit'
+        ? options.editingEventId ?? options.previousEvent?.id ?? null
+        : null,
+    otherEditions:
+      options?.otherEditions ??
+      (options?.mode === 'schedule' && options.previousEvent ? [options.previousEvent] : []),
+  });
+
+  if (scheduleError) {
+    if (values.scheduleMode === 'consecutive') {
+      errors.consecutiveStart = errors.consecutiveStart || scheduleError;
+      if (values.consecutiveStart && values.dayCount > 0) {
+        const lastDay = addUtcDays(values.consecutiveStart, values.dayCount - 1);
+        const bounds = getEditionScheduleBounds(
+          options?.mode === 'edit'
+            ? options.editingEventId ?? options.previousEvent?.id ?? null
+            : null,
+          dayDates,
+          options?.otherEditions ??
+            (options?.mode === 'schedule' && options.previousEvent
+              ? [options.previousEvent]
+              : []),
+        );
+        if (bounds.latestEnd && lastDay > bounds.latestEnd) {
+          errors.dayCount =
+            errors.dayCount ||
+            `Too many days — latest allowed end is ${formatUtcDateLabel(`${bounds.latestEnd}T00:00:00.000Z`)}.`;
+        }
       }
+    } else {
+      errors.days = errors.days || scheduleError;
     }
   }
 

@@ -162,7 +162,7 @@ export class PushNotificationService {
             tag: params.androidTag,
             clickAction: 'FLUTTER_NOTIFICATION_CLICK',
             icon: 'ic_stat_uyb',
-            color: '#E91E63',
+            color: '#DB457B',
           },
         },
         apns: {

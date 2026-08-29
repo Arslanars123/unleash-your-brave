@@ -52,6 +52,7 @@ export interface EventWizardResult {
 interface EventWizardModalProps {
   open: boolean;
   previousEvent: PublicEvent | null;
+  otherEditions?: PublicEvent[];
   loading?: boolean;
   onClose: () => void;
   onComplete: (result: EventWizardResult) => Promise<void> | void;
@@ -60,6 +61,7 @@ interface EventWizardModalProps {
 export function EventWizardModal({
   open,
   previousEvent,
+  otherEditions = [],
   loading = false,
   onClose,
   onComplete,
@@ -119,7 +121,11 @@ export function EventWizardModal({
 
   function validateCurrentStep(): FieldErrors {
     if (step === 0) {
-      return validateEventForm(values, { mode: 'schedule', previousEvent });
+      return validateEventForm(values, {
+        mode: 'schedule',
+        previousEvent,
+        otherEditions,
+      });
     }
     return {};
   }
@@ -142,7 +148,11 @@ export function EventWizardModal({
 
   async function handleFinish() {
     setSubmitted(true);
-    const nextErrors = validateEventForm(values, { mode: 'schedule', previousEvent });
+    const nextErrors = validateEventForm(values, {
+      mode: 'schedule',
+      previousEvent,
+      otherEditions,
+    });
     const waiverErrors = validateCheckInStep();
     setErrors(nextErrors);
     setCheckInFormErrors(waiverErrors);
@@ -224,6 +234,7 @@ export function EventWizardModal({
             <EventFormDetailsStep
               mode="schedule"
               initialEvent={previousEvent}
+              otherEditions={otherEditions}
               values={values}
               errors={errors}
               loading={busy}
@@ -233,7 +244,13 @@ export function EventWizardModal({
               onChange={(next) => {
                 setValues(next);
                 if (submitted) {
-                  setErrors(validateEventForm(next, { mode: 'schedule', previousEvent }));
+                  setErrors(
+                    validateEventForm(next, {
+                      mode: 'schedule',
+                      previousEvent,
+                      otherEditions,
+                    }),
+                  );
                 }
               }}
               onPendingCoverChange={handlePendingCoverChange}

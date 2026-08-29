@@ -7,8 +7,8 @@ abstract final class AppColors {
   static const Color bgCard = Color(0xFF0A0A0A);
   static const Color bgMaroon = Color(0xFF14080E);
 
-  static const Color accentPink = Color(0xFFE91E63);
-  static const Color accentPinkDark = Color(0xFFC2185B);
+  static const Color accentPink = Color(0xFFDB457B);
+  static const Color accentPinkDark = Color(0xFFC93E70);
 
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFFBDBDBD);

@@ -240,8 +240,8 @@ export function EventsPage() {
           <p className="muted">
             Manage {CANONICAL_EVENT_NAME} editions. Each event is separate. Link shared memberships
             and sponsors per edition (reusable across events). Speakers are assigned on sessions.
-            Sessions and content stay event-specific. A new edition must start after the previous one
-            ends.
+            Sessions and content stay event-specific. Editions must stay separated by at least one
+            day — when scheduling or editing dates.
           </p>
         </div>
         <div className="page-header-actions">
@@ -381,6 +381,7 @@ export function EventsPage() {
           open={editOpen}
           mode="edit"
           initialEvent={editingEvent}
+          otherEditions={workspace?.editions ?? []}
           loading={updateMutation.isPending}
           onClose={() => {
             setEditOpen(false);
@@ -393,6 +394,7 @@ export function EventsPage() {
       <EventWizardModal
         open={scheduleOpen}
         previousEvent={previousEditionForSchedule}
+        otherEditions={workspace?.editions ?? []}
         loading={scheduleMutation.isPending}
         onClose={() => setScheduleOpen(false)}
         onComplete={handleWizardComplete}

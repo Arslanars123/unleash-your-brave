@@ -75,9 +75,9 @@ async function clearS3() {
       : {}),
   });
 
-  const events = await clearS3Prefix(client, bucket, 'events/');
-  const materials = await clearS3Prefix(client, bucket, 'materials/');
-  return { bucket, deleted: { events, materials, total: events + materials } };
+  // Wipe the whole media bucket (covers events/, materials/, and any other prefixes).
+  const deleted = await clearS3Prefix(client, bucket, '');
+  return { bucket, deleted: { total: deleted } };
 }
 
 async function clearLocalUploads() {

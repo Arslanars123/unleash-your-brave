@@ -287,7 +287,7 @@ class PushNotificationService {
           importance: Importance.high,
           priority: Priority.high,
           icon: '@drawable/ic_stat_uyb',
-          color: const Color(0xFFE91E63),
+          color: const Color(0xFFDB457B),
           largeIcon: const DrawableResourceAndroidBitmap(
             '@drawable/ic_notification_brand',
           ),
