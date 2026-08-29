@@ -146,7 +146,7 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
       AppToast.error('Enter your delivery address');
       return;
     }
-    if (contactPhone.length < 6) {
+    if (contactPhone.isEmpty) {
       AppToast.error('Enter a contact phone number');
       return;
     }

@@ -114,7 +114,7 @@ async function main() {
   const local = await clearLocalUploads();
   console.log('Local uploads:', local);
 
-  console.log('\nDone. Restart the API to recreate indexes and demo seed data.');
+  console.log('\nDone. Restart the API to recreate indexes (production keeps admin only, no demo seed).');
 }
 
 main().catch((error) => {

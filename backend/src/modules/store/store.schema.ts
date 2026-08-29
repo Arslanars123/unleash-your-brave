@@ -141,7 +141,7 @@ export const createStoreCheckoutSessionSchema = z.object({
   contactPhone: z
     .string()
     .trim()
-    .min(6, 'Contact phone is required')
+    .min(1, 'Contact phone is required')
     .max(30, 'Contact phone is too long'),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
