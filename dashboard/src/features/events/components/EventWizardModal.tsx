@@ -139,7 +139,10 @@ export function EventWizardModal({
     setSubmitted(true);
     const nextErrors = validateCurrentStep();
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error('Fix the highlighted fields below to continue.');
+      return;
+    }
     setSubmitted(false);
     setStep((current) => Math.min(current + 1, STEPS.length - 1));
   }
@@ -158,6 +161,8 @@ export function EventWizardModal({
       previousEvent,
       otherEditions,
     });
+    const membershipError = validateEventMemberships(values.membershipIds);
+    if (membershipError) nextErrors.membershipIds = membershipError;
     const waiverErrors = validateCheckInStep();
     setErrors(nextErrors);
     setCheckInFormErrors(waiverErrors);

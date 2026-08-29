@@ -392,9 +392,6 @@ export function validateEventForm(
     errors.coverImage = 'Use a valid URL or upload an image file';
   }
 
-  const membershipError = validateEventMemberships(values.membershipIds);
-  if (membershipError) errors.membershipIds = membershipError;
-
   return errors;
 }
 
