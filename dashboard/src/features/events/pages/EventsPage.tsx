@@ -66,17 +66,20 @@ export function EventsPage() {
       payload,
       sessions,
       initialSessionIds,
+      checkInForm,
     }: {
       id: string;
       payload: EventPayload;
       sessions: EventEditResult['sessions'];
       initialSessionIds: string[];
+      checkInForm: EventEditResult['checkInForm'];
     }) => {
       const updated = await eventsApi.update(id, payload);
       await eventsApi.setAssociations(id, {
         sponsorIds: payload.sponsorIds ?? [],
         membershipIds: payload.membershipIds ?? [],
       });
+      await checkInFormsApi.upsertByEvent(id, checkInForm);
 
       const remainingKeys = new Set(sessions.map((item) => item.key));
       const toDelete = initialSessionIds.filter((sessionId) => !remainingKeys.has(sessionId));
@@ -102,6 +105,8 @@ export function EventsPage() {
         queryClient.invalidateQueries({ queryKey: ['sponsors'] }),
         queryClient.invalidateQueries({ queryKey: ['memberships'] }),
         queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+        queryClient.invalidateQueries({ queryKey: ['checkin-forms'] }),
+        queryClient.invalidateQueries({ queryKey: ['checkins'] }),
       ]);
       toast.success('Event updated');
       setEditOpen(false);
@@ -200,6 +205,7 @@ export function EventsPage() {
       payload: result.payload,
       sessions: result.sessions,
       initialSessionIds: result.initialSessionIds,
+      checkInForm: result.checkInForm,
     });
   }
 

@@ -13,16 +13,26 @@ import {
   type EventFormValues,
   type FieldErrors,
 } from '@/features/events/components/event-form-utils';
+import { EventWizardCheckInFormStep } from '@/features/events/components/EventWizardCheckInFormStep';
+import {
+  freshWizardCheckInFormValues,
+  publicCheckInFormToValues,
+  toCheckInFormPayload,
+  validateCheckInFormValues,
+  type CheckInFormFieldErrors,
+  type CheckInFormValues,
+} from '@/features/checkin-forms/checkin-form-utils';
+import { checkInFormsApi } from '@/features/checkin-forms/api/checkin-forms-api';
+import { eventsApi } from '@/features/events/api/events-api';
+import { sessionsApi } from '@/features/sessions/api/sessions-api';
+import { getApiErrorMessage } from '@/shared/api/client';
+import { uploadImageFile } from '@/shared/lib/upload-image';
 import {
   EventWizardSessionsStep,
   publicSessionToDraft,
   type DraftSession,
 } from '@/features/events/components/EventWizardSessionsStep';
-import { eventsApi } from '@/features/events/api/events-api';
-import { sessionsApi } from '@/features/sessions/api/sessions-api';
-import { getApiErrorMessage } from '@/shared/api/client';
-import { uploadImageFile } from '@/shared/lib/upload-image';
-import type { EventPayload, PublicEvent } from '@/shared/types/api';
+import type { EventPayload, PublicEvent, UpsertCheckInFormPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Spinner } from '@/shared/ui/Spinner';
 import { useToast } from '@/shared/ui/toast';
@@ -35,12 +45,14 @@ const STEPS = [
   { id: 'sponsors', label: 'Sponsors', description: 'Link sponsors to this edition' },
   { id: 'memberships', label: 'Memberships', description: 'Choose tiers for this event' },
   { id: 'sessions', label: 'Sessions', description: 'Build the agenda' },
+  { id: 'checkin', label: 'Check-in waiver', description: 'Required waiver form' },
 ] as const;
 
 export interface EventEditResult {
   payload: EventPayload;
   sessions: DraftSession[];
   initialSessionIds: string[];
+  checkInForm: UpsertCheckInFormPayload;
 }
 
 interface EventFormModalProps {
@@ -70,12 +82,17 @@ export function EventFormModal({
   const [pendingCoverPreview, setPendingCoverPreview] = useState<string | null>(null);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const [initialSessionIds, setInitialSessionIds] = useState<string[]>([]);
+  const [checkInFormValues, setCheckInFormValues] = useState<CheckInFormValues>(
+    freshWizardCheckInFormValues,
+  );
+  const [checkInFormErrors, setCheckInFormErrors] = useState<CheckInFormFieldErrors>({});
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     setSubmitted(false);
     setErrors({});
+    setCheckInFormErrors({});
     setUploading(false);
     setPendingCover(null);
     setPendingCoverPreview((prev) => {
@@ -84,6 +101,7 @@ export function EventFormModal({
     });
     setDraftSessions([]);
     setInitialSessionIds([]);
+    setCheckInFormValues(freshWizardCheckInFormValues());
     if (mode === 'edit' && initialEvent) {
       setValues(eventToForm(initialEvent));
     }
@@ -98,6 +116,12 @@ export function EventFormModal({
   const sessionsQuery = useQuery({
     queryKey: ['sessions', 'edit', initialEvent?.id],
     queryFn: () => sessionsApi.list({ eventId: initialEvent!.id, perPage: 100 }),
+    enabled: open && mode === 'edit' && Boolean(initialEvent?.id),
+  });
+
+  const checkInFormQuery = useQuery({
+    queryKey: ['checkin-forms', 'edit', initialEvent?.id],
+    queryFn: () => checkInFormsApi.getByEvent(initialEvent!.id),
     enabled: open && mode === 'edit' && Boolean(initialEvent?.id),
   });
 
@@ -118,6 +142,15 @@ export function EventFormModal({
     setInitialSessionIds(sessionsQuery.data.items.map((session) => session.id));
   }, [open, mode, sessionsQuery.data]);
 
+  useEffect(() => {
+    if (!open || mode !== 'edit' || checkInFormQuery.isLoading) return;
+    setCheckInFormValues(
+      checkInFormQuery.data
+        ? publicCheckInFormToValues(checkInFormQuery.data)
+        : freshWizardCheckInFormValues(),
+    );
+  }, [open, mode, checkInFormQuery.data, checkInFormQuery.isLoading]);
+
   if (!open) return null;
 
   const busy = loading || uploading;
@@ -125,7 +158,16 @@ export function EventFormModal({
   const isLastStep = step === STEPS.length - 1;
   const eventDays = eventDaysFromValues(values);
   const loadingStepData =
-    associationsQuery.isLoading || (step === 3 && sessionsQuery.isLoading);
+    associationsQuery.isLoading ||
+    (step === 3 && sessionsQuery.isLoading) ||
+    (step === 4 && checkInFormQuery.isLoading);
+
+  function validateCheckInStep(): CheckInFormFieldErrors {
+    return validateCheckInFormValues(checkInFormValues, {
+      requireActive: true,
+      requireContent: true,
+    });
+  }
 
   function handlePendingCoverChange(file: File | null, preview: string | null) {
     setPendingCoverPreview((prev) => {
@@ -154,15 +196,22 @@ export function EventFormModal({
   function goBack() {
     setSubmitted(false);
     setErrors({});
+    setCheckInFormErrors({});
     setStep((current) => Math.max(current - 1, 0));
   }
 
   async function handleFinish() {
     setSubmitted(true);
     const nextErrors = validateEventForm(values, { mode, previousEvent: initialEvent });
+    const waiverErrors = validateCheckInStep();
     setErrors(nextErrors);
+    setCheckInFormErrors(waiverErrors);
     if (Object.keys(nextErrors).length > 0) {
       setStep(0);
+      return;
+    }
+    if (Object.keys(waiverErrors).length > 0) {
+      setStep(STEPS.length - 1);
       return;
     }
 
@@ -190,6 +239,7 @@ export function EventFormModal({
       payload: toEventPayload(finalValues),
       sessions: draftSessions,
       initialSessionIds,
+      checkInForm: toCheckInFormPayload(checkInFormValues),
     });
   }
 
@@ -300,6 +350,25 @@ export function EventFormModal({
               sessions={draftSessions}
               disabled={busy}
               onChange={setDraftSessions}
+            />
+          ) : null}
+
+          {!loadingStepData && step === 4 ? (
+            <EventWizardCheckInFormStep
+              values={checkInFormValues}
+              errors={checkInFormErrors}
+              disabled={busy}
+              onChange={(next) => {
+                setCheckInFormValues(next);
+                if (submitted) {
+                  setCheckInFormErrors(
+                    validateCheckInFormValues(next, {
+                      requireActive: true,
+                      requireContent: true,
+                    }),
+                  );
+                }
+              }}
             />
           ) : null}
         </div>
