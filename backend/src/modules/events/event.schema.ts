@@ -223,4 +223,11 @@ export const scheduleEventSchema = z
   })
   .superRefine((value, ctx) => {
     assertDaysUnique(value.days, ctx);
+    if ((value.membershipIds ?? []).length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['membershipIds'],
+        message: 'Link at least one membership tier to this edition.',
+      });
+    }
   });

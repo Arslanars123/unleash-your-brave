@@ -137,6 +137,13 @@ export function customDayMinDate(
   return earliestEditionStart ?? undefined;
 }
 
+export function validateEventMemberships(membershipIds: string[]): string | null {
+  if (membershipIds.length === 0) {
+    return 'Select at least one membership tier for this edition.';
+  }
+  return null;
+}
+
 export function newDayKey(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -384,6 +391,9 @@ export function validateEventForm(
   if (values.coverImage.trim() && !isValidMediaRef(values.coverImage.trim())) {
     errors.coverImage = 'Use a valid URL or upload an image file';
   }
+
+  const membershipError = validateEventMemberships(values.membershipIds);
+  if (membershipError) errors.membershipIds = membershipError;
 
   return errors;
 }

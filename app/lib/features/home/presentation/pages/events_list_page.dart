@@ -574,47 +574,70 @@ class _BookingCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onViewAgenda,
-                      icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                      label: const Text('Agenda'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textPrimary,
-                        side: const BorderSide(color: AppColors.borderSubtle),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onViewMap,
-                      icon: const Icon(Icons.map_outlined, size: 16),
-                      label: const Text('Map'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textPrimary,
-                        side: const BorderSide(color: AppColors.borderSubtle),
-                      ),
-                    ),
-                  ),
-                  if (onQr != null) ...[
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: onQr,
-                        icon: const Icon(Icons.qr_code_2, size: 18),
-                        label: const Text('QR'),
-                      ),
-                    ),
-                  ],
-                ],
+              _EventQuickActions(
+                onViewAgenda: onViewAgenda,
+                onViewMap: onViewMap,
+                onQr: onQr,
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _EventQuickActions extends StatelessWidget {
+  const _EventQuickActions({
+    required this.onViewAgenda,
+    required this.onViewMap,
+    this.onQr,
+  });
+
+  final VoidCallback onViewAgenda;
+  final VoidCallback onViewMap;
+  final VoidCallback? onQr;
+
+  static final _outlinedStyle = OutlinedButton.styleFrom(
+    foregroundColor: AppColors.textPrimary,
+    side: const BorderSide(color: AppColors.borderSubtle),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onViewMap,
+                icon: const Icon(Icons.map_outlined, size: 16),
+                label: const Text('Map'),
+                style: _outlinedStyle,
+              ),
+            ),
+            if (onQr != null) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: onQr,
+                  icon: const Icon(Icons.qr_code_2, size: 18),
+                  label: const Text('QR'),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: onViewAgenda,
+          icon: const Icon(Icons.calendar_today_outlined, size: 16),
+          label: const Text('Agenda'),
+          style: _outlinedStyle,
+        ),
+      ],
     );
   }
 }
@@ -699,32 +722,9 @@ class _PreviousEventCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onViewAgenda,
-                      icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                      label: const Text('Agenda'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textPrimary,
-                        side: const BorderSide(color: AppColors.borderSubtle),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onViewMap,
-                      icon: const Icon(Icons.map_outlined, size: 16),
-                      label: const Text('Map'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textPrimary,
-                        side: const BorderSide(color: AppColors.borderSubtle),
-                      ),
-                    ),
-                  ),
-                ],
+              _EventQuickActions(
+                onViewAgenda: onViewAgenda,
+                onViewMap: onViewMap,
               ),
             ],
           ),

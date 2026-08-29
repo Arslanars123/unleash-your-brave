@@ -85,8 +85,11 @@ export class EventAssociationService {
         void this.sponsors?.notifyAssignedToEvent(sponsorId, eventId);
       }
     }
-    if (input.membershipIds) {
+    if (input.membershipIds !== undefined) {
       const membershipIds = await this.filterExistingMemberships(input.membershipIds);
+      if (membershipIds.length === 0) {
+        throw new BadRequestError('Link at least one membership tier to this edition.');
+      }
       await this.associations.setLinks(eventId, 'membership', membershipIds);
     }
 

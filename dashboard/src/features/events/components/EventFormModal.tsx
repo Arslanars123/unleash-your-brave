@@ -9,6 +9,7 @@ import {
   eventToForm,
   toEventPayload,
   validateEventForm,
+  validateEventMemberships,
   type EventFormMode,
   type EventFormValues,
   type FieldErrors,
@@ -187,6 +188,10 @@ export function EventFormModal({
         otherEditions,
       });
     }
+    if (step === 2) {
+      const membershipError = validateEventMemberships(values.membershipIds);
+      return membershipError ? { membershipIds: membershipError } : {};
+    }
     return {};
   }
 
@@ -217,7 +222,7 @@ export function EventFormModal({
     setErrors(nextErrors);
     setCheckInFormErrors(waiverErrors);
     if (Object.keys(nextErrors).length > 0) {
-      setStep(0);
+      setStep(nextErrors.membershipIds ? 2 : 0);
       return;
     }
     if (Object.keys(waiverErrors).length > 0) {
@@ -351,12 +356,22 @@ export function EventFormModal({
               showSponsors={false}
               disabled={busy}
               hint="Link membership tiers to this edition. These tiers can be assigned to sessions in the next step."
-              onChange={(next) =>
+              membershipError={submitted ? errors.membershipIds : undefined}
+              onChange={(next) => {
                 setValues((current) => ({
                   ...current,
                   membershipIds: next.membershipIds,
-                }))
-              }
+                }));
+                if (submitted) {
+                  const membershipError = validateEventMemberships(next.membershipIds);
+                  setErrors((current) => {
+                    const updated = { ...current };
+                    if (membershipError) updated.membershipIds = membershipError;
+                    else delete updated.membershipIds;
+                    return updated;
+                  });
+                }
+              }}
             />
           ) : null}
 

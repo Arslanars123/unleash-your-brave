@@ -24,6 +24,7 @@ interface EventAssociationPickerProps {
   allowCreateSponsor?: boolean;
   /** Explains that links are per-event and content stays separate. */
   hint?: string;
+  membershipError?: string;
 }
 
 function toggleId(ids: string[], id: string): string[] {
@@ -42,6 +43,7 @@ export function EventAssociationPicker({
   showSponsors = true,
   allowCreateSponsor = false,
   hint = 'Select shared memberships and sponsors for this event. Speakers are assigned when you create sessions. The same tier or sponsor can be linked to multiple events.',
+  membershipError,
 }: EventAssociationPickerProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -87,15 +89,18 @@ export function EventAssociationPicker({
       <p className="hint">{hint}</p>
 
       {showMemberships ? (
-        <AssociationChecklist
-          title="Memberships"
-          empty="No memberships in the library yet. Create them on the Memberships page, then link here."
-          items={memberships.map((item) => ({ id: item.id, label: item.name }))}
-          selected={value.membershipIds}
-          onToggle={(id) =>
-            onChange({ ...value, membershipIds: toggleId(value.membershipIds, id) })
-          }
-        />
+        <>
+          <AssociationChecklist
+            title="Memberships"
+            empty="No memberships in the library yet. Create them on the Memberships page, then link here."
+            items={memberships.map((item) => ({ id: item.id, label: item.name }))}
+            selected={value.membershipIds}
+            onToggle={(id) =>
+              onChange({ ...value, membershipIds: toggleId(value.membershipIds, id) })
+            }
+          />
+          {membershipError ? <p className="field-error">{membershipError}</p> : null}
+        </>
       ) : null}
 
       {showSponsors ? (
