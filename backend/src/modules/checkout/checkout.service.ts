@@ -458,8 +458,37 @@ export class CheckoutService {
   async getSessionStatus(sessionId: string) {
     const stripe = this.requireStripe();
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    const purchase = await this.purchases.findByStripeCheckoutSessionId(sessionId);
     const metadata = session.metadata ?? {};
+
+    if (metadata.purchaseType === 'store') {
+      const order = this.storeOrders
+        ? await this.storeOrders.findByStripeCheckoutSessionId(sessionId)
+        : null;
+      const quantity = Math.max(1, Number.parseInt(metadata.quantity ?? '1', 10) || 1);
+      const totalPrice =
+        order?.totalPrice ??
+        (Number.parseFloat(metadata.totalPrice ?? '') || null);
+      const productName = order?.productName ?? metadata.productName?.trim() ?? 'Store product';
+      const currency = (order?.currency ?? session.currency ?? env.stripe.currency).toUpperCase();
+
+      return {
+        sessionId: session.id,
+        paymentStatus: session.payment_status,
+        status: session.status,
+        fulfilled: Boolean(order),
+        purchaseType: 'store' as const,
+        order: {
+          productName,
+          quantity: order?.quantity ?? quantity,
+          totalPrice: totalPrice ?? 0,
+          currency,
+          deliveryAddress: order?.deliveryAddress ?? metadata.deliveryAddress?.trim() ?? '',
+          contactPhone: order?.contactPhone ?? metadata.contactPhone?.trim() ?? '',
+        },
+      };
+    }
+
+    const purchase = await this.purchases.findByStripeCheckoutSessionId(sessionId);
 
     let eventName = metadata.eventName?.trim() || null;
     let eventDateLabel = metadata.eventDateLabel?.trim() || null;
@@ -489,6 +518,7 @@ export class CheckoutService {
       paymentStatus: session.payment_status,
       status: session.status,
       fulfilled: Boolean(purchase),
+      purchaseType: 'membership' as const,
       purchase: purchase ? toPublicMembershipPurchase(purchase) : null,
       eventName,
       eventDateLabel,
