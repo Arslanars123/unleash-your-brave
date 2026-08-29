@@ -1042,15 +1042,9 @@ export class CheckoutService {
     if (input.nameUpdateChoice === 'update' || input.nameUpdateChoice === 'keep') {
       return input.nameUpdateChoice;
     }
-    throw new ConflictError(
-      `This email is already registered under the name ${account.existingName}. Would you like to update your name to ${account.proposedName} across your account?`,
-      {
-        existingName: account.existingName,
-        proposedName: account.proposedName,
-        role: account.role,
-      },
-      'NAME_CONFLICT',
-    );
+    // Account already has a display name for this email — keep it unless the
+    // caller explicitly chose to update (e.g. website name-conflict UI).
+    return 'keep';
   }
 
   private assertMembershipUnchanged(

@@ -145,6 +145,8 @@ class MembershipsRemoteDataSource {
           'email': email,
           'firstName': firstName,
           'lastName': lastName,
+          // Logged-in app checkout always keeps the account's existing name.
+          'nameUpdateChoice': 'keep',
           if (eventId != null && eventId.isNotEmpty) 'eventId': eventId,
           if (successUrl != null) 'successUrl': successUrl,
           if (cancelUrl != null) 'cancelUrl': cancelUrl,
