@@ -4,6 +4,7 @@ import type { EventAssociationService } from '../event-associations/event-associ
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import type { SessionRepository } from '../sessions/session.repository.js';
+import type { SessionService } from '../sessions/session.service.js';
 import type { UserService } from '../users/user.service.js';
 import type { PaginatedResult, SpeakerRepository } from './speaker.repository.js';
 import { toPublicSpeaker } from './speaker.mapper.js';
@@ -19,6 +20,7 @@ import type {
 export class SpeakerService {
   private associations: EventAssociationService | null = null;
   private sessions: SessionRepository | null = null;
+  private sessionService: SessionService | null = null;
 
   constructor(
     private readonly speakers: SpeakerRepository,
@@ -33,6 +35,10 @@ export class SpeakerService {
 
   setSessionRepository(sessions: SessionRepository): void {
     this.sessions = sessions;
+  }
+
+  setSessionService(sessions: SessionService): void {
+    this.sessionService = sessions;
   }
 
   async list(query: ListSpeakersQuery): Promise<PaginatedResult<PublicSpeaker>> {
@@ -133,6 +139,16 @@ export class SpeakerService {
   }
 
   async delete(id: string): Promise<void> {
+    await this.requireSpeaker(id);
+
+    if (this.sessionService) {
+      await this.sessionService.deleteAllForSpeaker(id);
+    }
+
+    if (this.associations) {
+      await this.associations.purgeSpeakerLinks(id);
+    }
+
     await this.users.clearSpeakerPortalLink(id);
     if (!(await this.speakers.delete(id))) {
       throw new NotFoundError('Speaker');

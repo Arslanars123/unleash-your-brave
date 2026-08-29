@@ -200,6 +200,7 @@ export async function createContainer() {
   });
   speakerService.setAssociationService(eventAssociationService);
   speakerService.setSessionRepository(sessionRepository);
+  speakerService.setSessionService(sessionService);
   sponsorService.setAssociationService(eventAssociationService);
   membershipService.setAssociationService(eventAssociationService);
   eventService.setAssociationService(eventAssociationService);

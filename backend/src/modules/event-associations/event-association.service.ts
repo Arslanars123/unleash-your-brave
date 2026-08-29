@@ -172,6 +172,18 @@ export class EventAssociationService {
     }
   }
 
+  /** Drop every edition link for a deleted shared speaker. */
+  async purgeSpeakerLinks(speakerId: string): Promise<number> {
+    const eventIds = await this.associations.listEventIds(speakerId, 'speaker');
+    let removed = 0;
+    for (const eventId of eventIds) {
+      if (await this.associations.unlink(eventId, 'speaker', speakerId)) {
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
   async unlinkSponsor(eventId: string, sponsorId: string): Promise<void> {
     await this.events.requireEvent(eventId);
     if (!(await this.associations.unlink(eventId, 'sponsor', sponsorId))) {

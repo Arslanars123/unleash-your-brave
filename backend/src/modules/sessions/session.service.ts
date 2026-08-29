@@ -264,6 +264,26 @@ export class SessionService {
     await this.feedback.deleteBySession(id);
   }
 
+  /** Removes every session assigned to a speaker (any edition) plus feedback. */
+  async deleteAllForSpeaker(speakerId: string): Promise<number> {
+    const sessionIds: string[] = [];
+    let page = 1;
+    const perPage = 100;
+
+    while (true) {
+      const { items, total } = await this.sessions.list({ speakerId, page, perPage });
+      sessionIds.push(...items.map((session) => session.id));
+      if (page * perPage >= total) break;
+      page += 1;
+    }
+
+    for (const sessionId of sessionIds) {
+      await this.delete(sessionId);
+    }
+
+    return sessionIds.length;
+  }
+
   private async resolveFeatureAccess(userId: string, eventId?: string) {
     if (!this.access) return null;
     return this.access.resolveForUser(userId, eventId);
