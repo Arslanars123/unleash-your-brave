@@ -674,6 +674,15 @@ export class CheckoutService {
       payload: { id: userId, eventId, removedFromEvent: true },
     });
 
+    const remaining = await this.purchases.listDistinctPaidEventIdsByUser(userId);
+    if (remaining.length === 0) {
+      await this.checkIns?.deleteByUserId(userId);
+      await this.checkInForms?.deleteSubmissionsByUserId(userId);
+      await this.storeOrders?.deleteByUserId(userId);
+      await this.revokeAttendeeAccount(userId);
+      return;
+    }
+
     await this.notifyAttendeeAccessRevoked(userId, eventId);
   }
 
@@ -686,6 +695,14 @@ export class CheckoutService {
     await this.checkInForms?.deleteSubmissionsByUserId(userId);
     await this.storeOrders?.deleteByUserId(userId);
 
+    await this.revokeAttendeeAccount(userId);
+  }
+
+  /** Disables or deletes attendee access when no event bookings remain. */
+  private async revokeAttendeeAccount(userId: string): Promise<void> {
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundError('User');
+
     if (this.userService.hasPortalAccess(user)) {
       await this.userService.stripAttendeeData(userId);
       this.realtimeHub.publish({
@@ -696,6 +713,8 @@ export class CheckoutService {
       return;
     }
 
+    await this.notifyAttendeeAccessRevoked(userId, null);
+
     if (!(await this.users.delete(userId))) {
       throw new NotFoundError('User');
     }
@@ -704,7 +723,6 @@ export class CheckoutService {
       type: 'attendee.deleted',
       payload: { id: userId },
     });
-    await this.notifyAttendeeAccessRevoked(userId, null);
   }
 
   private async notifyAttendeeAccessRevoked(

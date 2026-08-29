@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:unleash_your_brave/core/auth/attendee_session_guard.dart';
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
 import 'package:unleash_your_brave/features/checkin/data/datasources/checkin_remote_datasource.dart';
@@ -203,6 +204,7 @@ class SelectedEventCubit extends Cubit<SelectedEventState> {
 
     try {
       final bookings = await _checkIns.getMyBookings();
+      invalidateAttendeeSessionIfNoBookings(bookings.length);
       if (bookings.isEmpty) return null;
 
       final entitled = bookings.where((b) => b.entitled).toList();

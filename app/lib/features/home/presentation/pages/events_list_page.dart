@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unleash_your_brave/app/di/injection.dart';
+import 'package:unleash_your_brave/core/auth/attendee_session_guard.dart';
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
 import 'package:unleash_your_brave/core/error/exceptions.dart';
 import 'package:unleash_your_brave/core/responsive/responsive.dart';
@@ -87,6 +88,8 @@ class _EventsListPageState extends State<EventsListPage> {
       ]);
       if (!mounted) return;
       final bookings = results[0] as List<EventBookingEntity>;
+      invalidateAttendeeSessionIfNoBookings(bookings.length);
+      if (!mounted) return;
       final available = results[1] as List<EventEntity>;
       final previous = results[2] as List<EventEntity>;
       // Purchased for this edition (not content carried from another edition).
