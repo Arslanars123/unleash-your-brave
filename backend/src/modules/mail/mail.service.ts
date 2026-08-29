@@ -62,17 +62,23 @@ export class MailService {
     dualAccess?: boolean;
     eventName?: string;
     membershipName?: string;
-    /** Existing portal roles on this account (for clearer copy). */
+    /** Existing portal / attendee roles on this account (for clearer copy). */
     isSpeaker?: boolean;
     isSponsor?: boolean;
+    isAttendee?: boolean;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
     const expiresLabel = input.expiresAt.toUTCString();
     const hasEvent = Boolean(input.eventName?.trim());
     const membershipLabel = input.membershipName?.trim() || '';
-    const portalParts: string[] = [];
-    if (input.isSpeaker) portalParts.push('speaker');
-    if (input.isSponsor) portalParts.push('sponsor');
-    const portalLabel = portalParts.join(' and ');
+    const isSpeaker = Boolean(input.isSpeaker);
+    const isSponsor = Boolean(input.isSponsor);
+    const isAttendee = Boolean(input.isAttendee) || hasEvent;
+
+    const accessParts: string[] = [];
+    if (isAttendee) accessParts.push('attendee (mobile app)');
+    if (isSpeaker) accessParts.push('speaker dashboard');
+    if (isSponsor) accessParts.push('sponsor dashboard');
+    const accessLabel = accessParts.length > 0 ? joinNatural(accessParts) : '';
 
     const subject = hasEvent
       ? `You're registered for ${input.eventName} — your login code`
@@ -82,28 +88,33 @@ export class MailService {
       ? [
           `You've been registered as an attendee for ${input.eventName}.`,
           ...(membershipLabel ? [`Membership for this event: ${membershipLabel}.`] : []),
-          ...(portalLabel
+          ...(accessLabel
             ? [
-                `This email already has ${portalLabel} access. Use the code below to set your password — the same login will work for the mobile app and the ${portalLabel} dashboard.`,
+                `This email has ${accessLabel} access on one account.`,
+                'Use the code below to set your password. The same email and password will work for the mobile app and any speaker/sponsor dashboard access on this account.',
               ]
             : [
                 'Use the one-time login code below to open the app, set your password, and access your booking.',
               ]),
         ]
-      : input.dualAccess || portalLabel
+      : accessLabel
         ? [
             `Welcome to ${env.appName}.`,
-            ...(portalLabel
-              ? [`You have ${portalLabel} dashboard access on this account.`]
-              : []),
+            `This email has ${accessLabel} access on one account.`,
             'Use this code to finish setting up your password.',
-            'The same email and password will work for both the mobile app and the speaker/sponsor dashboard.',
+            'After you set it, the same email and password will work for the mobile app (attendee) and the speaker/sponsor dashboard.',
           ]
-        : [
-            `Welcome to ${env.appName}.`,
-            'Open the app, sign in with your email and this code, then set your own password.',
-            'If you also have dashboard access, the same password will work there too.',
-          ];
+        : input.dualAccess
+          ? [
+              `Welcome to ${env.appName}.`,
+              'Use this code to finish setting up your password.',
+              'The same email and password will work for both the mobile app and the speaker/sponsor dashboard.',
+            ]
+          : [
+              `Welcome to ${env.appName}.`,
+              'Open the app, sign in with your email and this code, then set your own password.',
+              'If you also have dashboard access, the same password will work there too.',
+            ];
 
     const text = [
       `Hi ${input.name},`,
@@ -204,20 +215,31 @@ export class MailService {
     name: string;
     portalRole: 'speaker' | 'sponsor';
     mustChangePassword?: boolean;
+    isAttendee?: boolean;
+    isSpeaker?: boolean;
+    isSponsor?: boolean;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
     const roleLabel = input.portalRole;
     const subject = `Your ${env.appName} ${roleLabel} dashboard access is ready`;
 
+    const accessParts: string[] = [];
+    if (input.isAttendee) accessParts.push('attendee (mobile app)');
+    if (input.isSpeaker || roleLabel === 'speaker') accessParts.push('speaker dashboard');
+    if (input.isSponsor || roleLabel === 'sponsor') accessParts.push('sponsor dashboard');
+    // Deduplicate while preserving order
+    const uniqueAccess = [...new Set(accessParts)];
+    const accessLabel = uniqueAccess.length > 0 ? joinNatural(uniqueAccess) : roleLabel;
+
     const loginLines = input.mustChangePassword
       ? [
-          'You already have an account on this email, but a password has not been set yet.',
-          'Use Forgot password with this email in the app or dashboard to create your password, then sign in.',
-          'After that, the same login works for attendee (app) and dashboard access.',
+          `This email has ${accessLabel} access on one account.`,
+          'A password has not been set yet. Use Forgot password with this email to create one, then sign in.',
+          'After that, the same login works for the mobile app and dashboard.',
         ]
       : [
+          `This email has ${accessLabel} access on one account.`,
           'You do not need a new invitation code.',
-          'Sign in to the dashboard with the same email and password you already use for the mobile app.',
-          'Your attendee/membership access (if any) remains on the same login.',
+          'Sign in with the same email and password you already use — it works for the mobile app (attendee) and the dashboard.',
         ];
 
     const text = [
@@ -421,4 +443,10 @@ function escapeHtml(value: string): string {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+function joinNatural(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? '';
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
 }

@@ -723,6 +723,7 @@ export class UserService {
         membershipName,
         isSpeaker,
         isSponsor,
+        isAttendee: true,
       });
       return;
     }
@@ -838,6 +839,7 @@ export class UserService {
       dualAccess: false,
       eventName: event?.name ?? undefined,
       membershipName: membership.name,
+      isAttendee: true,
     });
 
     return this.linkPortalProfilesByEmail(created.id, created.email);

@@ -898,6 +898,7 @@ export class CheckoutService {
         membershipName: membership.name,
         isSpeaker: Boolean(upsert.user.speakerId) || upsert.user.role === 'speaker',
         isSponsor: Boolean(upsert.user.sponsorId) || upsert.user.role === 'sponsor',
+        isAttendee: true,
       });
     } else if (!upsert.created) {
       await this.mail.sendExistingAccountMembershipAccess({

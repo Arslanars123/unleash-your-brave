@@ -271,6 +271,7 @@ export class SponsorService {
         dualAccess: true,
         isSpeaker: Boolean(user.speakerId),
         isSponsor: true,
+        isAttendee: Boolean(user.membershipId) || user.role === 'member',
       });
     } else if (issueInvite) {
       await this.mail.sendExistingAccountPortalAccess({
@@ -278,6 +279,8 @@ export class SponsorService {
         name: sponsor.name,
         portalRole: 'sponsor',
         mustChangePassword: false,
+        isAttendee: Boolean(user.membershipId) || user.role === 'member',
+        isSpeaker: Boolean(user.speakerId),
       });
     }
   }

@@ -54,6 +54,7 @@ export class GhlWebhookService {
           membershipName: payload.product?.trim() || undefined,
           isSpeaker: Boolean(user.speakerId) || user.role === 'speaker',
           isSponsor: Boolean(user.sponsorId) || user.role === 'sponsor',
+          isAttendee: true,
         });
         inviteEmailSent = result.sent;
         if (!result.sent && env.nodeEnv !== 'production') {
