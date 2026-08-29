@@ -99,3 +99,31 @@ class StoreCheckoutSessionResult {
   final String currency;
   final String eventId;
 }
+
+class StoreOrderEntity {
+  const StoreOrderEntity({
+    required this.id,
+    required this.productName,
+    required this.quantity,
+    required this.totalPrice,
+    required this.currency,
+    required this.purchasedAt,
+    required this.fulfillmentStatus,
+    required this.deliveryAddress,
+    required this.contactPhone,
+  });
+
+  final String id;
+  final String productName;
+  final int quantity;
+  final double totalPrice;
+  final String currency;
+  final DateTime purchasedAt;
+  final String fulfillmentStatus;
+  final String deliveryAddress;
+  final String contactPhone;
+
+  bool get isDelivered => fulfillmentStatus == 'completed';
+
+  String get statusLabel => isDelivered ? 'Delivered' : 'Pending';
+}

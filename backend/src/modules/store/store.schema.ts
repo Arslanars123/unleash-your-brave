@@ -140,7 +140,7 @@ export const createStoreCheckoutSessionSchema = z.object({
   deliveryAddress: z
     .string()
     .trim()
-    .min(5, 'Delivery address is required')
+    .min(1, 'Delivery address is required')
     .max(500, 'Delivery address is too long'),
   contactPhone: z
     .string()

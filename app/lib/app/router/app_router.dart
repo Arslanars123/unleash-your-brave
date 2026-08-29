@@ -33,10 +33,12 @@ import 'package:unleash_your_brave/features/sponsors/domain/entities/sponsor_ent
 import 'package:unleash_your_brave/features/sponsors/presentation/pages/sponsor_detail_page.dart';
 import 'package:unleash_your_brave/features/sponsors/presentation/pages/sponsors_list_page.dart';
 import 'package:unleash_your_brave/features/store/domain/entities/store_entity.dart';
+import 'package:unleash_your_brave/features/store/presentation/pages/my_orders_page.dart';
 import 'package:unleash_your_brave/features/store/presentation/pages/store_checkout_page.dart';
 import 'package:unleash_your_brave/features/store/presentation/pages/store_page.dart';
 import 'package:unleash_your_brave/features/store/presentation/pages/store_product_detail_page.dart';
 import 'package:unleash_your_brave/features/splash/presentation/pages/splash_page.dart';
+import 'package:unleash_your_brave/features/support/presentation/pages/help_support_page.dart';
 
 class AppRouter {
   const AppRouter._();
@@ -291,6 +293,16 @@ class AppRouter {
             },
           ),
         ],
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/my-orders',
+        builder: (context, state) => const MyOrdersPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/help-support',
+        builder: (context, state) => const HelpSupportPage(),
       ),
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,

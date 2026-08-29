@@ -16,6 +16,8 @@ class AppBrandingRemoteDataSource {
               const {};
       return AppBrandingEntity(
         homeCoverImage: data['homeCoverImage'] as String? ?? '',
+        supportEmail: data['supportEmail'] as String? ?? 'dedee@fittoprofit.com',
+        supportPhone: data['supportPhone'] as String? ?? '',
       );
     } on DioException catch (error) {
       throwMappedDioError(error);

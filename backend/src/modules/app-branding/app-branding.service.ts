@@ -6,10 +6,14 @@ import type {
 
 function toPublic(branding: {
   homeCoverImage: string;
+  supportEmail: string;
+  supportPhone: string;
   updatedAt: Date;
 }): PublicAppBranding {
   return {
     homeCoverImage: branding.homeCoverImage ?? '',
+    supportEmail: branding.supportEmail ?? '',
+    supportPhone: branding.supportPhone ?? '',
     updatedAt: branding.updatedAt.toISOString(),
   };
 }
@@ -29,6 +33,14 @@ export class AppBrandingService {
         input.homeCoverImage !== undefined
           ? input.homeCoverImage.trim()
           : current.homeCoverImage,
+      supportEmail:
+        input.supportEmail !== undefined
+          ? input.supportEmail.trim()
+          : current.supportEmail,
+      supportPhone:
+        input.supportPhone !== undefined
+          ? input.supportPhone.trim()
+          : current.supportPhone,
     });
     return toPublic(saved);
   }

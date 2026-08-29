@@ -540,6 +540,18 @@ class _HomeDrawer extends StatelessWidget {
               subtitle: 'Browse products & merch',
               onTap: () => _go(context, '/store'),
             ),
+            _DrawerTile(
+              icon: Icons.receipt_long_outlined,
+              title: 'My orders',
+              subtitle: 'Track store purchases',
+              onTap: () => _go(context, '/my-orders'),
+            ),
+            _DrawerTile(
+              icon: Icons.support_agent_outlined,
+              title: 'Help & Support',
+              subtitle: 'Contact our team',
+              onTap: () => _go(context, '/help-support'),
+            ),
             const Spacer(),
             const Divider(color: AppColors.borderSubtle, height: 1),
             _DrawerTile(

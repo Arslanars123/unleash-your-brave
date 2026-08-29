@@ -116,4 +116,35 @@ class StoreRemoteDataSource {
       throwMappedDioError(error);
     }
   }
+
+  Future<List<StoreOrderEntity>> listMyOrders() async {
+    try {
+      final response = await _dioClient.client.get(ApiConstants.storeMyOrders);
+      final data =
+          (response.data as Map<String, dynamic>)['data'] as List<dynamic>? ??
+              const [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(_parseOrder)
+          .toList(growable: false);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
+  StoreOrderEntity _parseOrder(Map<String, dynamic> data) {
+    final purchasedRaw = data['purchasedAt'] as String? ?? '';
+    final purchasedAt = DateTime.tryParse(purchasedRaw) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return StoreOrderEntity(
+      id: data['id'] as String? ?? '',
+      productName: data['productName'] as String? ?? 'Product',
+      quantity: (data['quantity'] as num?)?.toInt() ?? 1,
+      totalPrice: (data['totalPrice'] as num?)?.toDouble() ?? 0,
+      currency: data['currency'] as String? ?? 'usd',
+      purchasedAt: purchasedAt,
+      fulfillmentStatus: data['fulfillmentStatus'] as String? ?? 'pending',
+      deliveryAddress: data['deliveryAddress'] as String? ?? '',
+      contactPhone: data['contactPhone'] as String? ?? '',
+    );
+  }
 }

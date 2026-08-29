@@ -22,12 +22,16 @@ export class MongoAppBrandingRepository implements AppBrandingRepository {
         ...doc,
         id: 'default',
         homeCoverImage: doc.homeCoverImage ?? '',
+        supportEmail: doc.supportEmail?.trim() || 'dedee@fittoprofit.com',
+        supportPhone: doc.supportPhone ?? '',
       };
     }
 
     const created: AppBranding = {
       id: 'default',
       homeCoverImage: '',
+      supportEmail: 'dedee@fittoprofit.com',
+      supportPhone: '',
       updatedAt: new Date(),
     };
     await this.collection.insertOne(toDoc(created));

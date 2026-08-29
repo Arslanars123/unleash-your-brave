@@ -22,6 +22,7 @@ class ApiConstants {
   static const storeCategories = '/store/categories';
   static const storeProducts = '/store/products';
   static const storeCheckoutSessions = '/store/checkout/sessions';
+  static const storeMyOrders = '/store/orders/me';
   static const announcements = '/announcements';
   static const announcementsFeed = '/announcements/feed';
   static const announcementsUnreadCount = '/announcements/unread-count';

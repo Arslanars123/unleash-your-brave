@@ -826,11 +826,15 @@ export interface UpdateCountdownSettingsPayload {
 
 export interface AppBranding {
   homeCoverImage: string;
+  supportEmail: string;
+  supportPhone: string;
   updatedAt: string;
 }
 
 export interface UpdateAppBrandingPayload {
   homeCoverImage?: string;
+  supportEmail?: string;
+  supportPhone?: string;
 }
 
 export interface PublicPostAuthor {
