@@ -34,7 +34,6 @@ export function CheckInScanDetailsModal({
   if (!open || !result?.checkIn || !result.membership) return null;
 
   const membership = result.membership;
-  const title = result.alreadyCheckedIn ? 'Already checked in' : 'Check-in complete';
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -47,7 +46,7 @@ export function CheckInScanDetailsModal({
       >
         <header className="modal-header">
           <div>
-            <h2 id="checkin-scan-details-title">{title}</h2>
+            <h2 id="checkin-scan-details-title">Check-in complete</h2>
             <p className="muted" style={{ margin: 0 }}>
               {result.user.name} · {result.user.email}
             </p>
@@ -67,7 +66,6 @@ export function CheckInScanDetailsModal({
                   {result.checkIn.checkedInAt
                     ? formatUsDateTime(result.checkIn.checkedInAt)
                     : '—'}
-                  {result.alreadyCheckedIn ? ' (already checked in)' : ''}
                 </dd>
               </div>
               <div className="attendee-detail-row">

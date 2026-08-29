@@ -118,8 +118,6 @@ export function CheckInsPage() {
     pendingPayloadRef.current = null;
     const name = result.user.name;
     if (result.alreadyCheckedIn) {
-      const message = `${name} was already checked in`;
-      setLastResult(message);
       openScanDetails(result);
       if (options?.holdScanner) setScanHold(true);
       setToken('');
