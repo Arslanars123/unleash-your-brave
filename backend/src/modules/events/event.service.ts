@@ -14,7 +14,7 @@ import {
   toPublicEvent,
   utcDayAfter,
 } from './event.mapper.js';
-import { assertEditionScheduleAllowed } from './event-schedule-validation.js';
+import { assertCustomDaysSequential, assertEditionScheduleAllowed } from './event-schedule-validation.js';
 import type {
   CreateEventInput,
   Event,
@@ -251,6 +251,10 @@ export class EventService {
       days: input.days,
     });
 
+    if (input.days?.length) {
+      assertCustomDaysSequential(input.days.map((day) => day.date));
+    }
+
     assertEditionScheduleAllowed(null, days, items);
 
     const copy = Boolean(input.copyDetailsFromPrevious && previous);
@@ -350,6 +354,9 @@ export class EventService {
       input.paused !== undefined && Boolean(input.paused) !== Boolean(existing.paused);
 
     if (shouldRebuildDays) {
+      if (input.days?.length) {
+        assertCustomDaysSequential(input.days.map((day) => day.date));
+      }
       const { items } = await this.events.list({ page: 1, perPage: 100 });
       assertEditionScheduleAllowed(id, days, items);
     }

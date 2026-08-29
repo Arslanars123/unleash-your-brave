@@ -11,6 +11,7 @@ import { TextArea } from '@/shared/ui/TextArea';
 import {
   addUtcDays,
   buildConsecutiveDays,
+  customDayMinDate,
   dayAfterIso,
   formatUtcDateLabel,
   getEditionScheduleBounds,
@@ -245,7 +246,7 @@ export function EventFormDetailsStep({
               ? 'Choose the dates for this new edition.'
               : bounds.earliestStart || bounds.latestEnd
                 ? [
-                    'Dates must not overlap or touch another edition.',
+                    'Each day must be after the previous day.',
                     bounds.earliestStart
                       ? `Earliest start: ${formatUtcDateLabel(`${bounds.earliestStart}T00:00:00.000Z`)}.`
                       : null,
@@ -255,7 +256,7 @@ export function EventFormDetailsStep({
                   ]
                     .filter(Boolean)
                     .join(' ')
-                : 'Adjust dates for this edition if needed. Dates must not overlap another edition.'}
+                : 'Each day must be after the previous day and must not overlap another edition.'}
         </p>
 
         <div className="schedule-mode-toggle" role="group" aria-label="Schedule mode">
@@ -311,7 +312,7 @@ export function EventFormDetailsStep({
                   type="date"
                   name={`day-date-${index}`}
                   requiredMark
-                  min={minStart}
+                  min={customDayMinDate(index, values.days, minStart)}
                   max={bounds.latestEnd ?? undefined}
                   value={day.date}
                   error={errors[`day-${index}`]}

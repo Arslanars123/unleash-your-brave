@@ -35,6 +35,33 @@ function formatDay(date: Date): string {
   return formatUsDate(date, { utc: true });
 }
 
+function parseIsoDateKey(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestError('Invalid event day date');
+  }
+  return isoDateKey(parsed);
+}
+
+/** Each list entry must be strictly after the previous (Day 2 > Day 1, etc.). */
+export function assertCustomDaysSequential(dayDates: string[]): void {
+  let previous: string | null = null;
+  dayDates.forEach((raw, index) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const key = parseIsoDateKey(trimmed);
+    if (previous && key <= previous) {
+      const dayNum = index + 1;
+      throw new BadRequestError(
+        dayNum === 1
+          ? 'Each event day must be after the previous day.'
+          : `Day ${dayNum} must be after Day ${dayNum - 1} (${formatDay(new Date(`${previous}T00:00:00.000Z`))}).`,
+      );
+    }
+    previous = key;
+  });
+}
+
 export function getEditionScheduleBounds(
   eventId: string | null,
   days: EventDay[],

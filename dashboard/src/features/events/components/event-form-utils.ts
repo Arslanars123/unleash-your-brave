@@ -124,6 +124,19 @@ function validateEditionSchedule(
   return null;
 }
 
+/** Minimum selectable date for a custom day row (strictly after the previous row). */
+export function customDayMinDate(
+  index: number,
+  days: DayRow[],
+  earliestEditionStart?: string | null,
+): string | undefined {
+  if (index > 0) {
+    const previousDate = days[index - 1]?.date;
+    if (previousDate) return dayAfterIso(`${previousDate}T00:00:00.000Z`);
+  }
+  return earliestEditionStart ?? undefined;
+}
+
 export function newDayKey(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -199,7 +212,7 @@ export function eventToForm(event: PublicEvent): EventFormValues {
   const days: DayRow[] =
     event.days?.length > 0
       ? [...event.days]
-          .sort((a, b) => a.date.localeCompare(b.date))
+          .sort((a, b) => a.dayNumber - b.dayNumber)
           .map((day) => ({
             key: newDayKey(),
             date: toDateInput(day.date),
@@ -287,16 +300,48 @@ export function validateEventForm(
     if (values.dayCount > 60) errors.dayCount = 'Day count cannot exceed 60';
   } else {
     if (values.days.length === 0) errors.days = 'Add at least one event day';
-    const seen = new Set<string>();
+
+    const editingEventId =
+      options?.mode === 'edit'
+        ? options.editingEventId ?? options.previousEvent?.id ?? null
+        : null;
+    const otherEditions =
+      options?.otherEditions ??
+      (options?.mode === 'schedule' && options.previousEvent ? [options.previousEvent] : []);
+    const bounds = getEditionScheduleBounds(
+      editingEventId,
+      dayDates,
+      otherEditions,
+    );
+    const earliestStart =
+      options?.mode === 'schedule' && options.previousEvent
+        ? dayAfterIso(options.previousEvent.endDate)
+        : bounds.earliestStart;
+
     values.days.forEach((day, index) => {
       if (!day.date) {
         errors[`day-${index}`] = 'Date is required';
         return;
       }
-      if (seen.has(day.date)) {
-        errors[`day-${index}`] = 'Duplicate date';
+
+      if (index > 0) {
+        const previousDate = values.days[index - 1]?.date;
+        if (previousDate && day.date <= previousDate) {
+          errors[`day-${index}`] =
+            errors[`day-${index}`] ||
+            `Must be after Day ${index} (${formatUtcDateLabel(`${previousDate}T00:00:00.000Z`)}).`;
+        }
+      } else if (earliestStart && day.date < earliestStart) {
+        errors[`day-${index}`] =
+          errors[`day-${index}`] ||
+          `Must start on or after ${formatUtcDateLabel(`${earliestStart}T00:00:00.000Z`)}.`;
       }
-      seen.add(day.date);
+
+      if (bounds.latestEnd && day.date > bounds.latestEnd) {
+        errors[`day-${index}`] =
+          errors[`day-${index}`] ||
+          `Must be on or before ${formatUtcDateLabel(`${bounds.latestEnd}T00:00:00.000Z`)} (before the next edition).`;
+      }
     });
   }
 
@@ -346,7 +391,6 @@ export function validateEventForm(
 function toDaysPayload(values: EventFormValues) {
   return resolvedDays(values)
     .filter((day) => day.date)
-    .sort((a, b) => a.date.localeCompare(b.date))
     .map((day, index) => ({
       dayNumber: index + 1,
       date: `${day.date}T00:00:00.000Z`,
