@@ -44,11 +44,28 @@ export class EventAssociationService {
 
   async getForEvent(eventId: string): Promise<EventAssociationsView> {
     await this.events.requireEvent(eventId);
-    const [speakerIds, sponsorIds, membershipIds] = await Promise.all([
+    const [speakerIdsRaw, sponsorIdsRaw, membershipIdsRaw] = await Promise.all([
       this.associations.listEntityIds(eventId, 'speaker'),
       this.associations.listEntityIds(eventId, 'sponsor'),
       this.associations.listEntityIds(eventId, 'membership'),
     ]);
+    const [speakerIds, sponsorIds, membershipIds] = await Promise.all([
+      this.filterExistingSpeakers(speakerIdsRaw),
+      this.filterExistingSponsors(sponsorIdsRaw),
+      this.filterExistingMemberships(membershipIdsRaw),
+    ]);
+
+    // Drop deleted catalog rows so edit forms don't keep ghost IDs.
+    if (speakerIds.length !== speakerIdsRaw.length) {
+      await this.associations.setLinks(eventId, 'speaker', speakerIds);
+    }
+    if (sponsorIds.length !== sponsorIdsRaw.length) {
+      await this.associations.setLinks(eventId, 'sponsor', sponsorIds);
+    }
+    if (membershipIds.length !== membershipIdsRaw.length) {
+      await this.associations.setLinks(eventId, 'membership', membershipIds);
+    }
+
     return { eventId, speakerIds, sponsorIds, membershipIds };
   }
 
@@ -56,21 +73,21 @@ export class EventAssociationService {
     await this.events.requireEvent(eventId);
 
     if (input.speakerIds) {
-      await this.assertSpeakersExist(input.speakerIds);
-      await this.associations.setLinks(eventId, 'speaker', input.speakerIds);
+      const speakerIds = await this.filterExistingSpeakers(input.speakerIds);
+      await this.associations.setLinks(eventId, 'speaker', speakerIds);
     }
     if (input.sponsorIds) {
-      await this.assertSponsorsExist(input.sponsorIds);
+      const sponsorIds = await this.filterExistingSponsors(input.sponsorIds);
       const previouslyLinked = await this.associations.listEntityIds(eventId, 'sponsor');
-      await this.associations.setLinks(eventId, 'sponsor', input.sponsorIds);
-      const newlyLinked = input.sponsorIds.filter((id) => !previouslyLinked.includes(id));
+      await this.associations.setLinks(eventId, 'sponsor', sponsorIds);
+      const newlyLinked = sponsorIds.filter((id) => !previouslyLinked.includes(id));
       for (const sponsorId of newlyLinked) {
         void this.sponsors?.notifyAssignedToEvent(sponsorId, eventId);
       }
     }
     if (input.membershipIds) {
-      await this.assertMembershipsExist(input.membershipIds);
-      await this.associations.setLinks(eventId, 'membership', input.membershipIds);
+      const membershipIds = await this.filterExistingMemberships(input.membershipIds);
+      await this.associations.setLinks(eventId, 'membership', membershipIds);
     }
 
     return this.getForEvent(eventId);
@@ -209,5 +226,47 @@ export class EventAssociationService {
     for (const id of ids) {
       await this.memberships.getById(id);
     }
+  }
+
+  private async filterExistingSpeakers(ids: string[]): Promise<string[]> {
+    if (!this.speakers) throw new BadRequestError('Speaker service not ready');
+    const valid: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.speakers.getById(id);
+        valid.push(id);
+      } catch {
+        // Deleted speaker — drop stale link.
+      }
+    }
+    return valid;
+  }
+
+  private async filterExistingSponsors(ids: string[]): Promise<string[]> {
+    if (!this.sponsors) throw new BadRequestError('Sponsor service not ready');
+    const valid: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.sponsors.getById(id);
+        valid.push(id);
+      } catch {
+        // Deleted sponsor — drop stale link.
+      }
+    }
+    return valid;
+  }
+
+  private async filterExistingMemberships(ids: string[]): Promise<string[]> {
+    if (!this.memberships) throw new BadRequestError('Membership service not ready');
+    const valid: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.memberships.getById(id);
+        valid.push(id);
+      } catch {
+        // Deleted membership — drop stale link.
+      }
+    }
+    return valid;
   }
 }
