@@ -140,7 +140,8 @@ export function EventWizardModal({
     const nextErrors = validateCurrentStep();
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
-      toast.error('Fix the highlighted fields below to continue.');
+      const firstError = Object.values(nextErrors).find(Boolean);
+      toast.error(firstError ?? 'Fix the highlighted fields below to continue.');
       return;
     }
     setSubmitted(false);
@@ -240,6 +241,16 @@ export function EventWizardModal({
         </ol>
 
         <div className="modal-body event-form wizard-step-body">
+          {submitted && step === 0 && Object.keys(errors).length > 0 ? (
+            <div className="form-error" role="alert" style={{ marginBottom: '1rem' }}>
+              {Object.values(errors).map((message) => (
+                <p key={message} style={{ margin: 0 }}>
+                  {message}
+                </p>
+              ))}
+            </div>
+          ) : null}
+
           {step === 0 ? (
             <EventFormDetailsStep
               mode="schedule"

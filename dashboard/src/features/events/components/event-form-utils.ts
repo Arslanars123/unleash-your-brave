@@ -388,7 +388,28 @@ export function validateEventForm(
     }
   }
 
-  if (values.coverImage.trim() && !isValidMediaRef(values.coverImage.trim())) {
+  if (
+    options?.mode === 'schedule' &&
+    options.previousEvent &&
+    values.scheduleMode === 'consecutive' &&
+    values.consecutiveStart
+  ) {
+    const earliestStart = dayAfterIso(options.previousEvent.endDate);
+    if (earliestStart && values.consecutiveStart < earliestStart) {
+      errors.consecutiveStart =
+        errors.consecutiveStart ||
+        `Must start on or after ${formatUtcDateLabel(`${earliestStart}T00:00:00.000Z`)}.`;
+    }
+  }
+
+  const skipCopiedMediaCheck =
+    options?.mode === 'schedule' && values.copyDetailsFromPrevious && options.previousEvent;
+
+  if (
+    !skipCopiedMediaCheck &&
+    values.coverImage.trim() &&
+    !isValidMediaRef(values.coverImage.trim())
+  ) {
     errors.coverImage = 'Use a valid URL or upload an image file';
   }
 

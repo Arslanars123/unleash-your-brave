@@ -216,6 +216,13 @@ export function EventFormDetailsStep({
         </label>
       ) : null}
 
+      {!showDetails && errors.coverImage ? (
+        <p className="form-error">
+          Cover image from the previous edition is invalid. Uncheck “Copy…from previous edition”
+          above and add a new cover, or clear the previous edition cover first.
+        </p>
+      ) : null}
+
       {showDetails ? (
         <>
           <Input
