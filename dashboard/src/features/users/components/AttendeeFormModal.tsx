@@ -104,6 +104,19 @@ function isOptionalUrl(value: string): boolean {
   return false;
 }
 
+function validateEventMemberships(
+  eventMemberships: Record<string, string>,
+  requiredEventIds: string[],
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const eventId of requiredEventIds) {
+    if (!eventMemberships[eventId]?.trim()) {
+      errors[eventId] = 'Membership is required';
+    }
+  }
+  return errors;
+}
+
 function validate(values: AttendeeFormValues, mode: 'create' | 'edit'): FieldErrors {
   const errors: FieldErrors = {};
 
@@ -315,6 +328,7 @@ export function AttendeeFormModal({
 }: AttendeeFormModalProps) {
   const [values, setValues] = useState<AttendeeFormValues>(emptyForm);
   const [eventMemberships, setEventMemberships] = useState<Record<string, string>>({});
+  const [eventMembershipErrors, setEventMembershipErrors] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [committingPhoto, setCommittingPhoto] = useState(false);
@@ -366,6 +380,7 @@ export function AttendeeFormModal({
     if (!open) return;
     setSubmitted(false);
     setErrors({});
+    setEventMembershipErrors({});
     setEventMemberships({});
     if (initialUser) {
       setValues(userToForm(initialUser));
@@ -392,7 +407,48 @@ export function AttendeeFormModal({
     setEventMemberships(next);
   }, [open, mode, eventRecordsQuery.data, contextEventId, initialUser?.membershipId]);
 
+  const editMembershipsLoading =
+    eventRecordsQuery.isLoading || membershipQueries.some((query) => query.isLoading);
+
+  const visibleEditEventIds = useMemo(() => {
+    const ids = sortedEventRecords.map((record) => record.eventId);
+    if (
+      contextEventId &&
+      contextEvent &&
+      !ids.includes(contextEventId)
+    ) {
+      ids.push(contextEventId);
+    }
+    return ids;
+  }, [sortedEventRecords, contextEventId, contextEvent]);
+
+  useEffect(() => {
+    if (!open || mode !== 'edit' || editMembershipsLoading) return;
+    setEventMemberships((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const eventId of visibleEditEventIds) {
+        if (next[eventId]?.trim()) continue;
+        const options = membershipsByEventId.get(eventId) ?? [];
+        if (options[0]) {
+          next[eventId] = options[0].id;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [open, mode, editMembershipsLoading, visibleEditEventIds, membershipsByEventId]);
+
   if (!open) return null;
+
+  function resolveEventMemberships(): Record<string, string> {
+    return Object.fromEntries(
+      visibleEditEventIds.map((eventId) => {
+        const options = membershipsByEventId.get(eventId) ?? [];
+        return [eventId, eventMemberships[eventId]?.trim() || options[0]?.id || ''];
+      }),
+    );
+  }
 
   function update<K extends keyof AttendeeFormValues>(key: K, value: AttendeeFormValues[K]) {
     setValues((current) => {
@@ -424,21 +480,31 @@ export function AttendeeFormModal({
 
     const nextValues = { ...values, photoUrl };
     setValues(nextValues);
+    const resolvedEventMemberships = mode === 'edit' ? resolveEventMemberships() : {};
     const nextErrors = validate(nextValues, mode);
+    const nextMembershipErrors =
+      mode === 'edit'
+        ? validateEventMemberships(resolvedEventMemberships, visibleEditEventIds)
+        : {};
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    setEventMembershipErrors(nextMembershipErrors);
+    if (Object.keys(nextErrors).length > 0 || Object.keys(nextMembershipErrors).length > 0) return;
     await onSubmit(
       mode === 'create'
         ? toCreatePayload(nextValues)
-        : toUpdatePayload(nextValues, eventMemberships),
+        : toUpdatePayload(nextValues, resolvedEventMemberships),
     );
   }
 
-  const editMembershipsLoading =
-    eventRecordsQuery.isLoading || membershipQueries.some((query) => query.isLoading);
-
   function updateEventMembership(eventId: string, membershipId: string) {
+    if (!membershipId) return;
     setEventMemberships((current) => ({ ...current, [eventId]: membershipId }));
+    if (submitted) {
+      setEventMembershipErrors(validateEventMemberships(
+        { ...eventMemberships, [eventId]: membershipId },
+        visibleEditEventIds,
+      ));
+    }
   }
 
   return (
@@ -566,15 +632,19 @@ export function AttendeeFormModal({
               ) : null}
               {sortedEventRecords.map((record) => {
                 const options = membershipsByEventId.get(record.eventId) ?? [];
+                const selected = eventMemberships[record.eventId] ?? options[0]?.id ?? '';
                 return (
                   <label key={record.eventId} className="field">
-                    <span className="field-label">{eventRecordLabel(record)}</span>
+                    <span className="field-label">
+                      {eventRecordLabel(record)} <span className="required-mark">*</span>
+                    </span>
                     <select
                       className="field-input"
-                      value={eventMemberships[record.eventId] ?? ''}
+                      value={selected}
                       onChange={(e) => updateEventMembership(record.eventId, e.target.value)}
+                      required
+                      disabled={!options.length}
                     >
-                      <option value="">No membership assigned</option>
                       {options.map((membership) => (
                         <option key={membership.id} value={membership.id}>
                           {membership.name}
@@ -582,6 +652,9 @@ export function AttendeeFormModal({
                         </option>
                       ))}
                     </select>
+                    {eventMembershipErrors[record.eventId] ? (
+                      <p className="form-error">{eventMembershipErrors[record.eventId]}</p>
+                    ) : null}
                     {!options.length ? (
                       <p className="hint">No memberships are linked to this event yet.</p>
                     ) : null}
@@ -591,22 +664,34 @@ export function AttendeeFormModal({
               {contextEventId &&
               contextEvent &&
               !sortedEventRecords.some((record) => record.eventId === contextEventId) ? (
+                (() => {
+                  const options = membershipsByEventId.get(contextEventId) ?? [];
+                  const selected = eventMemberships[contextEventId] ?? options[0]?.id ?? '';
+                  return (
                 <label className="field">
-                  <span className="field-label">{eventLabel(contextEvent)}</span>
+                  <span className="field-label">
+                    {eventLabel(contextEvent)} <span className="required-mark">*</span>
+                  </span>
                   <select
                     className="field-input"
-                    value={eventMemberships[contextEventId] ?? ''}
+                    value={selected}
                     onChange={(e) => updateEventMembership(contextEventId, e.target.value)}
+                    required
+                    disabled={!options.length}
                   >
-                    <option value="">No membership assigned</option>
-                    {(membershipsByEventId.get(contextEventId) ?? []).map((membership) => (
+                    {options.map((membership) => (
                       <option key={membership.id} value={membership.id}>
                         {membership.name}
                         {membership.price != null ? ` ($${membership.price})` : ''}
                       </option>
                     ))}
                   </select>
+                  {eventMembershipErrors[contextEventId] ? (
+                    <p className="form-error">{eventMembershipErrors[contextEventId]}</p>
+                  ) : null}
                 </label>
+                  );
+                })()
               ) : null}
             </fieldset>
           )}
