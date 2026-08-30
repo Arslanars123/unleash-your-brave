@@ -104,19 +104,6 @@ function isOptionalUrl(value: string): boolean {
   return false;
 }
 
-function validateEventMemberships(
-  eventMemberships: Record<string, string>,
-  requiredEventIds: string[],
-): Record<string, string> {
-  const errors: Record<string, string> = {};
-  for (const eventId of requiredEventIds) {
-    if (!eventMemberships[eventId]?.trim()) {
-      errors[eventId] = 'Membership is required';
-    }
-  }
-  return errors;
-}
-
 function validate(values: AttendeeFormValues, mode: 'create' | 'edit'): FieldErrors {
   const errors: FieldErrors = {};
 
@@ -131,8 +118,6 @@ function validate(values: AttendeeFormValues, mode: 'create' | 'edit'): FieldErr
   if (mode === 'create') {
     if (!values.eventId) errors.eventId = 'Event is required';
     if (!values.membershipId) errors.membershipId = 'Membership is required';
-  } else if (values.password && values.password.length < 8) {
-    errors.password = 'Password must be at least 8 characters';
   }
 
   if (!isOptionalUrl(values.photoUrl)) errors.photoUrl = 'Enter a valid URL';
@@ -172,14 +157,10 @@ export function toCreatePayload(values: AttendeeFormValues): CreateUserPayload {
   };
 }
 
-export function toUpdatePayload(
-  values: AttendeeFormValues,
-  eventMemberships?: Record<string, string>,
-): UpdateUserPayload {
-  const payload: UpdateUserPayload = {
+export function toUpdatePayload(values: AttendeeFormValues): UpdateUserPayload {
+  return {
     email: values.email.trim().toLowerCase(),
     name: values.fullName.trim(),
-    ...(values.password ? { password: values.password } : {}),
     status: values.status,
     photoUrl: values.photoUrl.trim(),
     title: values.title.trim(),
@@ -197,16 +178,6 @@ export function toUpdatePayload(
     points: Number(values.points) || 0,
     profileCompleted: values.profileCompleted,
   };
-
-  if (eventMemberships && Object.keys(eventMemberships).length > 0) {
-    payload.eventMemberships = Object.entries(eventMemberships)
-      .filter(([, membershipId]) => membershipId.trim())
-      .map(([eventId, membershipId]) => ({ eventId, membershipId }));
-  } else {
-    payload.membershipId = values.membershipId || null;
-  }
-
-  return payload;
 }
 
 function ValuesListField({
@@ -328,7 +299,6 @@ export function AttendeeFormModal({
 }: AttendeeFormModalProps) {
   const [values, setValues] = useState<AttendeeFormValues>(emptyForm);
   const [eventMemberships, setEventMemberships] = useState<Record<string, string>>({});
-  const [eventMembershipErrors, setEventMembershipErrors] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [committingPhoto, setCommittingPhoto] = useState(false);
@@ -380,7 +350,6 @@ export function AttendeeFormModal({
     if (!open) return;
     setSubmitted(false);
     setErrors({});
-    setEventMembershipErrors({});
     setEventMemberships({});
     if (initialUser) {
       setValues(userToForm(initialUser));
@@ -441,15 +410,6 @@ export function AttendeeFormModal({
 
   if (!open) return null;
 
-  function resolveEventMemberships(): Record<string, string> {
-    return Object.fromEntries(
-      visibleEditEventIds.map((eventId) => {
-        const options = membershipsByEventId.get(eventId) ?? [];
-        return [eventId, eventMemberships[eventId]?.trim() || options[0]?.id || ''];
-      }),
-    );
-  }
-
   function update<K extends keyof AttendeeFormValues>(key: K, value: AttendeeFormValues[K]) {
     setValues((current) => {
       const next = { ...current, [key]: value };
@@ -480,31 +440,12 @@ export function AttendeeFormModal({
 
     const nextValues = { ...values, photoUrl };
     setValues(nextValues);
-    const resolvedEventMemberships = mode === 'edit' ? resolveEventMemberships() : {};
     const nextErrors = validate(nextValues, mode);
-    const nextMembershipErrors =
-      mode === 'edit'
-        ? validateEventMemberships(resolvedEventMemberships, visibleEditEventIds)
-        : {};
     setErrors(nextErrors);
-    setEventMembershipErrors(nextMembershipErrors);
-    if (Object.keys(nextErrors).length > 0 || Object.keys(nextMembershipErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) return;
     await onSubmit(
-      mode === 'create'
-        ? toCreatePayload(nextValues)
-        : toUpdatePayload(nextValues, resolvedEventMemberships),
+      mode === 'create' ? toCreatePayload(nextValues) : toUpdatePayload(nextValues),
     );
-  }
-
-  function updateEventMembership(eventId: string, membershipId: string) {
-    if (!membershipId) return;
-    setEventMemberships((current) => ({ ...current, [eventId]: membershipId }));
-    if (submitted) {
-      setEventMembershipErrors(validateEventMemberships(
-        { ...eventMemberships, [eventId]: membershipId },
-        visibleEditEventIds,
-      ));
-    }
   }
 
   return (
@@ -553,17 +494,7 @@ export function AttendeeFormModal({
             <p className="hint" style={{ marginTop: -4 }}>
               No password needed — they get an invite code by email (same as checkout).
             </p>
-          ) : (
-            <Input
-              label="password (leave blank to keep)"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              value={values.password}
-              error={errors.password}
-              onChange={(e) => update('password', e.target.value)}
-            />
-          )}
+          ) : null}
 
           {mode === 'create' ? (
             <label className="field">
@@ -626,6 +557,10 @@ export function AttendeeFormModal({
           ) : (
             <fieldset className="schedule-fieldset">
               <legend>Memberships by event</legend>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Membership is read-only here. Changes are made through checkout or when creating
+                the attendee.
+              </p>
               {editMembershipsLoading ? <p className="hint">Loading event memberships…</p> : null}
               {!editMembershipsLoading && sortedEventRecords.length === 0 ? (
                 <p className="hint">No paid event memberships recorded yet.</p>
@@ -635,15 +570,11 @@ export function AttendeeFormModal({
                 const selected = eventMemberships[record.eventId] ?? options[0]?.id ?? '';
                 return (
                   <label key={record.eventId} className="field">
-                    <span className="field-label">
-                      {eventRecordLabel(record)} <span className="required-mark">*</span>
-                    </span>
+                    <span className="field-label">{eventRecordLabel(record)}</span>
                     <select
                       className="field-input"
                       value={selected}
-                      onChange={(e) => updateEventMembership(record.eventId, e.target.value)}
-                      required
-                      disabled={!options.length}
+                      disabled
                     >
                       {options.map((membership) => (
                         <option key={membership.id} value={membership.id}>
@@ -652,9 +583,6 @@ export function AttendeeFormModal({
                         </option>
                       ))}
                     </select>
-                    {eventMembershipErrors[record.eventId] ? (
-                      <p className="form-error">{eventMembershipErrors[record.eventId]}</p>
-                    ) : null}
                     {!options.length ? (
                       <p className="hint">No memberships are linked to this event yet.</p>
                     ) : null}
@@ -669,16 +597,8 @@ export function AttendeeFormModal({
                   const selected = eventMemberships[contextEventId] ?? options[0]?.id ?? '';
                   return (
                 <label className="field">
-                  <span className="field-label">
-                    {eventLabel(contextEvent)} <span className="required-mark">*</span>
-                  </span>
-                  <select
-                    className="field-input"
-                    value={selected}
-                    onChange={(e) => updateEventMembership(contextEventId, e.target.value)}
-                    required
-                    disabled={!options.length}
-                  >
+                  <span className="field-label">{eventLabel(contextEvent)}</span>
+                  <select className="field-input" value={selected} disabled>
                     {options.map((membership) => (
                       <option key={membership.id} value={membership.id}>
                         {membership.name}
@@ -686,9 +606,6 @@ export function AttendeeFormModal({
                       </option>
                     ))}
                   </select>
-                  {eventMembershipErrors[contextEventId] ? (
-                    <p className="form-error">{eventMembershipErrors[contextEventId]}</p>
-                  ) : null}
                 </label>
                   );
                 })()
