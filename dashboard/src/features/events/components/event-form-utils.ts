@@ -206,7 +206,7 @@ export const emptyForm: EventFormValues = {
   latitude: null,
   longitude: null,
   coverImage: '',
-  copyDetailsFromPrevious: true,
+  copyDetailsFromPrevious: false,
   paused: false,
   published: true,
   notifyAttendees: true,
@@ -244,7 +244,7 @@ export function eventToForm(event: PublicEvent): EventFormValues {
     latitude: event.latitude ?? null,
     longitude: event.longitude ?? null,
     coverImage: event.coverImage,
-    copyDetailsFromPrevious: true,
+    copyDetailsFromPrevious: false,
     paused: Boolean(event.paused) || event.status === 'paused',
     published: event.published !== false,
     notifyAttendees: true,
@@ -270,7 +270,7 @@ export function scheduleBlankForm(previous: PublicEvent | null): EventFormValues
     latitude: previous.latitude ?? null,
     longitude: previous.longitude ?? null,
     coverImage: previous.coverImage,
-    copyDetailsFromPrevious: true,
+    copyDetailsFromPrevious: false,
     consecutiveStart: earliestStart,
     dayCount,
     days: buildConsecutiveDays(earliestStart, dayCount),
@@ -448,10 +448,9 @@ export function toEventPayload(values: EventFormValues): EventPayload {
 }
 
 export function toSchedulePayload(values: EventFormValues): ScheduleEventPayload {
-  const copy = values.copyDetailsFromPrevious;
   return {
     days: toDaysPayload(values),
-    copyDetailsFromPrevious: copy,
+    copyDetailsFromPrevious: false,
     tagline: values.tagline.trim(),
     description: values.description.trim(),
     venueName: values.venueName.trim(),

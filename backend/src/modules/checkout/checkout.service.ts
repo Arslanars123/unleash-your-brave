@@ -23,6 +23,7 @@ import type { CheckInRepository } from '../../db/repositories/mongo-checkin.repo
 import type { StoreOrderRepository } from '../store/store-order.repository.js';
 import type { UserRepository } from '../users/user.repository.js';
 import type { UserService } from '../users/user.service.js';
+import type { PublicUser } from '../users/user.types.js';
 import { toPublicMembershipPurchase } from './purchase.mapper.js';
 import type { MembershipPurchaseRepository } from './purchase.repository.js';
 import type {
@@ -658,6 +659,24 @@ export class CheckoutService {
       renewals: renewals.map(toPublicMembershipPurchase),
       latestPurchase: latest ? toPublicMembershipPurchase(latest) : null,
     };
+  }
+
+  async enrichUsersWithEventMembership(
+    users: PublicUser[],
+    eventId: string,
+  ): Promise<PublicUser[]> {
+    if (users.length === 0) return users;
+    const enriched = await Promise.all(
+      users.map(async (user) => {
+        const summary = await this.getAttendeePurchaseSummary(user.id, eventId);
+        return {
+          ...user,
+          eventMembershipId: summary.currentMembershipId,
+          eventMembershipName: summary.currentMembershipName,
+        };
+      }),
+    );
+    return enriched;
   }
 
   async getAttendeeEventRecords(userId: string): Promise<AttendeeEventRecord[]> {

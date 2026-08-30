@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import type {
+  AttendeeEventRecord,
   CreateUserPayload,
   NetworkingPref,
   PublicEvent,
@@ -14,6 +16,8 @@ import { Input } from '@/shared/ui/Input';
 import { MediaImageField, type MediaImageFieldHandle } from '@/shared/ui/MediaImageField';
 import { TextArea } from '@/shared/ui/TextArea';
 import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
+import { membershipsApi } from '@/features/memberships/api/memberships-api';
+import { usersApi } from '@/features/users/api/users-api';
 import { ATTENDEE_UI } from '@/features/users/attendee-ui-flags';
 
 export interface AttendeeFormValues {
@@ -155,8 +159,11 @@ export function toCreatePayload(values: AttendeeFormValues): CreateUserPayload {
   };
 }
 
-export function toUpdatePayload(values: AttendeeFormValues): UpdateUserPayload {
-  return {
+export function toUpdatePayload(
+  values: AttendeeFormValues,
+  eventMemberships?: Record<string, string>,
+): UpdateUserPayload {
+  const payload: UpdateUserPayload = {
     email: values.email.trim().toLowerCase(),
     name: values.fullName.trim(),
     ...(values.password ? { password: values.password } : {}),
@@ -176,8 +183,17 @@ export function toUpdatePayload(values: AttendeeFormValues): UpdateUserPayload {
     isVip: values.isVip,
     points: Number(values.points) || 0,
     profileCompleted: values.profileCompleted,
-    membershipId: values.membershipId || null,
   };
+
+  if (eventMemberships && Object.keys(eventMemberships).length > 0) {
+    payload.eventMemberships = Object.entries(eventMemberships)
+      .filter(([, membershipId]) => membershipId.trim())
+      .map(([eventId, membershipId]) => ({ eventId, membershipId }));
+  } else {
+    payload.membershipId = values.membershipId || null;
+  }
+
+  return payload;
 }
 
 function ValuesListField({
@@ -252,6 +268,9 @@ interface AttendeeFormModalProps {
   initialUser?: PublicUser | null;
   events?: PublicEvent[];
   defaultEventId?: string;
+  /** Edition filter active when opening edit — shown first in membership list. */
+  contextEventId?: string;
+  contextEvent?: PublicEvent | null;
   memberships?: PublicMembership[];
   membershipsLoading?: boolean;
   loading?: boolean;
@@ -260,12 +279,33 @@ interface AttendeeFormModalProps {
   onSubmit: (payload: CreateUserPayload | UpdateUserPayload) => Promise<void> | void;
 }
 
+function eventRecordLabel(record: AttendeeEventRecord): string {
+  return `${record.eventName} (${formatEditionRange({
+    startDate: record.eventStartDate,
+    endDate: record.eventEndDate,
+  })})`;
+}
+
+function eventLabel(event: PublicEvent): string {
+  return `${event.name} (${formatEditionRange(event)}${
+    event.status === 'live'
+      ? ', live'
+      : event.status === 'upcoming'
+        ? ', upcoming'
+        : event.status === 'ended'
+          ? ', past'
+          : ''
+  })`;
+}
+
 export function AttendeeFormModal({
   open,
   mode,
   initialUser,
   events = [],
   defaultEventId,
+  contextEventId,
+  contextEvent,
   memberships = [],
   membershipsLoading = false,
   loading = false,
@@ -274,15 +314,59 @@ export function AttendeeFormModal({
   onSubmit,
 }: AttendeeFormModalProps) {
   const [values, setValues] = useState<AttendeeFormValues>(emptyForm);
+  const [eventMemberships, setEventMemberships] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [committingPhoto, setCommittingPhoto] = useState(false);
   const photoRef = useRef<MediaImageFieldHandle>(null);
 
+  const eventRecordsQuery = useQuery({
+    queryKey: ['users', 'event-records', initialUser?.id],
+    enabled: open && mode === 'edit' && Boolean(initialUser?.id),
+    queryFn: () => usersApi.getEventRecords(initialUser!.id),
+  });
+
+  const editEventIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const record of eventRecordsQuery.data ?? []) ids.add(record.eventId);
+    if (contextEventId) ids.add(contextEventId);
+    return [...ids];
+  }, [eventRecordsQuery.data, contextEventId]);
+
+  const membershipQueries = useQueries({
+    queries: editEventIds.map((eventId) => ({
+      queryKey: ['memberships', 'list', eventId, 'attendee-edit'],
+      queryFn: () => membershipsApi.list({ eventId, perPage: 100 }),
+      enabled: open && mode === 'edit',
+    })),
+  });
+
+  const membershipsByEventId = useMemo(() => {
+    const map = new Map<string, PublicMembership[]>();
+    editEventIds.forEach((eventId, index) => {
+      map.set(eventId, membershipQueries[index]?.data?.items ?? []);
+    });
+    return map;
+  }, [editEventIds, membershipQueries]);
+
+  const sortedEventRecords = useMemo(() => {
+    const records = [...(eventRecordsQuery.data ?? [])];
+    records.sort((a, b) => {
+      if (contextEventId) {
+        const aMatch = a.eventId === contextEventId ? 0 : 1;
+        const bMatch = b.eventId === contextEventId ? 0 : 1;
+        if (aMatch !== bMatch) return aMatch - bMatch;
+      }
+      return new Date(b.eventStartDate).getTime() - new Date(a.eventStartDate).getTime();
+    });
+    return records;
+  }, [eventRecordsQuery.data, contextEventId]);
+
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
     setErrors({});
+    setEventMemberships({});
     if (initialUser) {
       setValues(userToForm(initialUser));
     } else {
@@ -293,6 +377,20 @@ export function AttendeeFormModal({
     // Intentionally only reset when opening / switching user.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialUser]);
+
+  useEffect(() => {
+    if (!open || mode !== 'edit' || !eventRecordsQuery.data) return;
+    const next: Record<string, string> = {};
+    for (const record of eventRecordsQuery.data) {
+      if (record.summary.currentMembershipId) {
+        next[record.eventId] = record.summary.currentMembershipId;
+      }
+    }
+    if (contextEventId && !next[contextEventId] && initialUser?.membershipId) {
+      next[contextEventId] = initialUser.membershipId;
+    }
+    setEventMemberships(next);
+  }, [open, mode, eventRecordsQuery.data, contextEventId, initialUser?.membershipId]);
 
   if (!open) return null;
 
@@ -329,7 +427,18 @@ export function AttendeeFormModal({
     const nextErrors = validate(nextValues, mode);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(mode === 'create' ? toCreatePayload(nextValues) : toUpdatePayload(nextValues));
+    await onSubmit(
+      mode === 'create'
+        ? toCreatePayload(nextValues)
+        : toUpdatePayload(nextValues, eventMemberships),
+    );
+  }
+
+  const editMembershipsLoading =
+    eventRecordsQuery.isLoading || membershipQueries.some((query) => query.isLoading);
+
+  function updateEventMembership(eventId: string, membershipId: string) {
+    setEventMemberships((current) => ({ ...current, [eventId]: membershipId }));
   }
 
   return (
@@ -420,37 +529,87 @@ export function AttendeeFormModal({
             </label>
           ) : null}
 
-          <label className="field">
-            <span className="field-label">
-              Membership{mode === 'create' ? <span className="required-mark"> *</span> : null}
-            </span>
-            <select
-              className="field-input"
-              value={values.membershipId}
-              onChange={(e) => update('membershipId', e.target.value)}
-              disabled={mode === 'create' && !values.eventId}
-              required={mode === 'create'}
-            >
-              <option value="">
-                {mode === 'create'
-                  ? values.eventId
-                    ? 'Select membership'
-                    : 'Select an event first'
-                  : 'No membership assigned'}
-              </option>
-              {memberships.map((membership) => (
-                <option key={membership.id} value={membership.id}>
-                  {membership.name}
-                  {membership.price != null ? ` ($${membership.price})` : ''}
+          {mode === 'create' ? (
+            <label className="field">
+              <span className="field-label">
+                Membership <span className="required-mark">*</span>
+              </span>
+              <select
+                className="field-input"
+                value={values.membershipId}
+                onChange={(e) => update('membershipId', e.target.value)}
+                disabled={!values.eventId}
+                required
+              >
+                <option value="">
+                  {values.eventId ? 'Select membership' : 'Select an event first'}
                 </option>
-              ))}
-            </select>
-            {membershipsLoading ? <p className="hint">Loading memberships…</p> : null}
-            {mode === 'create' && values.eventId && !membershipsLoading && memberships.length === 0 ? (
-              <p className="hint">No memberships are linked to this event yet.</p>
-            ) : null}
-            {errors.membershipId ? <p className="form-error">{errors.membershipId}</p> : null}
-          </label>
+                {memberships.map((membership) => (
+                  <option key={membership.id} value={membership.id}>
+                    {membership.name}
+                    {membership.price != null ? ` ($${membership.price})` : ''}
+                  </option>
+                ))}
+              </select>
+              {membershipsLoading ? <p className="hint">Loading memberships…</p> : null}
+              {values.eventId && !membershipsLoading && memberships.length === 0 ? (
+                <p className="hint">No memberships are linked to this event yet.</p>
+              ) : null}
+              {errors.membershipId ? <p className="form-error">{errors.membershipId}</p> : null}
+            </label>
+          ) : (
+            <fieldset className="schedule-fieldset">
+              <legend>Memberships by event</legend>
+              {editMembershipsLoading ? <p className="hint">Loading event memberships…</p> : null}
+              {!editMembershipsLoading && sortedEventRecords.length === 0 ? (
+                <p className="hint">No paid event memberships recorded yet.</p>
+              ) : null}
+              {sortedEventRecords.map((record) => {
+                const options = membershipsByEventId.get(record.eventId) ?? [];
+                return (
+                  <label key={record.eventId} className="field">
+                    <span className="field-label">{eventRecordLabel(record)}</span>
+                    <select
+                      className="field-input"
+                      value={eventMemberships[record.eventId] ?? ''}
+                      onChange={(e) => updateEventMembership(record.eventId, e.target.value)}
+                    >
+                      <option value="">No membership assigned</option>
+                      {options.map((membership) => (
+                        <option key={membership.id} value={membership.id}>
+                          {membership.name}
+                          {membership.price != null ? ` ($${membership.price})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {!options.length ? (
+                      <p className="hint">No memberships are linked to this event yet.</p>
+                    ) : null}
+                  </label>
+                );
+              })}
+              {contextEventId &&
+              contextEvent &&
+              !sortedEventRecords.some((record) => record.eventId === contextEventId) ? (
+                <label className="field">
+                  <span className="field-label">{eventLabel(contextEvent)}</span>
+                  <select
+                    className="field-input"
+                    value={eventMemberships[contextEventId] ?? ''}
+                    onChange={(e) => updateEventMembership(contextEventId, e.target.value)}
+                  >
+                    <option value="">No membership assigned</option>
+                    {(membershipsByEventId.get(contextEventId) ?? []).map((membership) => (
+                      <option key={membership.id} value={membership.id}>
+                        {membership.name}
+                        {membership.price != null ? ` ($${membership.price})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </fieldset>
+          )}
 
           <MediaImageField
             ref={photoRef}

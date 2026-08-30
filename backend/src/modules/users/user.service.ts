@@ -863,12 +863,16 @@ export class UserService {
       input.speakerId !== undefined ? input.speakerId : existing.speakerId;
     const sponsorId =
       input.sponsorId !== undefined ? input.sponsorId : existing.sponsorId;
-    const membershipId =
+    let membershipId =
       input.membershipId !== undefined
         ? input.membershipId
         : role === 'admin'
           ? null
           : existing.membershipId;
+
+    if (input.eventMemberships?.length) {
+      membershipId = await this.applyEventMembershipUpdates(existing, input.eventMemberships);
+    }
 
     if (role === 'speaker' && !speakerId) {
       throw new BadRequestError('Speaker accounts must link a speaker profile');
@@ -885,7 +889,7 @@ export class UserService {
       await this.assertProfileLinks(speakerId, sponsorId);
     }
 
-    if (input.membershipId !== undefined || input.role !== undefined) {
+    if (input.membershipId !== undefined || input.role !== undefined || input.eventMemberships?.length) {
       await this.assertMembership(role === 'admin' ? null : membershipId);
     }
 
@@ -912,7 +916,7 @@ export class UserService {
             sponsorId: role === 'admin' ? null : sponsorId,
           }
         : {}),
-      ...(input.membershipId !== undefined || input.role !== undefined
+      ...(input.membershipId !== undefined || input.role !== undefined || input.eventMemberships?.length
         ? { membershipId: role === 'admin' ? null : membershipId }
         : {}),
       ...(input.membershipStatus !== undefined
@@ -946,7 +950,90 @@ export class UserService {
         : {}),
     });
     if (!updated) throw new NotFoundError('User');
+
+    if (input.eventMemberships?.length) {
+      this.realtimeHub?.publish({
+        type: 'attendee.upserted',
+        payload: {
+          id: updated.id,
+          email: updated.email,
+          name: updated.name,
+          membershipUpdated: true,
+        },
+      });
+    }
+
     return toPublicUser(updated);
+  }
+
+  /**
+   * Admin assigns or changes membership for one or more editions by appending paid purchase records.
+   * Returns the membership id that should be stored on the user account (last update applied).
+   */
+  private async applyEventMembershipUpdates(
+    user: User,
+    updates: Array<{ eventId: string; membershipId: string }>,
+  ): Promise<string | null> {
+    if (!this.purchases || !this.membershipService || !this.events) {
+      throw new BadRequestError('Event membership updates are not configured');
+    }
+
+    let lastMembershipId: string | null = user.membershipId;
+
+    for (const { eventId, membershipId } of updates) {
+      await this.events.requireEvent(eventId);
+      await this.membershipService.assertLinkedToEvent(membershipId, eventId);
+      const membership = await this.membershipService.requireMembership(membershipId);
+
+      const paidForEvent = (await this.purchases.listByUserId(user.id)).filter(
+        (purchase) => purchase.eventId === eventId && purchase.paymentStatus === 'paid',
+      );
+      const latest = paidForEvent[paidForEvent.length - 1] ?? null;
+
+      if (latest?.membershipId === membershipId) {
+        lastMembershipId = membershipId;
+        continue;
+      }
+
+      const period = computeMembershipPeriod({ membership });
+      const kind = latest ? 'upgrade' : 'purchase';
+
+      await this.purchases.create({
+        eventId,
+        userId: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        membershipId: membership.id,
+        membershipName: membership.name,
+        price: 0,
+        currency: 'usd',
+        couponCode: null,
+        couponId: null,
+        originalPrice: membership.price,
+        discountAmount: membership.price,
+        kind,
+        previousMembershipId: latest?.membershipId ?? null,
+        previousMembershipName: latest?.membershipName ?? null,
+        paymentStatus: 'paid',
+        stripeCheckoutSessionId: `admin-membership-${randomUUID()}`,
+        stripePaymentIntentId: null,
+        stripeCustomerId: null,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        purchasedAt: new Date(),
+      });
+
+      lastMembershipId = membershipId;
+
+      await this.users.update(user.id, {
+        membershipId: membership.id,
+        membershipStatus: period.membershipStatus,
+        membershipExpiresAt: period.periodEnd,
+      });
+    }
+
+    return lastMembershipId;
   }
 
   async delete(id: string): Promise<void> {

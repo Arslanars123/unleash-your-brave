@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Eye, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
 import { usersApi } from '@/features/users/api/users-api';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
@@ -42,11 +42,7 @@ export function UsersPage() {
     setPage(1);
   }, [eventId]);
 
-  const membershipEventId = modalOpen
-    ? editing
-      ? undefined
-      : formEventId
-    : eventId;
+  const membershipEventId = modalOpen && !editing ? formEventId : undefined;
 
   const membershipsQuery = useQuery({
     queryKey: ['memberships', 'list', membershipEventId ?? 'library', 'attendee-form'],
@@ -55,8 +51,21 @@ export function UsersPage() {
         perPage: 100,
         ...(membershipEventId ? { eventId: membershipEventId } : {}),
       }),
-    enabled: modalOpen,
+    enabled: modalOpen && !editing,
   });
+
+  const allMembershipsQuery = useQuery({
+    queryKey: ['memberships', 'list', 'all', 'attendee-table'],
+    queryFn: () => membershipsApi.list({ perPage: 100 }),
+  });
+
+  const membershipNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const membership of allMembershipsQuery.data?.items ?? []) {
+      map.set(membership.id, membership.name);
+    }
+    return map;
+  }, [allMembershipsQuery.data?.items]);
 
   const usersQuery = useQuery({
     queryKey: ['users', 'list', 'attendees', eventId ?? 'all', search, page],
@@ -95,10 +104,13 @@ export function UsersPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateUserPayload }) =>
       usersApi.update(id, payload),
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['users', 'list'] }),
         queryClient.invalidateQueries({ queryKey: ['users', 'stats'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['users', 'event-records', variables.id],
+        }),
       ]);
       toast.success('Attendee updated');
       closeModal();
@@ -221,6 +233,12 @@ export function UsersPage() {
   const saving = createMutation.isPending || updateMutation.isPending;
   const memberships = membershipsQuery.data?.items ?? [];
 
+  function membershipLabel(user: PublicUser): string {
+    if (eventId) return user.eventMembershipName || '—';
+    if (user.membershipId) return membershipNameById.get(user.membershipId) || '—';
+    return '—';
+  }
+
   return (
     <div className="page">
       <header className="page-header">
@@ -313,7 +331,7 @@ export function UsersPage() {
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Title</th>
+                  <th>Membership</th>
                   <th>Email</th>
                   {ATTENDEE_UI.showIsVip ? <th>VIP</th> : null}
                   {ATTENDEE_UI.showPoints ? <th>Points</th> : null}
@@ -347,7 +365,7 @@ export function UsersPage() {
                         </div>
                       </div>
                     </td>
-                    <td>{user.title || '—'}</td>
+                    <td>{membershipLabel(user)}</td>
                     <td>{user.email}</td>
                     {ATTENDEE_UI.showIsVip ? <td>{user.isVip ? 'Yes' : '—'}</td> : null}
                     {ATTENDEE_UI.showPoints ? <td>{user.points ?? 0}</td> : null}
@@ -427,6 +445,8 @@ export function UsersPage() {
         initialUser={editing}
         events={editions}
         defaultEventId={formEventId}
+        contextEventId={eventId}
+        contextEvent={selectedEdition}
         memberships={memberships}
         membershipsLoading={membershipsQuery.isLoading}
         loading={saving}

@@ -54,7 +54,7 @@ export function EventFormDetailsStep({
 }: EventFormDetailsStepProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isSchedule = mode === 'schedule';
-  const showDetails = !isSchedule || !values.copyDetailsFromPrevious || !initialEvent;
+  const showDetails = true;
   const editingEventId = !isSchedule ? initialEvent?.id ?? null : null;
   const dayDates = resolvedDays(values)
     .map((day) => day.date)
@@ -204,24 +204,6 @@ export function EventFormDetailsStep({
           {!isSchedule ? ' or pause/resume' : ' (new edition announced)'}
         </span>
       </label>
-
-      {isSchedule && initialEvent ? (
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={values.copyDetailsFromPrevious}
-            onChange={(e) => update('copyDetailsFromPrevious', e.target.checked)}
-          />
-          <span>Copy tagline, venue, and cover from the previous edition</span>
-        </label>
-      ) : null}
-
-      {!showDetails && errors.coverImage ? (
-        <p className="form-error">
-          Cover image from the previous edition is invalid. Uncheck “Copy…from previous edition”
-          above and add a new cover, or clear the previous edition cover first.
-        </p>
-      ) : null}
 
       {showDetails ? (
         <>

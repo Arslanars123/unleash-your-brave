@@ -23,7 +23,10 @@ export class UserController {
       }
       // filter === 'all': no purchase-based id filtering
     }
-    const { items, total } = await this.service.list(query);
+    let { items, total } = await this.service.list(query);
+    if (query.eventId) {
+      items = await this.checkout.enrichUsersWithEventMembership(items, query.eventId);
+    }
     sendPaginated(res, items, buildPaginationMeta(query.page, query.perPage, total));
   };
 

@@ -162,6 +162,14 @@ export const updateUserSchema = z
     isVip: z.boolean().optional(),
     points: z.coerce.number().int().min(0).max(1_000_000).optional(),
     profileCompleted: z.boolean().optional(),
+    eventMemberships: z
+      .array(
+        z.object({
+          eventId: z.string().uuid(),
+          membershipId: z.string().uuid(),
+        }),
+      )
+      .optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to update',

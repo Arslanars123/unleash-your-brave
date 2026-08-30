@@ -153,6 +153,9 @@ export interface PublicUser {
   lastName: string;
   createdAt: string;
   updatedAt: string;
+  /** Present when listing attendees filtered by edition. */
+  eventMembershipId?: string | null;
+  eventMembershipName?: string | null;
 }
 
 export interface CreateUserInput {
@@ -218,6 +221,8 @@ export interface UpdateUserInput {
   isVip?: boolean;
   points?: number;
   profileCompleted?: boolean;
+  /** Admin: set or change paid membership for specific editions. */
+  eventMemberships?: Array<{ eventId: string; membershipId: string }>;
 }
 
 export interface ListUsersQuery {

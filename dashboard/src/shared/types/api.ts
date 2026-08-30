@@ -50,6 +50,9 @@ export interface PublicUser {
   lastName?: string;
   createdAt: string;
   updatedAt: string;
+  /** Set when listing attendees filtered by edition. */
+  eventMembershipId?: string | null;
+  eventMembershipName?: string | null;
 }
 
 export interface CreateUserPayload {
@@ -108,6 +111,7 @@ export interface UpdateUserPayload {
   isVip?: boolean;
   points?: number;
   profileCompleted?: boolean;
+  eventMemberships?: Array<{ eventId: string; membershipId: string }>;
 }
 
 export interface TokenPair {
