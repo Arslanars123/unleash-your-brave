@@ -457,6 +457,7 @@ export interface EventPayload {
 }
 
 export interface ScheduleEventPayload {
+  name?: string;
   days: EventDayPayload[];
   tagline?: string;
   description?: string;

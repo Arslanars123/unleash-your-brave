@@ -201,6 +201,7 @@ export const updateEventSchema = z
 
 export const scheduleEventSchema = z
   .object({
+    name: z.string().trim().min(2).max(160).optional(),
     days: z.array(eventDaySchema).min(1, 'Add at least one event day').max(60),
     tagline: optionalText,
     description: optionalLongText,

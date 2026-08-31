@@ -5,7 +5,7 @@ import { logger } from '../../core/logger.js';
 import type { AnnouncementService } from '../announcements/announcement.service.js';
 import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventRepository, PaginatedResult } from './event.repository.js';
-import { CANONICAL_EVENT_NAME } from './event.constants.js';
+import { CANONICAL_EVENT_NAME, resolveEventName } from './event.constants.js';
 import {
   editionStatus,
   pickChronologicallyLastEvent,
@@ -265,6 +265,13 @@ export class EventService {
     };
 
     const created = await this.createEdition({
+      name: resolveEventName(
+        input.name?.trim()
+          ? input.name
+          : copy
+            ? previous?.name
+            : undefined,
+      ),
       days: days.map((day) => ({
         dayNumber: day.dayNumber,
         date: day.date.toISOString(),
@@ -362,7 +369,7 @@ export class EventService {
     }
 
     const updated = await this.events.update(id, {
-      name: CANONICAL_EVENT_NAME,
+      ...(input.name !== undefined ? { name: resolveEventName(input.name) } : {}),
       ...(input.tagline !== undefined ? { tagline: input.tagline } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(shouldRebuildDays
@@ -448,7 +455,7 @@ export class EventService {
     });
 
     const created = await this.events.create({
-      name: CANONICAL_EVENT_NAME,
+      name: resolveEventName(input.name),
       tagline: input.tagline ?? '',
       description: input.description ?? '',
       days,

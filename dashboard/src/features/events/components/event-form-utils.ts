@@ -231,7 +231,7 @@ export function eventToForm(event: PublicEvent): EventFormValues {
   const consecutive = areConsecutive(dates);
 
   return {
-    name: CANONICAL_EVENT_NAME,
+    name: event.name?.trim() || CANONICAL_EVENT_NAME,
     tagline: event.tagline,
     description: event.description,
     scheduleMode: consecutive ? 'consecutive' : 'custom',
@@ -262,6 +262,7 @@ export function scheduleBlankForm(previous: PublicEvent | null): EventFormValues
 
   return {
     ...emptyForm,
+    name: previous.name?.trim() || CANONICAL_EVENT_NAME,
     tagline: previous.tagline,
     description: previous.description,
     venueName: previous.venueName,
@@ -300,6 +301,9 @@ export function validateEventForm(
   const dayDates = resolvedDays(values)
     .map((day) => day.date)
     .filter(Boolean);
+
+  if (!values.name.trim()) errors.name = 'Name is required';
+  else if (values.name.trim().length < 2) errors.name = 'Name must be at least 2 characters';
 
   if (values.scheduleMode === 'consecutive') {
     if (!values.consecutiveStart) errors.consecutiveStart = 'Start date is required';
@@ -428,7 +432,7 @@ function toDaysPayload(values: EventFormValues) {
 
 export function toEventPayload(values: EventFormValues): EventPayload {
   return {
-    name: CANONICAL_EVENT_NAME,
+    name: values.name.trim(),
     tagline: values.tagline.trim(),
     description: values.description.trim(),
     days: toDaysPayload(values),
@@ -449,6 +453,7 @@ export function toEventPayload(values: EventFormValues): EventPayload {
 
 export function toSchedulePayload(values: EventFormValues): ScheduleEventPayload {
   return {
+    name: values.name.trim(),
     days: toDaysPayload(values),
     copyDetailsFromPrevious: false,
     tagline: values.tagline.trim(),

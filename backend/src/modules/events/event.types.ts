@@ -145,6 +145,7 @@ export interface CreateEventInput {
 
 /** Dedicated “Schedule new event” payload — new edition with new dates. */
 export interface ScheduleEventInput {
+  name?: string;
   days: EventDayInput[];
   tagline?: string;
   description?: string;
@@ -171,6 +172,7 @@ export interface ScheduleEventInput {
 }
 
 export interface UpdateEventInput {
+  name?: string;
   tagline?: string;
   description?: string;
   days?: EventDayInput[];

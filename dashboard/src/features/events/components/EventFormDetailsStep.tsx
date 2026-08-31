@@ -1,6 +1,5 @@
 import { useRef } from 'react';
 import { ImagePlus, Plus, Trash2 } from 'lucide-react';
-import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
 import { VenuePlacesField } from '@/features/events/components/VenuePlacesField';
 import { formatUsDateInputValue } from '@/shared/lib/datetime';
 import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
@@ -161,7 +160,15 @@ export function EventFormDetailsStep({
 
   return (
     <>
-      <Input label="Name" name="name" value={CANONICAL_EVENT_NAME} readOnly disabled />
+      <Input
+        label="Name"
+        requiredMark
+        name="name"
+        value={values.name}
+        error={errors.name}
+        onChange={(e) => update('name', e.target.value)}
+        placeholder="Unleash Your Brave"
+      />
       <p className="hint" style={{ marginTop: '-0.35rem' }}>
         {isSchedule
           ? 'Creates a separate edition with its own sessions, sponsors, and store.'

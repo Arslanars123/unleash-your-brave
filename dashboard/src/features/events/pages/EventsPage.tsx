@@ -166,7 +166,7 @@ export function EventsPage() {
   async function handleDelete(edition: PublicEvent) {
     const ok = await confirm({
       title: 'Delete this event edition?',
-      message: `Permanently delete “${CANONICAL_EVENT_NAME}” (${formatEditionRange(edition)})? This removes speakers, sessions, sponsors, memberships, store items, and check-in data for this edition. Attendee accounts and purchase history are kept.`,
+      message: `Permanently delete “${edition.name}” (${formatEditionRange(edition)})? This removes speakers, sessions, sponsors, memberships, store items, and check-in data for this edition. Attendee accounts and purchase history are kept.`,
       confirmLabel: 'Delete event',
       tone: 'danger',
     });
@@ -432,7 +432,7 @@ function EventSummaryCard({
 
       <div className="event-single-body">
         <p className="field-label">Current edition</p>
-        <h2>{CANONICAL_EVENT_NAME}</h2>
+        <h2>{event.name}</h2>
         {event.tagline ? <p className="muted">{event.tagline}</p> : null}
 
         <div className="event-single-meta">
