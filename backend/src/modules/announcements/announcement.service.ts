@@ -206,6 +206,42 @@ export class AnnouncementService {
     return toPublicAnnouncement(announcement);
   }
 
+  /**
+   * Session schedule updates for purchasers of a specific edition (feed + push).
+   */
+  async publishSessionUpdateNotice(input: {
+    systemKey: string;
+    title: string;
+    description: string;
+    userIds: string[];
+  }): Promise<void> {
+    const userIds = [...new Set(input.userIds.filter(Boolean))];
+    if (userIds.length === 0) return;
+
+    const existing = await this.announcements.findBySystemKey(input.systemKey);
+    if (existing) return;
+
+    const announcement = await this.announcements.create({
+      title: input.title,
+      description: input.description,
+      kind: 'system',
+      status: 'published',
+      audienceType: 'users',
+      audienceRoles: [],
+      audienceUserIds: userIds,
+      scheduledAt: null,
+      publishedAt: new Date(),
+      sendPush: true,
+      systemKey: input.systemKey,
+    });
+
+    await this.dispatchPush(announcement);
+    logger.info(
+      { systemKey: input.systemKey, audience: userIds.length },
+      'Published session update notice',
+    );
+  }
+
   async update(id: string, input: UpdateAnnouncementInput): Promise<PublicAnnouncement> {
     const existing = await this.requireAnnouncement(id);
     if (existing.kind === 'system' && input.title === undefined && input.description === undefined) {

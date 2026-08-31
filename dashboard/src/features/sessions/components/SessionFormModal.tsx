@@ -37,6 +37,7 @@ export interface SessionFormValues {
   materials: MaterialRow[];
   membershipIds: string[];
   feedbackEnabled: boolean;
+  notifyAttendees: boolean;
 }
 
 type FieldErrors = Partial<Record<string, string>>;
@@ -64,6 +65,7 @@ const emptyForm: SessionFormValues = {
   materials: [],
   membershipIds: [],
   feedbackEnabled: true,
+  notifyAttendees: true,
 };
 
 function sessionToForm(session: PublicSession): SessionFormValues {
@@ -85,6 +87,7 @@ function sessionToForm(session: PublicSession): SessionFormValues {
     })),
     membershipIds: [...(session.membershipIds ?? [])],
     feedbackEnabled: session.feedbackEnabled ?? true,
+    notifyAttendees: true,
   };
 }
 
@@ -128,7 +131,10 @@ function validate(values: SessionFormValues): FieldErrors {
   return errors;
 }
 
-export function toSessionPayload(values: SessionFormValues): SessionPayload {
+export function toSessionPayload(
+  values: SessionFormValues,
+  options?: { includeNotify?: boolean },
+): SessionPayload {
   const isEvent = values.kind === 'event';
   return {
     kind: values.kind,
@@ -149,6 +155,7 @@ export function toSessionPayload(values: SessionFormValues): SessionPayload {
           url: material.url.trim(),
         })),
     feedbackEnabled: isEvent ? false : values.feedbackEnabled,
+    ...(options?.includeNotify ? { notifyAttendees: values.notifyAttendees } : {}),
   };
 }
 
@@ -198,6 +205,7 @@ export function SessionFormModal({
             eventDayNumber: eventDays[0] ? String(eventDays[0].dayNumber) : '',
             speakerId: speakers[0]?.id ?? '',
             feedbackEnabled: defaultKind === 'session',
+            notifyAttendees: true,
           },
     );
   }, [open, initialSession, eventDays, speakers, defaultKind]);
@@ -270,7 +278,7 @@ export function SessionFormModal({
     const nextErrors = validate(values);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    await onSubmit(toSessionPayload(values));
+    await onSubmit(toSessionPayload(values, { includeNotify: mode === 'edit' }));
   }
 
   const busy = loading || uploadingKey !== null;
@@ -556,6 +564,22 @@ export function SessionFormModal({
               </Button>
             </div>
           </fieldset>
+          ) : null}
+
+          {mode === 'edit' ? (
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={values.notifyAttendees}
+                onChange={(e) => update('notifyAttendees', e.target.checked)}
+              />
+              <span>
+                Notify attendees by push when schedule details change
+                <span className="hint" style={{ display: 'block', marginTop: '0.15rem' }}>
+                  Sent to purchasers of this edition. Skipped for materials-only edits.
+                </span>
+              </span>
+            </label>
           ) : null}
 
           <div className="modal-actions">

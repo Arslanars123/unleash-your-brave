@@ -682,6 +682,7 @@ export interface SessionPayload {
   membershipIds?: string[];
   materials?: SessionMaterialPayload[];
   feedbackEnabled?: boolean;
+  notifyAttendees?: boolean;
 }
 
 export interface PublicSessionFeedbackUser {

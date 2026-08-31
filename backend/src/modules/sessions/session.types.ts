@@ -121,6 +121,8 @@ export interface UpdateSessionInput {
   membershipIds?: string[];
   materials?: SessionMaterialInput[];
   feedbackEnabled?: boolean;
+  /** When true on admin update, notify event purchasers via push + announcements feed. */
+  notifyAttendees?: boolean;
 }
 
 export interface ListSessionsQuery {

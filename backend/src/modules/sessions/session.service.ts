@@ -1,4 +1,6 @@
+import type { AnnouncementService } from '../announcements/announcement.service.js';
 import type { EffectiveAccessService } from '../access/access.service.js';
+import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
 import { randomUUID } from 'node:crypto';
 import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
 import { formatEditionRange } from '../../core/format-date.js';
@@ -53,7 +55,72 @@ function isSessionAccessible(session: Session, membershipIds: string[]): boolean
   return membershipIds.some((id) => allowed.includes(id));
 }
 
+function formatSessionTimeRange(startTime: string, endTime: string): string {
+  const start = startTime.trim();
+  const end = endTime.trim();
+  if (start && end) return `${start} – ${end}`;
+  return start || end || '';
+}
+
+function sessionUpdateFingerprint(session: Session): string {
+  return [
+    session.name,
+    session.eventDayNumber,
+    session.startTime,
+    session.endTime,
+    session.location,
+    session.address,
+    session.description,
+    (session.membershipIds ?? []).join(','),
+  ].join('|');
+}
+
+function buildSessionChangeSummary(before: Session, after: Session): string | null {
+  const parts: string[] = [];
+
+  if (before.name !== after.name) {
+    parts.push(`Renamed to “${after.name}”`);
+  }
+  if (before.eventDayNumber !== after.eventDayNumber) {
+    parts.push(`Now on Day ${after.eventDayNumber}`);
+  }
+  const beforeTime = formatSessionTimeRange(before.startTime, before.endTime);
+  const afterTime = formatSessionTimeRange(after.startTime, after.endTime);
+  if (beforeTime !== afterTime) {
+    parts.push(afterTime ? `Time: ${afterTime}` : 'Time cleared');
+  }
+  if (before.location !== after.location) {
+    parts.push(after.location.trim() ? `Location: ${after.location.trim()}` : 'Location cleared');
+  }
+  if (before.address !== after.address) {
+    parts.push(after.address.trim() ? 'Address updated' : 'Address cleared');
+  }
+  if (before.description !== after.description) {
+    parts.push('Description updated');
+  }
+  const beforeMemberships = (before.membershipIds ?? []).slice().sort().join(',');
+  const afterMemberships = (after.membershipIds ?? []).slice().sort().join(',');
+  if (beforeMemberships !== afterMemberships) {
+    parts.push('Membership access updated');
+  }
+  if (before.kind !== after.kind) {
+    parts.push(after.kind === 'event' ? 'Now listed as an extra activity' : 'Now listed as a session');
+  }
+
+  if (parts.length === 0) return null;
+  return `${parts.join('. ')}. Open the app for the full agenda.`;
+}
+
+function isMaterialsOrFeedbackOnlyUpdate(input: UpdateSessionInput): boolean {
+  const keys = Object.keys(input).filter((key) => key !== 'notifyAttendees');
+  if (keys.length === 0) return true;
+  return keys.every((key) => key === 'materials' || key === 'feedbackEnabled');
+}
+
 export class SessionService {
+  private announcements: AnnouncementService | null = null;
+  private purchases: MembershipPurchaseRepository | null = null;
+
   constructor(
     private readonly sessions: SessionRepository,
     private readonly speakers: SpeakerRepository,
@@ -65,6 +132,14 @@ export class SessionService {
     private readonly associations?: EventAssociationService,
     private readonly mail?: MailService,
   ) {}
+
+  setAnnouncementService(service: AnnouncementService): void {
+    this.announcements = service;
+  }
+
+  setPurchaseRepository(repository: MembershipPurchaseRepository): void {
+    this.purchases = repository;
+  }
 
   async list(
     query: ListSessionsQuery,
@@ -254,6 +329,10 @@ export class SessionService {
       void this.notifySpeakerSessionAssigned(updated, speakerId);
     }
 
+    if (input.notifyAttendees) {
+      void this.notifyAttendeesSessionUpdated(existing, updated, input);
+    }
+
     return this.toPublic(updated);
   }
 
@@ -405,6 +484,39 @@ export class SessionService {
     if (speaker.eventId === eventId) return;
     if (this.associations) {
       await this.associations.linkSpeaker(eventId, speakerId);
+    }
+  }
+
+  private async notifyAttendeesSessionUpdated(
+    before: Session,
+    after: Session,
+    input: UpdateSessionInput,
+  ): Promise<void> {
+    if (!this.announcements || !this.purchases) return;
+    if (isMaterialsOrFeedbackOnlyUpdate(input)) return;
+
+    const summary = buildSessionChangeSummary(before, after);
+    if (!summary) return;
+
+    try {
+      const userIds = await this.purchases.listPaidUserIdsByEvent(after.eventId);
+      if (userIds.length === 0) return;
+
+      const event = await this.events.getById(after.eventId);
+      const label = after.kind === 'event' ? 'Activity' : 'Session';
+      const fingerprint = sessionUpdateFingerprint(after);
+
+      await this.announcements.publishSessionUpdateNotice({
+        systemKey: `session:update:${after.id}:${fingerprint}`,
+        title: `${label} updated: ${after.name}`,
+        description: `${event.name} — ${summary}`,
+        userIds,
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, sessionId: after.id, eventId: after.eventId },
+        'Failed to notify attendees about session update',
+      );
     }
   }
 

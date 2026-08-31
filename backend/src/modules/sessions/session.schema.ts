@@ -123,8 +123,9 @@ export const updateSessionSchema = z
     membershipIds: z.array(z.string().uuid()).max(20).optional(),
     materials: z.array(materialSchema).max(40).optional(),
     feedbackEnabled: z.boolean().optional(),
+    notifyAttendees: z.boolean().optional(),
   })
-  .refine((value) => Object.keys(value).length > 0, {
+  .refine((value) => Object.keys(value).filter((k) => k !== 'notifyAttendees').length > 0, {
     message: 'Provide at least one field to update',
   })
   .superRefine((value, ctx) => {

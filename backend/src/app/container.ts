@@ -248,6 +248,8 @@ export async function createContainer() {
     realtimeHub,
   );
   eventService.setAnnouncementService(announcementService);
+  sessionService.setAnnouncementService(announcementService);
+  sessionService.setPurchaseRepository(membershipPurchaseRepository);
   const couponRepository = new MongoCouponRepository();
   await couponRepository.ensureIndexes();
   const couponService = new CouponService(
