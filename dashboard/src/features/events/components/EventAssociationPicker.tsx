@@ -5,13 +5,19 @@ import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { sponsorsApi } from '@/features/sponsors/api/sponsors-api';
 import { SponsorFormModal } from '@/features/sponsors/components/SponsorFormModal';
 import { getApiErrorMessage } from '@/shared/api/client';
-import type { SponsorPayload } from '@/shared/types/api';
+import type { EventMembershipLink, SponsorPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
 import { useToast } from '@/shared/ui/toast';
+import {
+  membershipIdsFromLinks,
+  syncMembershipLinks,
+} from '@/features/events/components/event-form-utils';
 
 export interface EventAssociationSelection {
   sponsorIds: string[];
   membershipIds: string[];
+  membershipLinks: EventMembershipLink[];
 }
 
 interface EventAssociationPickerProps {
@@ -20,6 +26,8 @@ interface EventAssociationPickerProps {
   disabled?: boolean;
   showMemberships?: boolean;
   showSponsors?: boolean;
+  /** Last event day (YYYY-MM-DD) — purchase deadlines must be on/before this date. */
+  eventEndDate?: string | null;
   /** Lets admins create a sponsor profile without leaving the event form. */
   allowCreateSponsor?: boolean;
   /** Explains that links are per-event and content stays separate. */
@@ -29,6 +37,28 @@ interface EventAssociationPickerProps {
 
 function toggleId(ids: string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id];
+}
+
+function applyMembershipIds(
+  value: EventAssociationSelection,
+  membershipIds: string[],
+): EventAssociationSelection {
+  return {
+    ...value,
+    membershipIds,
+    membershipLinks: syncMembershipLinks(value.membershipLinks, membershipIds),
+  };
+}
+
+function updateMembershipLink(
+  value: EventAssociationSelection,
+  membershipId: string,
+  patch: Partial<Pick<EventMembershipLink, 'saleExpiresAt' | 'badgeLabel'>>,
+): EventAssociationSelection {
+  const membershipLinks = value.membershipLinks.map((link) =>
+    link.membershipId === membershipId ? { ...link, ...patch } : link,
+  );
+  return { ...value, membershipLinks };
 }
 
 /**
@@ -41,6 +71,7 @@ export function EventAssociationPicker({
   disabled = false,
   showMemberships = true,
   showSponsors = true,
+  eventEndDate = null,
   allowCreateSponsor = false,
   hint = 'Select shared memberships and sponsors for this event. Speakers are assigned when you create sessions. The same tier or sponsor can be linked to multiple events.',
   membershipError,
@@ -76,6 +107,10 @@ export function EventAssociationPicker({
 
   const sponsors = sponsorsQuery.data?.items ?? [];
   const memberships = membershipsQuery.data?.items ?? [];
+  const selectedMembershipLinks = value.membershipLinks.filter((link) =>
+    value.membershipIds.includes(link.membershipId),
+  );
+  const endDateMax = eventEndDate?.slice(0, 10) ?? undefined;
 
   return (
     <fieldset className="schedule-fieldset" disabled={disabled}>
@@ -96,9 +131,79 @@ export function EventAssociationPicker({
             items={memberships.map((item) => ({ id: item.id, label: item.name }))}
             selected={value.membershipIds}
             onToggle={(id) =>
-              onChange({ ...value, membershipIds: toggleId(value.membershipIds, id) })
+              onChange(applyMembershipIds(value, toggleId(value.membershipIds, id)))
             }
           />
+          {selectedMembershipLinks.length > 0 ? (
+            <div className="membership-link-settings" style={{ marginTop: 16 }}>
+              <p className="field-label">Per-tier settings for this edition</p>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Optional purchase deadline stops new sales after that date (existing buyers keep
+                access). Deadline must be on or before the event end date
+                {endDateMax ? ` (${endDateMax})` : ''}.
+              </p>
+              <ul className="day-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {selectedMembershipLinks.map((link) => {
+                  const label =
+                    memberships.find((item) => item.id === link.membershipId)?.name ??
+                    'Membership';
+                  return (
+                    <li
+                      key={link.membershipId}
+                      className="membership-link-row"
+                      style={{
+                        border: '1px solid var(--border, #ddd)',
+                        borderRadius: 8,
+                        padding: 12,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <strong>{label}</strong>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gap: 12,
+                          marginTop: 10,
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                        }}
+                      >
+                        <label className="field">
+                          <span className="field-label">Purchase deadline</span>
+                          <input
+                            type="date"
+                            className="field-input"
+                            max={endDateMax}
+                            value={link.saleExpiresAt ?? ''}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              onChange(
+                                updateMembershipLink(value, link.membershipId, {
+                                  saleExpiresAt: e.target.value || null,
+                                }),
+                              )
+                            }
+                          />
+                        </label>
+                        <Input
+                          label="Badge label"
+                          value={link.badgeLabel ?? ''}
+                          disabled={disabled}
+                          placeholder="e.g. Early Access"
+                          onChange={(e) =>
+                            onChange(
+                              updateMembershipLink(value, link.membershipId, {
+                                badgeLabel: e.target.value.trim() || null,
+                              }),
+                            )
+                          }
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
           {membershipError ? <p className="field-error">{membershipError}</p> : null}
         </>
       ) : null}
@@ -182,4 +287,21 @@ function AssociationChecklist({
       )}
     </div>
   );
+}
+
+/** Keep membershipIds aligned when loading association data. */
+export function associationSelectionFromApi(input: {
+  sponsorIds: string[];
+  membershipIds: string[];
+  membershipLinks?: EventMembershipLink[];
+}): EventAssociationSelection {
+  const membershipLinks = syncMembershipLinks(
+    input.membershipLinks ?? [],
+    input.membershipIds,
+  );
+  return {
+    sponsorIds: input.sponsorIds,
+    membershipIds: membershipIdsFromLinks(membershipLinks),
+    membershipLinks,
+  };
 }

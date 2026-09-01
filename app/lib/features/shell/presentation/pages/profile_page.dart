@@ -21,6 +21,7 @@ import 'package:unleash_your_brave/features/home/data/datasources/events_remote_
 import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
 import 'package:unleash_your_brave/features/memberships/domain/entities/membership_entity.dart';
+import 'package:unleash_your_brave/features/memberships/presentation/widgets/membership_sale_meta.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 ({String firstName, String lastName}) _splitDisplayName(String name) {
@@ -434,7 +435,7 @@ class _MembershipSectionState extends State<_MembershipSection>
       setState(() {
         _catalogEventId = eventId;
         _catalogEventName = eventName;
-        _memberships = [...items]
+        _memberships = [...MembershipEntity.purchasableOnly(items)]
           ..sort((a, b) {
             final bySort = a.sortOrder.compareTo(b.sortOrder);
             if (bySort != 0) return bySort;
@@ -1097,6 +1098,19 @@ class _MembershipTierheetCard extends StatelessWidget {
                               : 'Renewable',
                           style: AppTypography.caption.copyWith(
                             color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ],
+                      if (membership.hasBadgeLabel) ...[
+                        const SizedBox(height: 8),
+                        MembershipBadgeChip(label: membership.badgeLabel!.trim()),
+                      ],
+                      if (membership.saleDeadlineLabel != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          membership.saleDeadlineLabel!,
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],

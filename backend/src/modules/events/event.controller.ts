@@ -93,6 +93,7 @@ export class EventController {
         speakerIds: [],
         sponsorIds: [],
         membershipIds: [],
+        membershipLinks: [],
       });
       return;
     }
@@ -106,6 +107,7 @@ export class EventController {
         speakerIds: [],
         sponsorIds: [],
         membershipIds: [],
+        membershipLinks: [],
       });
       return;
     }

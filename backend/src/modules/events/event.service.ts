@@ -316,10 +316,16 @@ export class EventService {
     });
 
     if (this.associations) {
+      const associationPayload =
+        input.membershipLinks && input.membershipLinks.length > 0
+          ? { membershipLinks: input.membershipLinks }
+          : {
+              membershipIds: input.membershipIds ?? [],
+            };
       await this.associations.setForEvent(created.id, {
         speakerIds: input.speakerIds ?? [],
         sponsorIds: input.sponsorIds ?? [],
-        membershipIds: input.membershipIds ?? [],
+        ...associationPayload,
       });
     }
 

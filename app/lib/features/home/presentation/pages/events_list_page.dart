@@ -25,6 +25,7 @@ import 'package:unleash_your_brave/features/home/domain/entities/event_entity.da
 import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
 import 'package:unleash_your_brave/features/memberships/domain/entities/membership_entity.dart';
+import 'package:unleash_your_brave/features/memberships/presentation/widgets/membership_sale_meta.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 ({String firstName, String lastName}) _splitDisplayName(String name) {
@@ -150,6 +151,7 @@ class _EventsListPageState extends State<EventsListPage> {
         memberships =
             await sl<MembershipsRemoteDataSource>().list(eventId: event.id);
       }
+      memberships = MembershipEntity.purchasableOnly(memberships);
       if (!mounted) return;
       if (memberships.isEmpty) {
         AppToast.error('No memberships available for this event yet');
@@ -858,14 +860,24 @@ class _PurchasePlanTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  membership.name,
-                  style: AppTypography.body.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      membership.name,
+                      style: AppTypography.body.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (membership.hasBadgeLabel) ...[
+                      const SizedBox(height: 8),
+                      MembershipBadgeChip(label: membership.badgeLabel!.trim()),
+                    ],
+                  ],
                 ),
               ),
               Text(
@@ -877,6 +889,15 @@ class _PurchasePlanTile extends StatelessWidget {
               ),
             ],
           ),
+          if (membership.saleDeadlineLabel != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              membership.saleDeadlineLabel!,
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
           if (membership.description.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(

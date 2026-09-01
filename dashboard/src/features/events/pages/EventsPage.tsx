@@ -77,7 +77,7 @@ export function EventsPage() {
       const updated = await eventsApi.update(id, payload);
       await eventsApi.setAssociations(id, {
         sponsorIds: payload.sponsorIds ?? [],
-        membershipIds: payload.membershipIds ?? [],
+        membershipLinks: payload.membershipLinks ?? [],
       });
       await checkInFormsApi.upsertByEvent(id, checkInForm);
 
@@ -308,8 +308,10 @@ export function EventsPage() {
             {upcomingEditions.map((edition) => (
               <li key={edition.id}>
                 <div>
-                  <strong>{formatEditionRange(edition)}</strong>
+                  <strong>{edition.name}</strong>
                   <span className="muted">
+                    {formatEditionRange(edition)}
+                    {' · '}
                     {edition.dayCount} {edition.dayCount === 1 ? 'day' : 'days'}
                     {edition.venueCity ? ` · ${edition.venueCity}` : ''}
                     {edition.published === false ? ' · Draft' : ''}
@@ -352,8 +354,10 @@ export function EventsPage() {
             {pastEditions.map((edition) => (
               <li key={edition.id}>
                 <div>
-                  <strong>{formatEditionRange(edition)}</strong>
+                  <strong>{edition.name}</strong>
                   <span className="muted">
+                    {formatEditionRange(edition)}
+                    {' · '}
                     {edition.dayCount} {edition.dayCount === 1 ? 'day' : 'days'}
                     {edition.venueCity ? ` · ${edition.venueCity}` : ''}
                   </span>

@@ -238,6 +238,9 @@ class MembershipsRemoteDataSource {
       billingKind: json['billingKind'] as String? ?? 'one_time',
       durationDays: (json['durationDays'] as num?)?.toInt() ?? 0,
       updatedAt: json['updatedAt'] as String?,
+      badgeLabel: json['badgeLabel'] as String?,
+      saleExpiresAt: json['saleExpiresAt'] as String?,
+      saleOpen: json['saleOpen'] as bool?,
     );
   }
 }

@@ -19,6 +19,7 @@ import 'package:unleash_your_brave/features/home/data/datasources/events_remote_
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
 import 'package:unleash_your_brave/features/memberships/domain/entities/membership_entity.dart';
+import 'package:unleash_your_brave/features/memberships/presentation/widgets/membership_sale_meta.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 ({String firstName, String lastName}) _splitDisplayName(String name) {
@@ -136,6 +137,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
             await sl<MembershipsRemoteDataSource>().list(eventId: event.id);
       }
       if (!mounted) return;
+      memberships = MembershipEntity.purchasableOnly(memberships);
       if (memberships.isEmpty) {
         AppToast.error('No memberships available for this event yet');
         return;
@@ -167,16 +169,8 @@ class _EventDetailPageState extends State<EventDetailPage> {
                 ),
                 const SizedBox(height: 12),
                 for (final plan in memberships) ...[
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      plan.name,
-                      style: AppTypography.body.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: Text(plan.priceLabel),
-                    trailing: const Icon(Icons.chevron_right),
+                  MembershipPurchaseListTile(
+                    membership: plan,
                     onTap: () => Navigator.pop(context, plan),
                   ),
                   const Divider(color: AppColors.borderSubtle),

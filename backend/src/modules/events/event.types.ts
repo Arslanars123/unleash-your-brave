@@ -169,6 +169,11 @@ export interface ScheduleEventInput {
   speakerIds?: string[];
   sponsorIds?: string[];
   membershipIds?: string[];
+  membershipLinks?: Array<{
+    membershipId: string;
+    saleExpiresAt?: string | null;
+    badgeLabel?: string | null;
+  }>;
 }
 
 export interface UpdateEventInput {

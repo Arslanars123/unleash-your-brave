@@ -454,6 +454,7 @@ export interface EventPayload {
   speakerIds?: string[];
   sponsorIds?: string[];
   membershipIds?: string[];
+  membershipLinks?: EventMembershipLink[];
 }
 
 export interface ScheduleEventPayload {
@@ -478,6 +479,14 @@ export interface ScheduleEventPayload {
   speakerIds?: string[];
   sponsorIds?: string[];
   membershipIds?: string[];
+  membershipLinks?: EventMembershipLink[];
+}
+
+export interface EventMembershipLink {
+  membershipId: string;
+  saleExpiresAt: string | null;
+  badgeLabel: string | null;
+  saleOpen?: boolean;
 }
 
 export interface EventAssociations {
@@ -485,6 +494,7 @@ export interface EventAssociations {
   speakerIds: string[];
   sponsorIds: string[];
   membershipIds: string[];
+  membershipLinks: EventMembershipLink[];
 }
 
 export interface PublicSpeaker {
@@ -537,6 +547,9 @@ export interface PublicMembership {
   billingKind?: 'one_time' | 'renewable';
   durationDays?: number;
   upgradeToMembershipId?: string | null;
+  saleExpiresAt?: string | null;
+  badgeLabel?: string | null;
+  saleOpen?: boolean;
   createdAt: string;
   updatedAt: string;
 }

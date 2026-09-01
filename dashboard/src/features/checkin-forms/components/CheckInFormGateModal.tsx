@@ -126,6 +126,11 @@ export function CheckInFormGateModal({
           setError(`“${field.label}” is required`);
           return;
         }
+      } else if (field.type === 'yes_no') {
+        if (value !== true && value !== false) {
+          setError(`“${field.label}” is required`);
+          return;
+        }
       } else if (value === undefined || value === null || String(value).trim() === '') {
         setError(`“${field.label}” is required`);
         return;
@@ -218,11 +223,22 @@ export function CheckInFormGateModal({
                   </span>
                   <select
                     className="field-input"
-                    value={String(answers[field.id] ?? '')}
-                    disabled={loading}
-                    onChange={(e) =>
-                      setAnswers((prev) => ({ ...prev, [field.id]: e.target.value }))
+                    value={
+                      answers[field.id] === true
+                        ? 'yes'
+                        : answers[field.id] === false
+                          ? 'no'
+                          : ''
                     }
+                    disabled={loading}
+                    onChange={(e) => {
+                      const selected = e.target.value;
+                      setAnswers((prev) => ({
+                        ...prev,
+                        [field.id]:
+                          selected === 'yes' ? true : selected === 'no' ? false : '',
+                      }));
+                    }}
                   >
                     <option value="">Select…</option>
                     <option value="yes">Yes</option>

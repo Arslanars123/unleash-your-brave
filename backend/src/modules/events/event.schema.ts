@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { eventMembershipLinkSchema } from '../event-associations/event-association.schema.js';
 import { isValidMediaUrl } from '../uploads/media-url.js';
 
 const isoDateSchema = z
@@ -221,13 +222,15 @@ export const scheduleEventSchema = z
     speakerIds: z.array(z.string().uuid()).optional().default([]),
     sponsorIds: z.array(z.string().uuid()).optional().default([]),
     membershipIds: z.array(z.string().uuid()).optional().default([]),
+    membershipLinks: z.array(eventMembershipLinkSchema).optional().default([]),
   })
   .superRefine((value, ctx) => {
     assertDaysUnique(value.days, ctx);
-    if ((value.membershipIds ?? []).length === 0) {
+    const linkCount = value.membershipLinks?.length || value.membershipIds?.length || 0;
+    if (linkCount === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['membershipIds'],
+        path: ['membershipLinks'],
         message: 'Link at least one membership tier to this edition.',
       });
     }

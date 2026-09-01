@@ -81,7 +81,7 @@ export function EditionSwitcher({
             const isCurrent = edition.id === currentEdition?.id;
             return (
               <option key={edition.id} value={edition.id}>
-                {formatEditionRange(edition)}
+                {edition.name} ({formatEditionRange(edition)})
                 {editionSuffix(edition.status, isCurrent)}
               </option>
             );

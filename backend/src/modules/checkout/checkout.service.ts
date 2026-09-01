@@ -107,22 +107,26 @@ export class CheckoutService {
     return this.stripe;
   }
 
-  private async listMembershipsForEvent(eventId: string) {
+  private async listMembershipsForEvent(eventId: string, options?: { purchasableOnly?: boolean }) {
+    let items;
     if (this.membershipCatalog) {
-      const { items } = await this.membershipCatalog.list({
+      const result = await this.membershipCatalog.list({
         page: 1,
         perPage: 200,
         eventId,
       });
-      return items;
+      items = result.items;
+    } else {
+      const { items: legacy } = await this.memberships.list({
+        page: 1,
+        perPage: 200,
+        eventId,
+      });
+      items = legacy.map((membership) => toPublicMembership(membership));
     }
 
-    const { items } = await this.memberships.list({
-      page: 1,
-      perPage: 200,
-      eventId,
-    });
-    return items.map(toPublicMembership);
+    if (!options?.purchasableOnly) return items;
+    return items.filter((membership) => membership.saleOpen !== false);
   }
 
   private catalogEventSummary(event: {
@@ -156,7 +160,7 @@ export class CheckoutService {
   async listCatalog(eventId?: string) {
     if (eventId) {
       const event = await this.events.getById(eventId);
-      const memberships = await this.listMembershipsForEvent(event.id);
+      const memberships = await this.listMembershipsForEvent(event.id, { purchasableOnly: true });
       const summary = this.catalogEventSummary(event);
       return {
         event: summary,
@@ -168,7 +172,7 @@ export class CheckoutService {
     const available = await this.events.listAvailableForPurchase();
     const events = [];
     for (const event of available) {
-      const memberships = await this.listMembershipsForEvent(event.id);
+      const memberships = await this.listMembershipsForEvent(event.id, { purchasableOnly: true });
       events.push({
         event: this.catalogEventSummary(event),
         memberships,
@@ -206,6 +210,9 @@ export class CheckoutService {
   ): Promise<CheckoutEligibility> {
     const membership = await this.requireMembership(membershipId);
     const checkoutEventId = await this.resolveCheckoutEventId(membership, nameInput?.eventId);
+    if (this.membershipCatalog) {
+      await this.membershipCatalog.assertMembershipSaleOpen(membership.id, checkoutEventId);
+    }
     const normalizedEmail = email.trim().toLowerCase();
     const existing = await this.users.findByEmail(normalizedEmail);
 
@@ -317,6 +324,9 @@ export class CheckoutService {
     let lastName = input.lastName.trim();
     const membership = await this.requireMembership(input.membershipId);
     const checkoutEventId = await this.resolveCheckoutEventId(membership, input.eventId);
+    if (this.membershipCatalog) {
+      await this.membershipCatalog.assertMembershipSaleOpen(membership.id, checkoutEventId);
+    }
     const event = await this.events.requireEvent(checkoutEventId);
 
     const eligibility = await this.checkEligibility(email, membership.id, {

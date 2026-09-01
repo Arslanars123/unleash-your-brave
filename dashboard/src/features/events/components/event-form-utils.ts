@@ -1,7 +1,7 @@
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
 import { formatUsDate } from '@/shared/lib/datetime';
 import { isValidMediaRef } from '@/shared/lib/media';
-import type { EventPayload, PublicEvent, ScheduleEventPayload } from '@/shared/types/api';
+import type { EventMembershipLink, EventPayload, PublicEvent, ScheduleEventPayload } from '@/shared/types/api';
 
 export type ScheduleMode = 'consecutive' | 'custom';
 export type EventFormMode = 'edit' | 'schedule';
@@ -33,6 +33,7 @@ export interface EventFormValues {
   speakerIds: string[];
   sponsorIds: string[];
   membershipIds: string[];
+  membershipLinks: EventMembershipLink[];
 }
 
 export type FieldErrors = Partial<Record<string, string>>;
@@ -137,9 +138,52 @@ export function customDayMinDate(
   return earliestEditionStart ?? undefined;
 }
 
+export function membershipIdsFromLinks(links: EventMembershipLink[]): string[] {
+  return links.map((link) => link.membershipId);
+}
+
+export function syncMembershipLinks(
+  current: EventMembershipLink[],
+  membershipIds: string[],
+): EventMembershipLink[] {
+  const byId = new Map(current.map((link) => [link.membershipId, link]));
+  return membershipIds.map(
+    (membershipId) =>
+      byId.get(membershipId) ?? {
+        membershipId,
+        saleExpiresAt: null,
+        badgeLabel: null,
+      },
+  );
+}
+
+export function eventEndDateFromValues(values: EventFormValues): string | null {
+  const dates = resolvedDays(values)
+    .map((day) => day.date)
+    .filter(Boolean)
+    .sort();
+  return dates.at(-1) ?? null;
+}
+
 export function validateEventMemberships(membershipIds: string[]): string | null {
   if (membershipIds.length === 0) {
     return 'Select at least one membership tier for this edition.';
+  }
+  return null;
+}
+
+export function validateEventMembershipLinks(
+  links: EventMembershipLink[],
+  eventEndDate: string | null,
+): string | null {
+  const membershipError = validateEventMemberships(membershipIdsFromLinks(links));
+  if (membershipError) return membershipError;
+  if (!eventEndDate) return null;
+  const endKey = eventEndDate.slice(0, 10);
+  for (const link of links) {
+    if (link.saleExpiresAt && link.saleExpiresAt > endKey) {
+      return `Purchase deadline must be on or before the event end date (${formatUsDate(`${endKey}T00:00:00.000Z`, { utc: true })})`;
+    }
   }
   return null;
 }
@@ -213,6 +257,7 @@ export const emptyForm: EventFormValues = {
   speakerIds: [],
   sponsorIds: [],
   membershipIds: [],
+  membershipLinks: [],
 };
 
 export function eventToForm(event: PublicEvent): EventFormValues {
@@ -251,6 +296,7 @@ export function eventToForm(event: PublicEvent): EventFormValues {
     speakerIds: [],
     sponsorIds: [],
     membershipIds: [],
+    membershipLinks: [],
   };
 }
 
@@ -278,6 +324,7 @@ export function scheduleBlankForm(previous: PublicEvent | null): EventFormValues
     speakerIds: [],
     sponsorIds: [],
     membershipIds: [],
+    membershipLinks: [],
   };
 }
 
@@ -448,6 +495,7 @@ export function toEventPayload(values: EventFormValues): EventPayload {
     speakerIds: values.speakerIds,
     sponsorIds: values.sponsorIds,
     membershipIds: values.membershipIds,
+    membershipLinks: values.membershipLinks,
   };
 }
 
@@ -469,6 +517,7 @@ export function toSchedulePayload(values: EventFormValues): ScheduleEventPayload
     speakerIds: values.speakerIds,
     sponsorIds: values.sponsorIds,
     membershipIds: values.membershipIds,
+    membershipLinks: values.membershipLinks,
   };
 }
 

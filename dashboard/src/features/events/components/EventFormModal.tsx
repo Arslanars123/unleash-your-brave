@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import { EventAssociationPicker } from '@/features/events/components/EventAssociationPicker';
+import { EventAssociationPicker, associationSelectionFromApi } from '@/features/events/components/EventAssociationPicker';
 import { EventFormDetailsStep } from '@/features/events/components/EventFormDetailsStep';
 import {
   emptyForm,
   eventDaysFromValues,
+  eventEndDateFromValues,
   eventToForm,
   toEventPayload,
   validateEventForm,
-  validateEventMemberships,
+  validateEventMembershipLinks,
   type EventFormMode,
   type EventFormValues,
   type FieldErrors,
@@ -132,9 +133,7 @@ export function EventFormModal({
     if (!open || mode !== 'edit' || !associationsQuery.data) return;
     setValues((current) => ({
       ...current,
-      speakerIds: [],
-      sponsorIds: associationsQuery.data.sponsorIds,
-      membershipIds: associationsQuery.data.membershipIds,
+      ...associationSelectionFromApi(associationsQuery.data),
     }));
   }, [open, mode, associationsQuery.data]);
 
@@ -180,6 +179,8 @@ export function EventFormModal({
     setPendingCover(file);
   }
 
+  const eventEndDate = eventEndDateFromValues(values);
+
   function validateCurrentStep(): FieldErrors {
     if (step === 0) {
       return validateEventForm(values, {
@@ -189,7 +190,7 @@ export function EventFormModal({
       });
     }
     if (step === 2) {
-      const membershipError = validateEventMemberships(values.membershipIds);
+      const membershipError = validateEventMembershipLinks(values.membershipLinks, eventEndDate);
       return membershipError ? { membershipIds: membershipError } : {};
     }
     return {};
@@ -221,7 +222,7 @@ export function EventFormModal({
       editingEventId: initialEvent?.id ?? null,
       otherEditions,
     });
-    const membershipError = validateEventMemberships(values.membershipIds);
+    const membershipError = validateEventMembershipLinks(values.membershipLinks, eventEndDate);
     if (membershipError) nextErrors.membershipIds = membershipError;
     const waiverErrors = validateCheckInStep();
     setErrors(nextErrors);
@@ -338,6 +339,7 @@ export function EventFormModal({
               value={{
                 sponsorIds: values.sponsorIds,
                 membershipIds: values.membershipIds,
+                membershipLinks: values.membershipLinks,
               }}
               showMemberships={false}
               allowCreateSponsor
@@ -357,8 +359,10 @@ export function EventFormModal({
               value={{
                 sponsorIds: values.sponsorIds,
                 membershipIds: values.membershipIds,
+                membershipLinks: values.membershipLinks,
               }}
               showSponsors={false}
+              eventEndDate={eventEndDate}
               disabled={busy}
               hint="Link membership tiers to this edition. These tiers can be assigned to sessions in the next step."
               membershipError={submitted ? errors.membershipIds : undefined}
@@ -366,9 +370,13 @@ export function EventFormModal({
                 setValues((current) => ({
                   ...current,
                   membershipIds: next.membershipIds,
+                  membershipLinks: next.membershipLinks,
                 }));
                 if (submitted) {
-                  const membershipError = validateEventMemberships(next.membershipIds);
+                  const membershipError = validateEventMembershipLinks(
+                    next.membershipLinks,
+                    eventEndDate,
+                  );
                   setErrors((current) => {
                     const updated = { ...current };
                     if (membershipError) updated.membershipIds = membershipError;

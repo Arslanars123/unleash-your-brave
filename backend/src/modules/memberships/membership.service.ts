@@ -58,16 +58,25 @@ export class MembershipService {
       const total = items.length;
       const start = (query.page - 1) * query.perPage;
       const pageItems = items.slice(start, start + query.perPage);
+      const linkMetaById = new Map(
+        (await this.associations.listMembershipLinks(query.eventId!)).map((link) => [
+          link.membershipId,
+          link,
+        ]),
+      );
       return {
         items: pageItems.map((membership) =>
-          toPublicMembership({ ...membership, eventId: query.eventId! }),
+          toPublicMembership(
+            { ...membership, eventId: query.eventId! },
+            linkMetaById.get(membership.id) ?? null,
+          ),
         ),
         total,
       };
     }
 
     const { items, total } = await this.memberships.list(query);
-    return { items: items.map(toPublicMembership), total };
+    return { items: items.map((membership) => toPublicMembership(membership)), total };
   }
 
   async getById(id: string): Promise<PublicMembership> {
@@ -154,6 +163,11 @@ export class MembershipService {
       return;
     }
     throw new BadRequestError('Membership must be associated with this event edition');
+  }
+
+  async assertMembershipSaleOpen(membershipId: string, eventId: string): Promise<void> {
+    if (!this.associations) return;
+    await this.associations.assertMembershipSaleOpen(eventId, membershipId);
   }
 
   async requireMembership(id: string): Promise<Membership> {

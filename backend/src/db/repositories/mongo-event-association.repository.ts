@@ -11,8 +11,18 @@ export interface EventAssociation {
   entityId: string;
   /** Event-specific sponsor offers JSON (sponsors only). */
   offersJson?: unknown;
+  /** Membership-only: last calendar date new purchases are allowed (inclusive). */
+  saleExpiresAt?: string | null;
+  /** Membership-only: admin badge e.g. "Early Access". */
+  badgeLabel?: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface EventAssociationLinkMeta {
+  offersJson?: unknown;
+  saleExpiresAt?: string | null;
+  badgeLabel?: string | null;
 }
 
 function collection(): Collection<EventAssociation & { _id: string }> {
@@ -76,16 +86,17 @@ export class MongoEventAssociationRepository {
     eventId: string,
     kind: AssociationKind,
     entityId: string,
-    offersJson?: unknown,
+    meta?: EventAssociationLinkMeta,
   ): Promise<EventAssociation> {
     const existing = await collection().findOne({ eventId, kind, entityId });
     if (existing) {
-      if (offersJson !== undefined) {
-        await collection().updateOne(
-          { _id: existing._id },
-          { $set: { offersJson, updatedAt: new Date() } },
-        );
-        return toRow({ ...existing, offersJson, updatedAt: new Date() })!;
+      const patch: Partial<EventAssociation> = { updatedAt: new Date() };
+      if (meta?.offersJson !== undefined) patch.offersJson = meta.offersJson;
+      if (meta?.saleExpiresAt !== undefined) patch.saleExpiresAt = meta.saleExpiresAt;
+      if (meta?.badgeLabel !== undefined) patch.badgeLabel = meta.badgeLabel;
+      if (Object.keys(patch).length > 1) {
+        await collection().updateOne({ _id: existing._id }, { $set: patch });
+        return toRow({ ...existing, ...patch })!;
       }
       return toRow(existing)!;
     }
@@ -97,13 +108,45 @@ export class MongoEventAssociationRepository {
       eventId,
       kind,
       entityId,
-      ...(offersJson !== undefined ? { offersJson } : {}),
+      ...(meta?.offersJson !== undefined ? { offersJson: meta.offersJson } : {}),
+      ...(meta?.saleExpiresAt !== undefined ? { saleExpiresAt: meta.saleExpiresAt } : {}),
+      ...(meta?.badgeLabel !== undefined ? { badgeLabel: meta.badgeLabel } : {}),
       createdAt: now,
       updatedAt: now,
     };
     row.id = row._id;
     await collection().insertOne(row);
     return toRow(row)!;
+  }
+
+  async setMembershipLinks(
+    eventId: string,
+    links: Array<{
+      membershipId: string;
+      saleExpiresAt?: string | null;
+      badgeLabel?: string | null;
+    }>,
+  ): Promise<void> {
+    const unique = new Map<string, (typeof links)[number]>();
+    for (const link of links) {
+      if (!link.membershipId) continue;
+      unique.set(link.membershipId, link);
+    }
+    const membershipIds = [...unique.keys()];
+    const existing = await this.listEntityIds(eventId, 'membership');
+    const toAdd = membershipIds.filter((id) => !existing.includes(id));
+    const toRemove = existing.filter((id) => !membershipIds.includes(id));
+
+    await Promise.all(
+      membershipIds.map((membershipId) => {
+        const link = unique.get(membershipId)!;
+        return this.link(eventId, 'membership', membershipId, {
+          saleExpiresAt: link.saleExpiresAt ?? null,
+          badgeLabel: link.badgeLabel ?? null,
+        });
+      }),
+    );
+    await Promise.all(toRemove.map((membershipId) => this.unlink(eventId, 'membership', membershipId)));
   }
 
   async unlink(eventId: string, kind: AssociationKind, entityId: string): Promise<boolean> {
@@ -163,7 +206,9 @@ export class MongoEventAssociationRepository {
       .project({ _id: 1, eventId: 1, offers: 1 })
       .toArray();
     for (const doc of sponsorDocs) {
-      await this.link(String(doc.eventId), 'sponsor', String(doc._id), doc.offers ?? []);
+      await this.link(String(doc.eventId), 'sponsor', String(doc._id), {
+        offersJson: doc.offers ?? [],
+      });
       sponsors += 1;
     }
 

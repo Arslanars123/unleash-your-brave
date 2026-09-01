@@ -1,6 +1,12 @@
 import type { Membership, PublicMembership } from './membership.types.js';
+import { isMembershipSaleOpen } from '../event-associations/membership-link.utils.js';
+import type { MembershipLinkMeta } from '../event-associations/membership-link.utils.js';
 
-export function toPublicMembership(membership: Membership): PublicMembership {
+export function toPublicMembership(
+  membership: Membership,
+  linkMeta?: MembershipLinkMeta | null,
+): PublicMembership {
+  const saleExpiresAt = linkMeta?.saleExpiresAt ?? null;
   return {
     id: membership.id,
     eventId: membership.eventId,
@@ -18,6 +24,9 @@ export function toPublicMembership(membership: Membership): PublicMembership {
     billingKind: membership.billingKind === 'renewable' ? 'renewable' : 'one_time',
     durationDays: Math.max(0, membership.durationDays ?? 0),
     upgradeToMembershipId: membership.upgradeToMembershipId ?? null,
+    saleExpiresAt,
+    badgeLabel: linkMeta?.badgeLabel ?? null,
+    saleOpen: isMembershipSaleOpen(saleExpiresAt),
     createdAt: membership.createdAt.toISOString(),
     updatedAt: membership.updatedAt.toISOString(),
   };

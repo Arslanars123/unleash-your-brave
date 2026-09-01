@@ -5,10 +5,11 @@ import { EventFormDetailsStep } from '@/features/events/components/EventFormDeta
 import {
   emptyForm,
   eventDaysFromValues,
+  eventEndDateFromValues,
   scheduleBlankForm,
   toSchedulePayload,
   validateEventForm,
-  validateEventMemberships,
+  validateEventMembershipLinks,
   type EventFormValues,
   type FieldErrors,
 } from '@/features/events/components/event-form-utils';
@@ -120,6 +121,8 @@ export function EventWizardModal({
     });
   }
 
+  const eventEndDate = eventEndDateFromValues(values);
+
   function validateCurrentStep(): FieldErrors {
     if (step === 0) {
       return validateEventForm(values, {
@@ -129,7 +132,7 @@ export function EventWizardModal({
       });
     }
     if (step === 2) {
-      const membershipError = validateEventMemberships(values.membershipIds);
+      const membershipError = validateEventMembershipLinks(values.membershipLinks, eventEndDate);
       return membershipError ? { membershipIds: membershipError } : {};
     }
     return {};
@@ -162,7 +165,7 @@ export function EventWizardModal({
       previousEvent,
       otherEditions,
     });
-    const membershipError = validateEventMemberships(values.membershipIds);
+    const membershipError = validateEventMembershipLinks(values.membershipLinks, eventEndDate);
     if (membershipError) nextErrors.membershipIds = membershipError;
     const waiverErrors = validateCheckInStep();
     setErrors(nextErrors);
@@ -284,6 +287,7 @@ export function EventWizardModal({
               value={{
                 sponsorIds: values.sponsorIds,
                 membershipIds: values.membershipIds,
+                membershipLinks: values.membershipLinks,
               }}
               showMemberships={false}
               allowCreateSponsor
@@ -304,8 +308,10 @@ export function EventWizardModal({
                 value={{
                   sponsorIds: values.sponsorIds,
                   membershipIds: values.membershipIds,
+                  membershipLinks: values.membershipLinks,
                 }}
                 showSponsors={false}
+                eventEndDate={eventEndDate}
                 disabled={busy}
                 hint="Link membership tiers to this edition. These tiers can be assigned to sessions in the next step."
                 membershipError={submitted ? errors.membershipIds : undefined}
@@ -313,9 +319,13 @@ export function EventWizardModal({
                   setValues((current) => ({
                     ...current,
                     membershipIds: next.membershipIds,
+                    membershipLinks: next.membershipLinks,
                   }));
                   if (submitted) {
-                    const membershipError = validateEventMemberships(next.membershipIds);
+                    const membershipError = validateEventMembershipLinks(
+                      next.membershipLinks,
+                      eventEndDate,
+                    );
                     setErrors((current) => {
                       const updated = { ...current };
                       if (membershipError) updated.membershipIds = membershipError;

@@ -204,11 +204,27 @@ export class CheckInFormService {
         continue;
       }
 
-      if (field.type === 'checkbox' || field.type === 'yes_no') {
-        if (typeof raw !== 'boolean') {
+      if (field.type === 'yes_no') {
+        let boolVal: boolean | undefined;
+        if (typeof raw === 'boolean') {
+          boolVal = raw;
+        } else if (typeof raw === 'string') {
+          const lower = raw.trim().toLowerCase();
+          if (lower === 'yes') boolVal = true;
+          else if (lower === 'no') boolVal = false;
+        }
+        if (boolVal === undefined) {
           throw new BadRequestError(`Field "${field.label}" must be yes/no`);
         }
-        if (field.required && field.type === 'checkbox' && raw !== true) {
+        normalized[field.id] = boolVal;
+        continue;
+      }
+
+      if (field.type === 'checkbox') {
+        if (typeof raw !== 'boolean') {
+          throw new BadRequestError(`Field "${field.label}" must be checked or unchecked`);
+        }
+        if (field.required && raw !== true) {
           throw new BadRequestError(`Field "${field.label}" must be checked`);
         }
         normalized[field.id] = raw;

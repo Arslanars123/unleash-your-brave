@@ -31,6 +31,7 @@ import 'package:unleash_your_brave/features/home/domain/entities/event_entity.da
 import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
 import 'package:unleash_your_brave/features/memberships/domain/entities/membership_entity.dart';
+import 'package:unleash_your_brave/features/memberships/presentation/widgets/membership_sale_meta.dart';
 
 ({String firstName, String lastName}) _splitDisplayName(String name) {
   final parts =
@@ -325,6 +326,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
             await sl<MembershipsRemoteDataSource>().list(eventId: event.id);
       }
       if (!mounted) return;
+      memberships = MembershipEntity.purchasableOnly(memberships);
       if (memberships.isEmpty) {
         AppToast.error('No memberships available for this event yet');
         return;
@@ -381,16 +383,8 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
                           const Divider(color: AppColors.borderSubtle),
                       itemBuilder: (context, index) {
                         final plan = memberships[index];
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            plan.name,
-                            style: AppTypography.body.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          subtitle: Text(plan.priceLabel),
-                          trailing: const Icon(Icons.chevron_right),
+                        return MembershipPurchaseListTile(
+                          membership: plan,
                           onTap: () => Navigator.pop(context, plan),
                         );
                       },

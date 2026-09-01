@@ -66,6 +66,10 @@ export interface PublicMembership {
   billingKind: 'one_time' | 'renewable';
   durationDays: number;
   upgradeToMembershipId: string | null;
+  saleExpiresAt?: string | null;
+  badgeLabel?: string | null;
+  /** When listed for an event, false if the purchase window has closed. */
+  saleOpen?: boolean;
   createdAt: string;
   updatedAt: string;
 }

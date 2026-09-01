@@ -16,6 +16,9 @@ class MembershipEntity {
     this.billingKind = 'one_time',
     this.durationDays = 0,
     this.updatedAt,
+    this.badgeLabel,
+    this.saleExpiresAt,
+    this.saleOpen,
   });
 
   final String id;
@@ -34,6 +37,47 @@ class MembershipEntity {
   final String billingKind;
   final int durationDays;
   final String? updatedAt;
+  /// Admin badge for this tier on a specific event, e.g. "Early Access".
+  final String? badgeLabel;
+  /// Last calendar date (YYYY-MM-DD) new purchases are allowed.
+  final String? saleExpiresAt;
+  /// When false, new purchases are closed for this event edition.
+  final bool? saleOpen;
+
+  bool get isSaleOpen => saleOpen != false;
+
+  bool get hasBadgeLabel => badgeLabel != null && badgeLabel!.trim().isNotEmpty;
+
+  String? get saleDeadlineLabel {
+    final raw = saleExpiresAt?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(raw);
+    if (match == null) return null;
+    final date = DateTime.utc(
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3)!),
+    );
+    return 'Available until ${_formatSaleDeadline(date)}';
+  }
+
+  static String _formatSaleDeadline(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
 
   bool get isRenewable => billingKind == 'renewable';
 
@@ -50,6 +94,11 @@ class MembershipEntity {
         durationDays.toString(),
         updatedAt ?? '',
       ].join('::');
+
+  /// Drops tiers whose purchase window has closed (when the API sends `saleOpen`).
+  static List<MembershipEntity> purchasableOnly(List<MembershipEntity> items) {
+    return items.where((item) => item.isSaleOpen).toList(growable: false);
+  }
 
   String get priceLabel {
     if (price <= 0) return 'Free';

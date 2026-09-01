@@ -4,11 +4,25 @@ import type { EventService } from '../events/event.service.js';
 import type { MembershipService } from '../memberships/membership.service.js';
 import type { SpeakerService } from '../speakers/speaker.service.js';
 import type { SponsorService } from '../sponsors/sponsor.service.js';
+import {
+  assertSaleExpiresBeforeEventEnd,
+  isMembershipSaleOpen,
+  normalizeMembershipLinkInput,
+  type EventMembershipLinkInput,
+} from './membership-link.utils.js';
+
+export interface EventMembershipLinkView {
+  membershipId: string;
+  saleExpiresAt: string | null;
+  badgeLabel: string | null;
+  saleOpen: boolean;
+}
 
 export interface EventAssociationsPayload {
   speakerIds?: string[];
   sponsorIds?: string[];
   membershipIds?: string[];
+  membershipLinks?: EventMembershipLinkInput[];
 }
 
 export interface EventAssociationsView {
@@ -16,6 +30,7 @@ export interface EventAssociationsView {
   speakerIds: string[];
   sponsorIds: string[];
   membershipIds: string[];
+  membershipLinks: EventMembershipLinkView[];
 }
 
 /**
@@ -44,11 +59,12 @@ export class EventAssociationService {
 
   async getForEvent(eventId: string): Promise<EventAssociationsView> {
     await this.events.requireEvent(eventId);
-    const [speakerIdsRaw, sponsorIdsRaw, membershipIdsRaw] = await Promise.all([
+    const [speakerIdsRaw, sponsorIdsRaw, membershipLinksRaw] = await Promise.all([
       this.associations.listEntityIds(eventId, 'speaker'),
       this.associations.listEntityIds(eventId, 'sponsor'),
-      this.associations.listEntityIds(eventId, 'membership'),
+      this.associations.listLinksForEvent(eventId, 'membership'),
     ]);
+    const membershipIdsRaw = membershipLinksRaw.map((link) => link.entityId);
     const [speakerIds, sponsorIds, membershipIds] = await Promise.all([
       this.filterExistingSpeakers(speakerIdsRaw),
       this.filterExistingSponsors(sponsorIdsRaw),
@@ -63,10 +79,19 @@ export class EventAssociationService {
       await this.associations.setLinks(eventId, 'sponsor', sponsorIds);
     }
     if (membershipIds.length !== membershipIdsRaw.length) {
-      await this.associations.setLinks(eventId, 'membership', membershipIds);
+      const surviving = membershipLinksRaw
+        .filter((link) => membershipIds.includes(link.entityId))
+        .map((link) => ({
+          membershipId: link.entityId,
+          saleExpiresAt: link.saleExpiresAt ?? null,
+          badgeLabel: link.badgeLabel ?? null,
+        }));
+      await this.associations.setMembershipLinks(eventId, surviving);
     }
 
-    return { eventId, speakerIds, sponsorIds, membershipIds };
+    const membershipLinks = await this.listMembershipLinks(eventId, membershipIds);
+
+    return { eventId, speakerIds, sponsorIds, membershipIds, membershipLinks };
   }
 
   async setForEvent(eventId: string, input: EventAssociationsPayload): Promise<EventAssociationsView> {
@@ -85,15 +110,94 @@ export class EventAssociationService {
         void this.sponsors?.notifyAssignedToEvent(sponsorId, eventId);
       }
     }
-    if (input.membershipIds !== undefined) {
+    if (input.membershipLinks !== undefined) {
+      await this.setMembershipLinksForEvent(eventId, input.membershipLinks);
+    } else if (input.membershipIds !== undefined) {
+      const existingLinks = await this.listMembershipLinks(eventId);
+      const metaById = new Map(existingLinks.map((link) => [link.membershipId, link]));
       const membershipIds = await this.filterExistingMemberships(input.membershipIds);
       if (membershipIds.length === 0) {
         throw new BadRequestError('Link at least one membership tier to this edition.');
       }
-      await this.associations.setLinks(eventId, 'membership', membershipIds);
+      await this.setMembershipLinksForEvent(
+        eventId,
+        membershipIds.map((membershipId) => ({
+          membershipId,
+          saleExpiresAt: metaById.get(membershipId)?.saleExpiresAt ?? null,
+          badgeLabel: metaById.get(membershipId)?.badgeLabel ?? null,
+        })),
+      );
     }
 
     return this.getForEvent(eventId);
+  }
+
+  async listMembershipLinks(
+    eventId: string,
+    membershipIds?: string[],
+  ): Promise<EventMembershipLinkView[]> {
+    const links = await this.associations.listLinksForEvent(eventId, 'membership');
+    const ids = membershipIds ?? links.map((link) => link.entityId);
+    const byId = new Map(links.map((link) => [link.entityId, link]));
+    return ids.map((membershipId) => {
+      const link = byId.get(membershipId);
+      const saleExpiresAt = link?.saleExpiresAt ?? null;
+      return {
+        membershipId,
+        saleExpiresAt,
+        badgeLabel: link?.badgeLabel ?? null,
+        saleOpen: isMembershipSaleOpen(saleExpiresAt),
+      };
+    });
+  }
+
+  async getMembershipLink(
+    eventId: string,
+    membershipId: string,
+  ): Promise<EventMembershipLinkView | null> {
+    const link = await this.associations.findLink(eventId, 'membership', membershipId);
+    if (!link) return null;
+    const saleExpiresAt = link.saleExpiresAt ?? null;
+    return {
+      membershipId,
+      saleExpiresAt,
+      badgeLabel: link.badgeLabel ?? null,
+      saleOpen: isMembershipSaleOpen(saleExpiresAt),
+    };
+  }
+
+  async assertMembershipSaleOpen(eventId: string, membershipId: string): Promise<void> {
+    const link = await this.getMembershipLink(eventId, membershipId);
+    if (link && !link.saleOpen) {
+      throw new BadRequestError('Sales for this membership tier have ended for this event');
+    }
+  }
+
+  private async setMembershipLinksForEvent(
+    eventId: string,
+    links: EventMembershipLinkInput[],
+  ): Promise<void> {
+    const event = await this.events.requireEvent(eventId);
+    const normalized = links.map(normalizeMembershipLinkInput);
+    const membershipIds = await this.filterExistingMemberships(
+      normalized.map((link) => link.membershipId),
+    );
+    if (membershipIds.length === 0) {
+      throw new BadRequestError('Link at least one membership tier to this edition.');
+    }
+
+    const allowed = new Set(membershipIds);
+    const filtered = normalized.filter((link) => allowed.has(link.membershipId));
+    for (const link of filtered) {
+      try {
+        assertSaleExpiresBeforeEventEnd(link.saleExpiresAt, event.endDate);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Invalid sale expiry date';
+        throw new BadRequestError(message);
+      }
+    }
+
+    await this.associations.setMembershipLinks(eventId, filtered);
   }
 
   async linkSpeaker(eventId: string, speakerId: string): Promise<void> {
@@ -153,7 +257,7 @@ export class EventAssociationService {
     await this.events.requireEvent(eventId);
     await this.assertSponsorsExist([sponsorId]);
     const alreadyLinked = await this.associations.isLinked(eventId, 'sponsor', sponsorId);
-    await this.associations.link(eventId, 'sponsor', sponsorId, offersJson);
+    await this.associations.link(eventId, 'sponsor', sponsorId, { offersJson });
     if (!alreadyLinked) {
       void this.sponsors?.notifyAssignedToEvent(sponsorId, eventId);
     }
