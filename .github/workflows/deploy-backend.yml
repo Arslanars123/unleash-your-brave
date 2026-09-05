@@ -99,11 +99,10 @@ jobs:
                   parts.append(origin)
           env["CORS_ORIGINS"] = ",".join(parts)
           env.setdefault("STRIPE_CURRENCY", "usd")
-          env.setdefault(
-              "STRIPE_SUCCESS_URL",
-              "https://www.fittoprofit.com/checkout-test/success?session_id={CHECKOUT_SESSION_ID}",
-            )
-          env.setdefault("STRIPE_CANCEL_URL", "https://www.fittoprofit.com/checkout-test")
+          env["STRIPE_SUCCESS_URL"] = (
+              "https://www.fittoprofit.com/checkout/success?session_id={CHECKOUT_SESSION_ID}"
+          )
+          env["STRIPE_CANCEL_URL"] = "https://www.fittoprofit.com/checkout"
           print(json.dumps({
               "AuthenticationConfiguration": {
                   "AccessRoleArn": os.environ["ACCESS_ROLE"]
