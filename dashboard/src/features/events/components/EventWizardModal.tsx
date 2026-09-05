@@ -53,7 +53,7 @@ const STEPS = [
 
 export interface EventWizardResult {
   payload: ScheduleEventPayload;
-  speakers: Array<Omit<import('@/shared/types/api').SpeakerPayload, 'eventId'>>;
+  speakers: Array<Omit<import('@/shared/types/api').SpeakerPayload, 'eventId' | 'eventIds'>>;
   sessions: SessionPayload[];
   checkInForm: UpsertCheckInFormPayload;
 }

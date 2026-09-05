@@ -14,7 +14,7 @@ import {
 import { TextArea } from '@/shared/ui/TextArea';
 
 export interface SpeakerFormValues {
-  eventId: string;
+  eventIds: string[];
   name: string;
   email: string;
   title: string;
@@ -25,7 +25,7 @@ export interface SpeakerFormValues {
 type FieldErrors = Partial<Record<keyof SpeakerFormValues, string>>;
 
 const emptyForm: SpeakerFormValues = {
-  eventId: '',
+  eventIds: [],
   name: '',
   email: '',
   title: '',
@@ -34,8 +34,14 @@ const emptyForm: SpeakerFormValues = {
 };
 
 function speakerToForm(speaker: PublicSpeaker): SpeakerFormValues {
+  const eventIds =
+    speaker.eventIds && speaker.eventIds.length > 0
+      ? speaker.eventIds
+      : speaker.eventId
+        ? [speaker.eventId]
+        : [];
   return {
-    eventId: speaker.eventId ?? '',
+    eventIds,
     name: speaker.name,
     email: speaker.email,
     title: speaker.title,
@@ -47,8 +53,8 @@ function speakerToForm(speaker: PublicSpeaker): SpeakerFormValues {
 function validate(values: SpeakerFormValues, requireEvent: boolean): FieldErrors {
   const errors: FieldErrors = {};
 
-  if (requireEvent && !values.eventId) {
-    errors.eventId = 'Select an event';
+  if (requireEvent && values.eventIds.length === 0) {
+    errors.eventIds = 'Select at least one event';
   }
 
   if (!values.name.trim()) errors.name = 'Name is required';
@@ -68,7 +74,7 @@ function validate(values: SpeakerFormValues, requireEvent: boolean): FieldErrors
 
 export function toSpeakerPayload(values: SpeakerFormValues): SpeakerPayload {
   return {
-    eventId: values.eventId,
+    eventIds: values.eventIds,
     name: values.name.trim(),
     email: values.email.trim() || undefined,
     title: values.title.trim(),
@@ -87,6 +93,10 @@ interface SpeakerFormModalProps {
   loading?: boolean;
   onClose: () => void;
   onSubmit: (payload: SpeakerPayload) => Promise<void> | void;
+}
+
+function toggleId(ids: string[], id: string): string[] {
+  return ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id];
 }
 
 export function SpeakerFormModal({
@@ -123,7 +133,7 @@ export function SpeakerFormModal({
     } else {
       setValues({
         ...emptyForm,
-        eventId: eventId ?? '',
+        eventIds: eventId ? [eventId] : [],
       });
     }
   }, [open, initialSpeaker, eventId]);
@@ -154,10 +164,14 @@ export function SpeakerFormModal({
       setCommittingPhoto(false);
     }
 
-    const nextValues = {
+    const nextValues: SpeakerFormValues = {
       ...values,
       photo,
-      eventId: hideEventSelect ? (eventId || values.eventId) : values.eventId,
+      eventIds: hideEventSelect
+        ? eventId
+          ? [eventId]
+          : values.eventIds
+        : values.eventIds,
     };
     setValues(nextValues);
     const nextErrors = validate(nextValues, requireEvent);
@@ -184,25 +198,38 @@ export function SpeakerFormModal({
 
         <form className="modal-body event-form" onSubmit={handleSubmit} noValidate>
           {!hideEventSelect ? (
-            <label className="field">
-              <span className="field-label">
-                Event <span className="required-mark">*</span>
-              </span>
-              <select
-                className={`field-input${errors.eventId ? ' field-input-error' : ''}`}
-                value={values.eventId}
-                onChange={(e) => update('eventId', e.target.value)}
-                disabled={eventsQuery.isLoading}
-              >
-                <option value="">Select event</option>
-                {editions.map((edition) => (
-                  <option key={edition.id} value={edition.id}>
-                    {edition.name} ({formatEditionRange(edition)})
-                  </option>
-                ))}
-              </select>
-              {errors.eventId ? <span className="field-error">{errors.eventId}</span> : null}
-            </label>
+            <fieldset className="schedule-fieldset">
+              <legend>
+                Events <span className="required-mark">*</span>
+              </legend>
+              <p className="hint">
+                One speaker profile can be linked to multiple event editions. The same email cannot
+                be added twice to the same event.
+              </p>
+              {eventsQuery.isLoading ? (
+                <p className="muted">Loading events…</p>
+              ) : editions.length === 0 ? (
+                <p className="muted">No events yet. Create an event first.</p>
+              ) : (
+                <ul className="day-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  {editions.map((edition) => (
+                    <li key={edition.id} style={{ marginBottom: 6 }}>
+                      <label className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={values.eventIds.includes(edition.id)}
+                          onChange={() => update('eventIds', toggleId(values.eventIds, edition.id))}
+                        />
+                        <span>
+                          {edition.name} ({formatEditionRange(edition)})
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {errors.eventIds ? <span className="field-error">{errors.eventIds}</span> : null}
+            </fieldset>
           ) : null}
 
           <Input
@@ -223,7 +250,10 @@ export function SpeakerFormModal({
             onChange={(e) => update('email', e.target.value)}
             placeholder="speaker@example.com"
           />
-          <p className="hint">Optional. Sends a login invite when creating or updating.</p>
+          <p className="hint">
+            Optional. Sends a login invite (or “use your existing password” if they already have an
+            account). Event add/remove also emails the speaker.
+          </p>
           <Input
             label="Title"
             name="title"

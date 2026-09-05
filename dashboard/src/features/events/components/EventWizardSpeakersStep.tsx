@@ -12,7 +12,7 @@ import { useToast } from '@/shared/ui/toast';
 
 export interface DraftSpeaker {
   key: string;
-  payload: Omit<SpeakerPayload, 'eventId'>;
+  payload: Omit<SpeakerPayload, 'eventId' | 'eventIds'>;
 }
 
 interface EventWizardSpeakersStepProps {
@@ -29,7 +29,7 @@ function newSpeakerKey(): string {
 
 export function draftSpeakersWithoutEvent(
   speakers: DraftSpeaker[],
-): Array<Omit<SpeakerPayload, 'eventId'>> {
+): Array<Omit<SpeakerPayload, 'eventId' | 'eventIds'>> {
   return speakers.map((item) => item.payload);
 }
 
@@ -126,28 +126,61 @@ export function EventWizardSpeakersStep({
   }
 
   async function removeLive(speaker: PublicSpeaker) {
+    const linked =
+      speaker.eventIds && speaker.eventIds.length > 0
+        ? speaker.eventIds
+        : speaker.eventId
+          ? [speaker.eventId]
+          : [];
+    const onlyThisEdition = linked.length <= 1 || !eventId || !linked.includes(eventId);
+
     const ok = await confirm({
-      title: 'Delete speaker?',
-      message: `Delete “${speaker.name}”? This cannot be undone.`,
-      confirmLabel: 'Delete',
+      title: onlyThisEdition ? 'Delete speaker?' : 'Remove from this event?',
+      message: onlyThisEdition
+        ? `Delete “${speaker.name}”? This cannot be undone.`
+        : `Remove “${speaker.name}” from this event only? They stay linked to other events.`,
+      confirmLabel: onlyThisEdition ? 'Delete' : 'Remove',
       tone: 'danger',
     });
     if (!ok) return;
-    await deleteMutation.mutateAsync(speaker.id);
+
+    if (onlyThisEdition) {
+      await deleteMutation.mutateAsync(speaker.id);
+      return;
+    }
+
+    await updateMutation.mutateAsync({
+      id: speaker.id,
+      payload: {
+        name: speaker.name,
+        email: speaker.email || undefined,
+        title: speaker.title,
+        description: speaker.description,
+        photo: speaker.photo,
+        eventIds: linked.filter((id) => id !== eventId),
+      },
+    });
   }
 
   async function handleSubmit(payload: SpeakerPayload) {
     if (liveMode && eventId) {
-      const withEvent = { ...payload, eventId };
       if (editingLive) {
-        await updateMutation.mutateAsync({ id: editingLive.id, payload: withEvent });
+        // Don't replace multi-event associations from the edition wizard — profile only.
+        const profile: SpeakerPayload = {
+          name: payload.name,
+          email: payload.email,
+          title: payload.title,
+          description: payload.description,
+          photo: payload.photo,
+        };
+        await updateMutation.mutateAsync({ id: editingLive.id, payload: profile });
       } else {
-        await createMutation.mutateAsync(withEvent);
+        await createMutation.mutateAsync({ ...payload, eventIds: [eventId] });
       }
       return;
     }
 
-    const draftPayload: Omit<SpeakerPayload, 'eventId'> = {
+    const draftPayload: Omit<SpeakerPayload, 'eventId' | 'eventIds'> = {
       name: payload.name,
       email: payload.email,
       title: payload.title,

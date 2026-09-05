@@ -505,6 +505,58 @@ export class MailService {
     return this.send({ to: input.to, subject, text, html });
   }
 
+  async sendSpeakerEventAssigned(input: {
+    to: string;
+    name: string;
+    eventName: string;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const eventLabel = input.eventName.trim();
+    const subject = `You're a speaker for ${eventLabel}`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `You've been added as a speaker for ${eventLabel}.`,
+      '',
+      'Sign in to the speaker dashboard with your email to manage sessions for this event.',
+      'If you have not set a password yet, use the invite code from your earlier email, or Forgot password.',
+      '',
+      'If you did not expect this email, you can ignore it.',
+    ].join('\n');
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>You've been added as a speaker for <strong>${escapeHtml(eventLabel)}</strong>.</p>
+      <p>Sign in to the speaker dashboard with your email to manage sessions for this event.</p>
+      <p>If you have not set a password yet, use the invite code from your earlier email, or Forgot password.</p>
+      <p>If you did not expect this email, you can ignore it.</p>
+    `;
+    return this.send({ to: input.to, subject, text, html });
+  }
+
+  async sendSpeakerEventRemoved(input: {
+    to: string;
+    name: string;
+    eventName: string;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const eventLabel = input.eventName.trim();
+    const subject = `Speaker access removed for ${eventLabel}`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `You are no longer listed as a speaker for ${eventLabel}.`,
+      '',
+      'If you still have access to other events, you can sign in with the same email and password.',
+      '',
+      'If you did not expect this email, you can ignore it.',
+    ].join('\n');
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>You are no longer listed as a speaker for <strong>${escapeHtml(eventLabel)}</strong>.</p>
+      <p>If you still have access to other events, you can sign in with the same email and password.</p>
+      <p>If you did not expect this email, you can ignore it.</p>
+    `;
+    return this.send({ to: input.to, subject, text, html });
+  }
+
   async sendMembershipRenewalReminder(input: {
     to: string;
     name: string;

@@ -1,9 +1,15 @@
 import type { PublicSpeaker, Speaker } from './speaker.types.js';
 
-export function toPublicSpeaker(speaker: Speaker): PublicSpeaker {
+export function toPublicSpeaker(
+  speaker: Speaker,
+  eventIds: string[] = speaker.eventId ? [speaker.eventId] : [],
+): PublicSpeaker {
+  const unique = [...new Set(eventIds.filter(Boolean))];
+  const primary = unique[0] ?? speaker.eventId ?? '';
   return {
     id: speaker.id,
-    eventId: speaker.eventId,
+    eventId: primary,
+    eventIds: unique,
     name: speaker.name,
     email: speaker.email ?? '',
     title: speaker.title,

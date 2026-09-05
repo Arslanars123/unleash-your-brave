@@ -1,6 +1,6 @@
 export interface Speaker {
   id: string;
-  /** Event edition this speaker belongs to. */
+  /** Primary / home event edition (first linked event). */
   eventId: string;
   name: string;
   /** Portal login email (optional; linked user account when set). */
@@ -15,6 +15,8 @@ export interface Speaker {
 export interface PublicSpeaker {
   id: string;
   eventId: string;
+  /** All event editions this speaker is associated with. */
+  eventIds: string[];
   name: string;
   email: string;
   title: string;
@@ -25,7 +27,10 @@ export interface PublicSpeaker {
 }
 
 export interface CreateSpeakerInput {
-  eventId: string;
+  /** Preferred: one or more event editions. */
+  eventIds?: string[];
+  /** Legacy single-event field (normalized into eventIds). */
+  eventId?: string;
   name: string;
   email?: string;
   title?: string;
@@ -34,6 +39,7 @@ export interface CreateSpeakerInput {
 }
 
 export interface UpdateSpeakerInput {
+  eventIds?: string[];
   eventId?: string;
   name?: string;
   email?: string;

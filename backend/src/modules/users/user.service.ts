@@ -118,14 +118,21 @@ export class UserService {
   async clearSpeakerPortalLink(speakerId: string): Promise<void> {
     const user = await this.users.findBySpeakerId(speakerId);
     if (!user || user.speakerId !== speakerId) return;
-
     const nextRole =
       user.role === 'admin' ? 'admin' : user.sponsorId ? 'sponsor' : 'member';
-
     await this.users.update(user.id, {
       speakerId: null,
       role: nextRole,
     });
+  }
+
+  /** When consolidating duplicate speaker profiles, keep portal login on the canonical id. */
+  async repointSpeakerPortalLink(fromSpeakerId: string, toSpeakerId: string): Promise<void> {
+    if (fromSpeakerId === toSpeakerId) return;
+    const user = await this.users.findBySpeakerId(fromSpeakerId);
+    if (!user || user.speakerId !== fromSpeakerId) return;
+    if (!(await this.speakers?.findById(toSpeakerId))) return;
+    await this.users.update(user.id, { speakerId: toSpeakerId });
   }
 
   /** Drop sponsor portal access when the sponsor profile is deleted. */
@@ -394,16 +401,15 @@ export class UserService {
         throw new ConflictError('That email is already used by an admin account');
       }
 
-      // Speakers (and sponsors) may share one portal login email across multiple
-      // event-specific profiles. Keep the first profile link stable so login /me
-      // stays consistent instead of rejecting the second association.
+      // One portal login per email. Prefer the speaker/sponsor id being provisioned
+      // so consolidations land on the canonical profile.
       const nextSpeakerId =
         input.role === 'speaker'
-          ? (existing.speakerId ?? incomingSpeakerId)
+          ? (incomingSpeakerId ?? existing.speakerId)
           : existing.speakerId;
       const nextSponsorId =
         input.role === 'sponsor'
-          ? (existing.sponsorId ?? incomingSponsorId)
+          ? (incomingSponsorId ?? existing.sponsorId)
           : existing.sponsorId;
 
       await this.assertProfileLinks(nextSpeakerId, nextSponsorId);
@@ -414,15 +420,6 @@ export class UserService {
         : nextSponsorId
           ? 'sponsor'
           : existing.role;
-
-      const linkingAdditionalSpeakerProfile =
-        input.role === 'speaker' &&
-        Boolean(existing.speakerId) &&
-        existing.speakerId !== incomingSpeakerId;
-      const linkingAdditionalSponsorProfile =
-        input.role === 'sponsor' &&
-        Boolean(existing.sponsorId) &&
-        existing.sponsorId !== incomingSponsorId;
 
       // Password already set → keep it. Still needs setup → optional fresh invite.
       const passwordAlreadySet = !existing.mustChangePassword;
@@ -435,10 +432,7 @@ export class UserService {
 
       const updated = await this.users.update(existing.id, {
         email,
-        name:
-          linkingAdditionalSpeakerProfile || linkingAdditionalSponsorProfile
-            ? existing.name
-            : input.name.trim(),
+        name: input.name.trim(),
         role: nextRole,
         speakerId: nextSpeakerId,
         sponsorId: nextSponsorId,

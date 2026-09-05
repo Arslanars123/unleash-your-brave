@@ -501,6 +501,8 @@ export interface EventAssociations {
 export interface PublicSpeaker {
   id: string;
   eventId: string;
+  /** All event editions this speaker is associated with. */
+  eventIds?: string[];
   name: string;
   email: string;
   title: string;
@@ -511,7 +513,10 @@ export interface PublicSpeaker {
 }
 
 export interface SpeakerPayload {
-  eventId: string;
+  /** Preferred: associate the speaker with one or more events. */
+  eventIds?: string[];
+  /** Legacy single-event field (still accepted by the API). */
+  eventId?: string;
   name: string;
   email?: string;
   title?: string;

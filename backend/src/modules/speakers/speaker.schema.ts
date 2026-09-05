@@ -34,18 +34,32 @@ const optionalEmail = z
   .or(z.literal(''))
   .transform((value) => value || undefined);
 
-export const createSpeakerSchema = z.object({
-  eventId: z.string().uuid('Event is required'),
-  name: z.string().trim().min(2, 'Name is required').max(160),
-  email: optionalEmail,
-  title: optionalText,
-  description: optionalLongText,
-  photo: photoSchema,
-});
+const eventIdsSchema = z.array(z.string().uuid()).min(1).optional();
+
+function hasAtLeastOneEvent(value: { eventId?: string; eventIds?: string[] }): boolean {
+  if (value.eventIds && value.eventIds.length > 0) return true;
+  return Boolean(value.eventId);
+}
+
+export const createSpeakerSchema = z
+  .object({
+    eventId: z.string().uuid('Event is required').optional(),
+    eventIds: eventIdsSchema,
+    name: z.string().trim().min(2, 'Name is required').max(160),
+    email: optionalEmail,
+    title: optionalText,
+    description: optionalLongText,
+    photo: photoSchema,
+  })
+  .refine(hasAtLeastOneEvent, {
+    message: 'Select at least one event',
+    path: ['eventIds'],
+  });
 
 export const updateSpeakerSchema = z
   .object({
     eventId: z.string().uuid('Event is required').optional(),
+    eventIds: eventIdsSchema,
     name: z.string().trim().min(2).max(160).optional(),
     email: optionalEmail,
     title: z.string().trim().max(500).optional(),

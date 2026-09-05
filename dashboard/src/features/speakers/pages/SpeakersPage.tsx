@@ -126,8 +126,8 @@ export function SpeakersPage() {
           <span className="page-kicker">Stage</span>
           <h1>Speakers</h1>
           <p className="muted">
-            Speakers belong to an event edition. Choose which event each speaker is for when you
-            create or edit them.
+            One speaker profile per email. Link the same person to multiple event editions — they
+            appear once in this list.
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -179,7 +179,7 @@ export function SpeakersPage() {
           <div className="empty-state">
             <Mic2 size={28} />
             <h2>No speakers yet</h2>
-            <p className="muted">Add a speaker and select which event they belong to.</p>
+            <p className="muted">Add a speaker and select which events they belong to.</p>
             <Button onClick={openCreate}>
               <Plus size={16} />
               Create speaker
@@ -192,6 +192,7 @@ export function SpeakersPage() {
                 <tr>
                   <th>Speaker</th>
                   <th>Title</th>
+                  <th>Events</th>
                   <th>Description</th>
                   <th />
                 </tr>
@@ -216,6 +217,13 @@ export function SpeakersPage() {
                       </div>
                     </td>
                     <td>{speaker.title || '—'}</td>
+                    <td>
+                      {speaker.eventIds && speaker.eventIds.length > 0
+                        ? `${speaker.eventIds.length} event${speaker.eventIds.length === 1 ? '' : 's'}`
+                        : speaker.eventId
+                          ? '1 event'
+                          : '—'}
+                    </td>
                     <td>
                       <span className="cell-clamp">{speaker.description || '—'}</span>
                     </td>
