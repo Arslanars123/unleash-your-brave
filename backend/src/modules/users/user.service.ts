@@ -394,26 +394,17 @@ export class UserService {
         throw new ConflictError('That email is already used by an admin account');
       }
 
-      if (
-        incomingSpeakerId &&
-        existing.speakerId &&
-        existing.speakerId !== incomingSpeakerId
-      ) {
-        throw new ConflictError('That email is linked to a different speaker profile');
-      }
-      if (
-        incomingSponsorId &&
-        existing.sponsorId &&
-        existing.sponsorId !== incomingSponsorId
-      ) {
-        throw new ConflictError('That email is linked to a different sponsor profile');
-      }
-
-      // Merge capabilities — never drop the other portal link or membership.
+      // Speakers (and sponsors) may share one portal login email across multiple
+      // event-specific profiles. Keep the first profile link stable so login /me
+      // stays consistent instead of rejecting the second association.
       const nextSpeakerId =
-        input.role === 'speaker' ? incomingSpeakerId : existing.speakerId;
+        input.role === 'speaker'
+          ? (existing.speakerId ?? incomingSpeakerId)
+          : existing.speakerId;
       const nextSponsorId =
-        input.role === 'sponsor' ? incomingSponsorId : existing.sponsorId;
+        input.role === 'sponsor'
+          ? (existing.sponsorId ?? incomingSponsorId)
+          : existing.sponsorId;
 
       await this.assertProfileLinks(nextSpeakerId, nextSponsorId);
 
@@ -423,6 +414,15 @@ export class UserService {
         : nextSponsorId
           ? 'sponsor'
           : existing.role;
+
+      const linkingAdditionalSpeakerProfile =
+        input.role === 'speaker' &&
+        Boolean(existing.speakerId) &&
+        existing.speakerId !== incomingSpeakerId;
+      const linkingAdditionalSponsorProfile =
+        input.role === 'sponsor' &&
+        Boolean(existing.sponsorId) &&
+        existing.sponsorId !== incomingSponsorId;
 
       // Password already set → keep it. Still needs setup → optional fresh invite.
       const passwordAlreadySet = !existing.mustChangePassword;
@@ -435,7 +435,10 @@ export class UserService {
 
       const updated = await this.users.update(existing.id, {
         email,
-        name: input.name.trim(),
+        name:
+          linkingAdditionalSpeakerProfile || linkingAdditionalSponsorProfile
+            ? existing.name
+            : input.name.trim(),
         role: nextRole,
         speakerId: nextSpeakerId,
         sponsorId: nextSponsorId,

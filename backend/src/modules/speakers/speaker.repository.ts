@@ -9,6 +9,8 @@ export interface PaginatedResult<T> {
 export interface SpeakerRepository {
   findById(id: string): Promise<Speaker | null>;
   findByEmail(email: string): Promise<Speaker | null>;
+  /** All speaker profiles that share a portal email (one per event edition). */
+  listByEmail(email: string): Promise<Speaker[]>;
   list(query: ListSpeakersQuery): Promise<PaginatedResult<Speaker>>;
   listByIds(ids: string[]): Promise<Speaker[]>;
   create(data: Omit<Speaker, 'id' | 'createdAt' | 'updatedAt'>): Promise<Speaker>;
@@ -24,13 +26,16 @@ export class InMemorySpeakerRepository implements SpeakerRepository {
   }
 
   async findByEmail(email: string): Promise<Speaker | null> {
+    const matches = await this.listByEmail(email);
+    return matches[0] ?? null;
+  }
+
+  async listByEmail(email: string): Promise<Speaker[]> {
     const normalized = email.trim().toLowerCase();
-    if (!normalized) return null;
-    return (
-      [...this.speakers.values()].find(
-        (speaker) => speaker.email.trim().toLowerCase() === normalized,
-      ) ?? null
-    );
+    if (!normalized) return [];
+    return [...this.speakers.values()]
+      .filter((speaker) => speaker.email.trim().toLowerCase() === normalized)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async list(query: ListSpeakersQuery): Promise<PaginatedResult<Speaker>> {

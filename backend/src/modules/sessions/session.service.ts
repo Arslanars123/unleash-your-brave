@@ -328,10 +328,22 @@ export class SessionService {
   private async resolveSpeakerEventIds(speakerId: string): Promise<Set<string>> {
     const ids = new Set<string>();
     const speaker = await this.speakers.findById(speakerId);
-    if (speaker?.eventId) ids.add(speaker.eventId);
-    if (this.associations) {
-      for (const eventId of await this.associations.listEventIdsForSpeaker(speakerId)) {
-        ids.add(eventId);
+    if (!speaker) return ids;
+
+    const profileIds = new Set<string>([speakerId]);
+    if (speaker.email.trim()) {
+      for (const sibling of await this.speakers.listByEmail(speaker.email)) {
+        profileIds.add(sibling.id);
+      }
+    }
+
+    for (const profileId of profileIds) {
+      const profile = profileId === speakerId ? speaker : await this.speakers.findById(profileId);
+      if (profile?.eventId) ids.add(profile.eventId);
+      if (this.associations) {
+        for (const eventId of await this.associations.listEventIdsForSpeaker(profileId)) {
+          ids.add(eventId);
+        }
       }
     }
     return ids;

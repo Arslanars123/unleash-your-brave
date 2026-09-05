@@ -18,9 +18,15 @@ export class MongoSpeakerRepository implements SpeakerRepository {
   }
 
   async findByEmail(email: string): Promise<Speaker | null> {
+    const matches = await this.listByEmail(email);
+    return matches[0] ?? null;
+  }
+
+  async listByEmail(email: string): Promise<Speaker[]> {
     const normalized = email.trim().toLowerCase();
-    if (!normalized) return null;
-    return fromDoc<Speaker>(await this.collection.findOne({ email: normalized }));
+    if (!normalized) return [];
+    const docs = await this.collection.find({ email: normalized }).sort({ name: 1 }).toArray();
+    return fromDocs<Speaker>(docs);
   }
 
   async list(query: ListSpeakersQuery): Promise<PaginatedResult<Speaker>> {

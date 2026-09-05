@@ -160,30 +160,19 @@ export class SpeakerService {
   }
 
   async assertLinkedToEvent(speakerId: string, eventId: string): Promise<void> {
-    const speaker = await this.speakers.findById(speakerId);
-    if (!speaker) throw new BadRequestError('Selected speaker was not found');
-    if (speaker.eventId === eventId) return;
-    if (this.associations && (await this.associations.isSpeakerLinked(eventId, speakerId))) {
-      return;
-    }
+    const eventIds = await this.collectEventIdsForSpeaker(speakerId);
+    if (eventIds.has(eventId)) return;
     throw new BadRequestError('Speaker must be associated with this event edition');
   }
 
   /**
-   * Editions where this speaker is linked (home eventId and/or associations).
+   * Editions where this speaker is linked (home eventId and/or associations),
+   * including sibling profiles that share the same portal email.
    */
   async listLinkedEvents(speakerId: string): Promise<LinkedSpeakerEvent[]> {
     await this.requireSpeaker(speakerId);
 
-    const eventIds = new Set<string>();
-    const speaker = await this.speakers.findById(speakerId);
-    if (speaker?.eventId) eventIds.add(speaker.eventId);
-
-    if (this.associations) {
-      for (const eventId of await this.associations.listEventIdsForSpeaker(speakerId)) {
-        eventIds.add(eventId);
-      }
-    }
+    const eventIds = await this.collectEventIdsForSpeaker(speakerId);
 
     const results: LinkedSpeakerEvent[] = [];
     for (const eventId of eventIds) {
@@ -227,6 +216,12 @@ export class SpeakerService {
       issueInvite,
     });
 
+    // Portal stays on the first speaker profile for this email; later edition
+    // profiles share login via email sibling resolution — skip duplicate invites.
+    if (user.speakerId && user.speakerId !== speaker.id) {
+      return;
+    }
+
     if (inviteCode) {
       const expiresAt = new Date(
         Date.now() + env.inviteCodeTtlDays * 24 * 60 * 60 * 1000,
@@ -251,6 +246,34 @@ export class SpeakerService {
         isSponsor: Boolean(user.sponsorId),
       });
     }
+  }
+
+  /**
+   * Union of home event + association links for this speaker and any other
+   * speaker profiles that use the same portal email.
+   */
+  private async collectEventIdsForSpeaker(speakerId: string): Promise<Set<string>> {
+    const speaker = await this.speakers.findById(speakerId);
+    if (!speaker) throw new BadRequestError('Selected speaker was not found');
+
+    const profileIds = new Set<string>([speakerId]);
+    if (speaker.email.trim()) {
+      for (const sibling of await this.speakers.listByEmail(speaker.email)) {
+        profileIds.add(sibling.id);
+      }
+    }
+
+    const eventIds = new Set<string>();
+    for (const profileId of profileIds) {
+      const profile = profileId === speakerId ? speaker : await this.speakers.findById(profileId);
+      if (profile?.eventId) eventIds.add(profile.eventId);
+      if (this.associations) {
+        for (const eventId of await this.associations.listEventIdsForSpeaker(profileId)) {
+          eventIds.add(eventId);
+        }
+      }
+    }
+    return eventIds;
   }
 
   private async requireSpeaker(id: string): Promise<Speaker> {
