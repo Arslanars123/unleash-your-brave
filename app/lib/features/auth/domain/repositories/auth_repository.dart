@@ -37,6 +37,8 @@ abstract class AuthRepository {
     Map<String, dynamic> payload,
   );
 
+  Future<Either<Failure, void>> deactivateMyAccount();
+
   Future<Either<Failure, void>> logout();
 
   Future<bool> hasSession();

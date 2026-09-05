@@ -219,7 +219,10 @@ export class AnnouncementService {
     if (userIds.length === 0) return;
 
     const existing = await this.announcements.findBySystemKey(input.systemKey);
-    if (existing) return;
+    if (existing) {
+      logger.info({ systemKey: input.systemKey }, 'Session update notice skipped: duplicate systemKey');
+      return;
+    }
 
     const announcement = await this.announcements.create({
       title: input.title,

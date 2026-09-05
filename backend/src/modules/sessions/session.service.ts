@@ -64,14 +64,16 @@ function formatSessionTimeRange(startTime: string, endTime: string): string {
 
 function sessionUpdateFingerprint(session: Session): string {
   return [
+    session.kind,
     session.name,
+    session.speakerId ?? '',
     session.eventDayNumber,
     session.startTime,
     session.endTime,
     session.location,
     session.address,
     session.description,
-    (session.membershipIds ?? []).join(','),
+    (session.membershipIds ?? []).slice().sort().join(','),
   ].join('|');
 }
 
@@ -89,14 +91,17 @@ function buildSessionChangeSummary(before: Session, after: Session): string | nu
   if (beforeTime !== afterTime) {
     parts.push(afterTime ? `Time: ${afterTime}` : 'Time cleared');
   }
-  if (before.location !== after.location) {
+  if (before.location.trim() !== after.location.trim()) {
     parts.push(after.location.trim() ? `Location: ${after.location.trim()}` : 'Location cleared');
   }
-  if (before.address !== after.address) {
+  if (before.address.trim() !== after.address.trim()) {
     parts.push(after.address.trim() ? 'Address updated' : 'Address cleared');
   }
-  if (before.description !== after.description) {
+  if (before.description.trim() !== after.description.trim()) {
     parts.push('Description updated');
+  }
+  if ((before.speakerId ?? '') !== (after.speakerId ?? '')) {
+    parts.push(after.speakerId ? 'Speaker updated' : 'Speaker removed');
   }
   const beforeMemberships = (before.membershipIds ?? []).slice().sort().join(',');
   const afterMemberships = (after.membershipIds ?? []).slice().sort().join(',');
@@ -492,22 +497,38 @@ export class SessionService {
     after: Session,
     input: UpdateSessionInput,
   ): Promise<void> {
-    if (!this.announcements || !this.purchases) return;
-    if (isMaterialsOrFeedbackOnlyUpdate(input)) return;
+    if (!this.announcements || !this.purchases) {
+      logger.warn(
+        { sessionId: after.id, hasAnnouncements: Boolean(this.announcements), hasPurchases: Boolean(this.purchases) },
+        'Session update notify skipped: announcements or purchases not wired',
+      );
+      return;
+    }
+    if (isMaterialsOrFeedbackOnlyUpdate(input)) {
+      logger.info({ sessionId: after.id }, 'Session update notify skipped: materials/feedback only');
+      return;
+    }
 
     const summary = buildSessionChangeSummary(before, after);
-    if (!summary) return;
+    if (!summary) {
+      logger.info({ sessionId: after.id }, 'Session update notify skipped: no schedule/content changes detected');
+      return;
+    }
 
     try {
       const userIds = await this.purchases.listPaidUserIdsByEvent(after.eventId);
-      if (userIds.length === 0) return;
+      if (userIds.length === 0) {
+        logger.info({ sessionId: after.id, eventId: after.eventId }, 'Session update notify skipped: no paid purchasers');
+        return;
+      }
 
       const event = await this.events.getById(after.eventId);
       const label = after.kind === 'event' ? 'Activity' : 'Session';
-      const fingerprint = sessionUpdateFingerprint(after);
+      // Unique per before→after change so re-edits still notify; identical double-saves still dedupe.
+      const systemKey = `session:update:${after.id}:${sessionUpdateFingerprint(before)}=>${sessionUpdateFingerprint(after)}`;
 
       await this.announcements.publishSessionUpdateNotice({
-        systemKey: `session:update:${after.id}:${fingerprint}`,
+        systemKey,
         title: `${label} updated: ${after.name}`,
         description: `${event.name} — ${summary}`,
         userIds,

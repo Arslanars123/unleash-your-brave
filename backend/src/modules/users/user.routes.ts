@@ -32,6 +32,12 @@ export function createUserRouter(controller: UserController): Router {
     asyncHandler(controller.upgradeMyMembership),
   );
 
+  router.post(
+    '/me/deactivate',
+    authenticate,
+    asyncHandler(controller.deactivateMe),
+  );
+
   router.use(authenticate, authorize('admin'));
 
   router.get('/stats', asyncHandler(controller.stats));

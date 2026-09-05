@@ -39,7 +39,7 @@ export interface AttendeeFormValues {
   isVip: boolean;
   points: string;
   profileCompleted: boolean;
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'deactivated';
   eventId: string;
   membershipId: string;
 }
@@ -756,6 +756,7 @@ export function AttendeeFormModal({
                 onChange={(e) => update('status', e.target.value as AttendeeFormValues['status'])}
               >
                 <option value="active">active</option>
+                <option value="deactivated">deactivated</option>
                 <option value="suspended">suspended</option>
               </select>
             </label>

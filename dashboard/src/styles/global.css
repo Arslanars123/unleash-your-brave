@@ -1578,6 +1578,11 @@ td strong {
   color: #991b1b;
 }
 
+.status-deactivated {
+  background: var(--warning-soft, #fff7ed);
+  color: #9a3412;
+}
+
 .table-meta {
   padding: 0.8rem 1.15rem;
   font-size: 0.8rem;

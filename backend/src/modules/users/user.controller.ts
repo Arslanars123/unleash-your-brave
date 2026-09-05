@@ -73,6 +73,14 @@ export class UserController {
     sendSuccess(res, await this.service.upgradeMyMembership(req.auth.userId, body.membershipId));
   };
 
+  deactivateMe = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth?.userId) {
+      throw new UnauthorizedError('Authentication required');
+    }
+    await this.service.deactivateMe(req.auth.userId);
+    res.status(204).send();
+  };
+
   remove = async (req: Request, res: Response): Promise<void> => {
     const userId = req.params.id as string;
     const eventId =

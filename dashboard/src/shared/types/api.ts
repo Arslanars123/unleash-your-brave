@@ -1,5 +1,5 @@
 export type UserRole = 'admin' | 'member' | 'speaker' | 'sponsor';
-export type UserStatus = 'active' | 'suspended';
+export type UserStatus = 'active' | 'suspended' | 'deactivated';
 
 export type NetworkingPref =
   | 'open_to_all'
@@ -328,6 +328,7 @@ export interface ErrorEnvelope {
 export interface UserStats {
   active: number;
   suspended: number;
+  deactivated: number;
   total: number;
 }
 

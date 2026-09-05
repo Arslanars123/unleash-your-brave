@@ -10,6 +10,7 @@ class ApiConstants {
   static const verifyResetOtp = '/auth/verify-reset-otp';
   static const resetPassword = '/auth/reset-password';
   static const updateMyProfile = '/users/me';
+  static const deactivateMyAccount = '/users/me/deactivate';
   static const uploadImage = '/uploads/images';
   static const currentEvent = '/events/current';
   static const availableEvents = '/events/available';
@@ -18,6 +19,7 @@ class ApiConstants {
   static const eventWorkspace = '/events/workspace';
   static const appBranding = '/app-branding';
   static const sessions = '/sessions';
+  static const speakers = '/speakers';
   static const sponsors = '/sponsors';
   static const storeCategories = '/store/categories';
   static const storeProducts = '/store/products';

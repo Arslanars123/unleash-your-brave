@@ -126,6 +126,14 @@ class AuthRemoteDataSource {
     }
   }
 
+  Future<void> deactivateMyAccount() async {
+    try {
+      await _dioClient.client.post(ApiConstants.deactivateMyAccount);
+    } on DioException catch (error) {
+      throwMappedDioError(error);
+    }
+  }
+
   ({UserModel user, String accessToken, String refreshToken}) _parseAuthResult(
     Map<String, dynamic> body,
   ) {

@@ -1,7 +1,7 @@
 export const USER_ROLES = ['admin', 'member', 'speaker', 'sponsor'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
-export const USER_STATUSES = ['active', 'suspended'] as const;
+export const USER_STATUSES = ['active', 'suspended', 'deactivated'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 /** Lifecycle of the attendee’s current membership entitlement (payment period). */

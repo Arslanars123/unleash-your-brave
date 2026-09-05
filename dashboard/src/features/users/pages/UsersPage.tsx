@@ -215,16 +215,16 @@ export function UsersPage() {
   }
 
   async function handleStatusToggle(user: PublicUser) {
-    const nextStatus: UserStatus = user.status === 'suspended' ? 'active' : 'suspended';
+    const nextStatus: UserStatus = user.status === 'active' ? 'deactivated' : 'active';
     const label = user.fullName || user.name || user.email;
     const ok = await confirm({
-      title: nextStatus === 'suspended' ? 'Suspend attendee?' : 'Activate attendee?',
+      title: nextStatus === 'deactivated' ? 'Deactivate attendee?' : 'Activate attendee?',
       message:
-        nextStatus === 'suspended'
-          ? `Suspend “${label}”? They will not be able to sign in until activated again.`
+        nextStatus === 'deactivated'
+          ? `Deactivate “${label}”? They will not be able to sign in or reset their password until activated again.`
           : `Activate “${label}”? They will be able to sign in again.`,
-      confirmLabel: nextStatus === 'suspended' ? 'Suspend' : 'Activate',
-      tone: nextStatus === 'suspended' ? 'danger' : 'primary',
+      confirmLabel: nextStatus === 'deactivated' ? 'Deactivate' : 'Activate',
+      tone: nextStatus === 'deactivated' ? 'danger' : 'primary',
     });
     if (!ok) return;
     await statusMutation.mutateAsync({ id: user.id, status: nextStatus });
@@ -389,7 +389,7 @@ export function UsersPage() {
                           disabled={statusMutation.isPending}
                           onClick={() => void handleStatusToggle(user)}
                         >
-                          {user.status === 'active' ? 'Suspend' : 'Activate'}
+                          {user.status === 'active' ? 'Deactivate' : 'Activate'}
                         </Button>
                       ) : null}
                       <Button

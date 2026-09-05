@@ -1042,12 +1042,30 @@ export class UserService {
     }
   }
 
-  async getStats(): Promise<{ active: number; suspended: number; total: number }> {
-    const [active, suspended] = await Promise.all([
+  /** Soft-delete: mark account deactivated so login / password reset are blocked. */
+  async deactivateMe(userId: string): Promise<void> {
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundError('User');
+    if (user.role === 'admin') {
+      throw new BadRequestError('Admin accounts cannot be deleted from the app');
+    }
+    if (user.status === 'deactivated') return;
+    const updated = await this.users.update(userId, { status: 'deactivated' });
+    if (!updated) throw new NotFoundError('User');
+  }
+
+  async getStats(): Promise<{
+    active: number;
+    suspended: number;
+    deactivated: number;
+    total: number;
+  }> {
+    const [active, suspended, deactivated] = await Promise.all([
       this.users.countByStatus('active'),
       this.users.countByStatus('suspended'),
+      this.users.countByStatus('deactivated'),
     ]);
-    return { active, suspended, total: active + suspended };
+    return { active, suspended, deactivated, total: active + suspended + deactivated };
   }
 
   /**

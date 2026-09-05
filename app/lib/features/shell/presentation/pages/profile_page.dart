@@ -15,6 +15,7 @@ import 'package:unleash_your_brave/core/utils/app_toast.dart';
 import 'package:unleash_your_brave/core/widgets/adaptive_page.dart';
 import 'package:unleash_your_brave/core/widgets/app_circle_avatar.dart';
 import 'package:unleash_your_brave/features/auth/domain/entities/user_entity.dart';
+import 'package:unleash_your_brave/features/auth/domain/repositories/auth_repository.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/attendee_access_refresh.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
@@ -324,6 +325,9 @@ class _MembershipSectionState extends State<_MembershipSection>
   bool _upgrading = false;
   bool _awaitingCheckoutReturn = false;
   String? _error;
+  /// All event-linked tiers (includes sale-closed). Used to resolve owned pass.
+  List<MembershipEntity> _allMemberships = const [];
+  /// Purchase-open tiers only. Used for buy/upgrade actions.
   List<MembershipEntity> _memberships = const [];
   EffectiveEventAccess? _access;
   String? _catalogEventId;
@@ -367,7 +371,7 @@ class _MembershipSectionState extends State<_MembershipSection>
       _awaitingCheckoutReturn = false;
       if (!mounted) return;
       context.read<AuthBloc>().add(const AuthRefreshRequested());
-      AppToast.success('If payment succeeded, your membership will update shortly.');
+      AppToast.success('If payment succeeded, your event plan will update shortly.');
     }
   }
 
@@ -419,23 +423,39 @@ class _MembershipSectionState extends State<_MembershipSection>
       } catch (_) {
         // Fall back to all memberships if event lookup fails.
       }
-      List<MembershipEntity> items;
+      final ds = sl<MembershipsRemoteDataSource>();
+      // Full event-linked list (includes sale-closed) for owned-pass display.
+      final allItems = await ds.list(eventId: eventId);
+      List<MembershipEntity> purchasableItems;
       try {
-        items = await sl<MembershipsRemoteDataSource>().catalog(eventId: eventId);
+        purchasableItems =
+            MembershipEntity.purchasableOnly(await ds.catalog(eventId: eventId));
       } catch (_) {
-        items = await sl<MembershipsRemoteDataSource>().list(eventId: eventId);
+        purchasableItems = MembershipEntity.purchasableOnly(allItems);
       }
       EffectiveEventAccess? access;
       try {
-        access = await sl<MembershipsRemoteDataSource>().myAccess(eventId: eventId);
+        access = await ds.myAccess(eventId: eventId);
       } catch (_) {
         access = null;
+      }
+      // Hydrate owned tier only from a real membership record (no name-only ghosts).
+      final allWithOwned = [...allItems];
+      final owned = await _resolveOwnedMembership(
+        allItems: allWithOwned,
+        access: access,
+        dataSource: ds,
+      );
+      if (owned != null &&
+          allWithOwned.every((item) => item.id != owned.id)) {
+        allWithOwned.add(owned);
       }
       if (!mounted) return;
       setState(() {
         _catalogEventId = eventId;
         _catalogEventName = eventName;
-        _memberships = [...MembershipEntity.purchasableOnly(items)]
+        _allMemberships = allWithOwned;
+        _memberships = [...purchasableItems]
           ..sort((a, b) {
             final bySort = a.sortOrder.compareTo(b.sortOrder);
             if (bySort != 0) return bySort;
@@ -461,31 +481,66 @@ class _MembershipSectionState extends State<_MembershipSection>
       if (!mounted || silent) return;
       setState(() {
         _loading = false;
-        _error = 'Unable to load memberships';
+        _error = 'Unable to load event plans';
       });
     }
   }
 
   static const _ineligiblePurchaseMessage =
-      'You cannot purchase this membership. You can only continue with your current plan or upgrade to a higher membership plan.';
+      'You cannot purchase this event plan. You can only continue with your current plan or upgrade to a higher event plan.';
 
-  MembershipEntity? get _current {
-    final effectiveId = _access?.effectiveMembershipId;
-    if (effectiveId != null && effectiveId.isNotEmpty) {
-      for (final item in _memberships) {
-        if (item.id == effectiveId) return item;
-      }
-    }
-    final id = widget.user.membershipId;
+  MembershipEntity? _findMembershipById(
+    List<MembershipEntity> items,
+    String? id,
+  ) {
     if (id == null || id.isEmpty) return null;
-    for (final item in _memberships) {
+    for (final item in items) {
       if (item.id == id) return item;
     }
     return null;
   }
 
+  /// Resolves the owned pass to a real membership document only.
+  /// Never invents a tier from a bare id/name (avoids ghost passes).
+  Future<MembershipEntity?> _resolveOwnedMembership({
+    required List<MembershipEntity> allItems,
+    required EffectiveEventAccess? access,
+    required MembershipsRemoteDataSource dataSource,
+  }) async {
+    final effectiveId = access?.effectiveMembershipId?.trim();
+    if (effectiveId != null && effectiveId.isNotEmpty) {
+      final inList = _findMembershipById(allItems, effectiveId);
+      if (inList != null) return inList;
+      try {
+        final remote = await dataSource.getById(effectiveId);
+        if (remote.id == effectiveId) return remote;
+      } catch (_) {
+        // Deleted / unknown id → treat as no pass (no ghost).
+      }
+      return null;
+    }
+
+    // Access did not assert an effective id: only trust event-linked list match.
+    return _findMembershipById(allItems, widget.user.membershipId);
+  }
+
+  MembershipEntity? get _current {
+    final effectiveId = _access?.effectiveMembershipId;
+    final fromEffective = _findMembershipById(_allMemberships, effectiveId);
+    if (fromEffective != null) return fromEffective;
+    return _findMembershipById(_allMemberships, widget.user.membershipId);
+  }
+
   List<MembershipEntity> get _allPlans {
-    final items = [..._memberships]
+    final byId = <String, MembershipEntity>{};
+    for (final item in _memberships) {
+      byId[item.id] = item;
+    }
+    final current = _current;
+    if (current != null) {
+      byId.putIfAbsent(current.id, () => current);
+    }
+    final items = byId.values.toList()
       ..sort((a, b) {
         final byRank = a.upgradeRank.compareTo(b.upgradeRank);
         if (byRank != 0) return byRank;
@@ -689,14 +744,14 @@ class _MembershipSectionState extends State<_MembershipSection>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        current == null ? 'Membership plans' : 'Membership plans',
+                        'Event plans',
                         style: AppTypography.headline.copyWith(fontSize: 26),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         current == null
-                            ? 'Browse every plan below. Pay securely with Stripe to unlock your pass.'
-                            : 'All plans are shown below. You can keep your current plan or upgrade to a higher membership only.',
+                            ? 'Browse every event plan below. Pay securely with Stripe to unlock your plan.'
+                            : 'All event plans are shown below. You can keep your current plan or upgrade to a higher event plan only.',
                         style: AppTypography.caption.copyWith(height: 1.4),
                       ),
                     ],
@@ -722,7 +777,7 @@ class _MembershipSectionState extends State<_MembershipSection>
                             border: Border.all(color: AppColors.borderSubtle),
                           ),
                           child: Text(
-                            'You’re already on the highest available membership for this event.',
+                            'You’re already on the highest available event plan for this event.',
                             style: AppTypography.caption.copyWith(
                               color: AppColors.textSecondary,
                               height: 1.4,
@@ -788,13 +843,15 @@ class _MembershipSectionState extends State<_MembershipSection>
   @override
   Widget build(BuildContext context) {
     final current = _current;
-    final canOpenSheet = !_loading && _error == null && _memberships.isNotEmpty;
+    final canOpenSheet = !_loading &&
+        _error == null &&
+        (_memberships.isNotEmpty || current != null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Membership',
+          'Event plans',
           style: AppTypography.body.copyWith(
             fontWeight: FontWeight.w700,
             fontSize: 17,
@@ -952,7 +1009,7 @@ class _MembershipSectionState extends State<_MembershipSection>
                           ),
                           const SizedBox(height: 18),
                           Text(
-                            current?.name ?? 'Choose a membership',
+                            current?.name ?? 'Choose an event plan',
                             style: AppTypography.headline.copyWith(fontSize: 28),
                           ),
                           const SizedBox(height: 8),
@@ -987,7 +1044,7 @@ class _MembershipSectionState extends State<_MembershipSection>
                             children: [
                               Text(
                                 current == null
-                                    ? 'Browse membership plans'
+                                    ? 'Browse event plans'
                                     : 'View all plans & upgrades',
                                 style: AppTypography.caption.copyWith(
                                   color: AppColors.textPrimary,
@@ -1455,6 +1512,7 @@ class _SettingsSection extends StatefulWidget {
 class _SettingsSectionState extends State<_SettingsSection> {
   late bool _notificationsOn;
   bool _toggling = false;
+  bool _deletingAccount = false;
 
   @override
   void initState() {
@@ -1475,7 +1533,7 @@ class _SettingsSectionState extends State<_SettingsSection> {
       setState(() => _notificationsOn = enabled);
       if (value && !enabled) {
         AppToast.error(
-          'Notification permission is off. Enable it in system settings.',
+          'Notifications are off in system Settings. We opened Settings — enable them for this app, then try again.',
         );
       } else {
         AppToast.success(
@@ -1489,6 +1547,45 @@ class _SettingsSectionState extends State<_SettingsSection> {
     } finally {
       if (mounted) setState(() => _toggling = false);
     }
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    if (_deletingAccount) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+          'This permanently deletes your account. You will be signed out and will not be able to sign in again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete account'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingAccount = true);
+    final result = await sl<AuthRepository>().deactivateMyAccount();
+    if (!mounted) return;
+    setState(() => _deletingAccount = false);
+
+    result.fold(
+      (failure) => AppToast.error(failure.message),
+      (_) {
+        context.read<AuthBloc>().add(const AuthLogoutRequested());
+        context.go('/login');
+        AppToast.success('Your account has been deleted');
+      },
+    );
   }
 
   @override
@@ -1561,6 +1658,13 @@ class _SettingsSectionState extends State<_SettingsSection> {
                 label: 'Terms & Conditions',
                 onTap: () => context.push('/terms'),
               ),
+              const Divider(height: 1, color: AppColors.borderSubtle),
+              _SettingsLinkTile(
+                icon: Icons.delete_forever_outlined,
+                label: _deletingAccount ? 'Deleting account…' : 'Delete account',
+                onTap: _deletingAccount ? () {} : _confirmDeleteAccount,
+                danger: true,
+              ),
             ],
           ),
         ),
@@ -1574,14 +1678,17 @@ class _SettingsLinkTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.danger = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool danger;
 
   @override
   Widget build(BuildContext context) {
+    final color = danger ? Colors.red.shade700 : AppColors.accentPink;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1590,18 +1697,19 @@ class _SettingsLinkTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           child: Row(
             children: [
-              Icon(icon, size: 18, color: AppColors.accentPink),
+              Icon(icon, size: 18, color: color),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,
                   style: AppTypography.body.copyWith(
                     fontWeight: FontWeight.w600,
+                    color: danger ? Colors.red.shade700 : null,
                   ),
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
+              Icon(
+                Icons.chevron_right_rounded,
                 size: 20,
                 color: AppColors.textTertiary,
               ),
@@ -1707,7 +1815,7 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
         _preview = preview.valid ? preview : null;
         _previewError = preview.valid
             ? null
-            : (preview.reason ?? 'This coupon is not valid for this membership');
+            : (preview.reason ?? 'This coupon is not valid for this event plan');
       });
     } on NetworkException catch (error) {
       if (!mounted) return;
@@ -1755,13 +1863,13 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
     final bodyLead = switch (widget.mode) {
       'renew' =>
         'You’ll complete a secure Stripe renewal payment for $priceLine. '
-            'Your membership stays active and your check-in QR remains enabled after payment.',
+            'Your event plan stays active and your check-in QR remains enabled after payment.',
       'upgrade' =>
         'You’ll complete a secure Stripe payment for $priceLine. '
-            'Your membership updates automatically after payment.',
+            'Your event plan updates automatically after payment.',
       _ =>
         'You’ll complete a secure Stripe payment for $priceLine. '
-            'Your pass unlocks after payment succeeds.',
+            'Your event plan unlocks after payment succeeds.',
     };
 
     return AlertDialog(
@@ -1789,7 +1897,7 @@ class _MembershipCheckoutDialogState extends State<_MembershipCheckoutDialog> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'This membership was just updated. Please review the new price and details before paying.',
+                  'This event plan was just updated. Please review the new price and details before paying.',
                   style: AppTypography.caption.copyWith(
                     color: AppColors.accentPink,
                     fontWeight: FontWeight.w600,

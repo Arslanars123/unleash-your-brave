@@ -109,6 +109,9 @@ export class AuthService {
       );
     }
 
+    if (user.status === 'deactivated') {
+      throw new UnauthorizedError("You don't have an account.");
+    }
     if (user.status !== 'active') {
       throw new UnauthorizedError('Account is suspended');
     }
@@ -141,6 +144,10 @@ export class AuthService {
   async forgotPassword(input: ForgotPasswordInput): Promise<ForgotPasswordResult> {
     const email = input.email.trim().toLowerCase();
     const user = await this.users.findByEmail(email);
+
+    if (user?.status === 'deactivated') {
+      throw new UnauthorizedError("You don't have an account.");
+    }
 
     if (user && user.status === 'active') {
       const otp = generatePasswordResetOtp();

@@ -188,6 +188,21 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<Either<Failure, void>> deactivateMyAccount() async {
+    try {
+      await _remote.deactivateMyAccount();
+      await _local.clear();
+      return const Right(null);
+    } on ServerException catch (error) {
+      return Left(AuthFailure(error.message));
+    } on NetworkException catch (error) {
+      return Left(NetworkFailure(error.message));
+    } catch (_) {
+      return const Left(UnexpectedFailure());
+    }
+  }
+
+  @override
   Future<Either<Failure, void>> logout() async {
     try {
       await _local.clear();
