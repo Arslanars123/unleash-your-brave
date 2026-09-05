@@ -303,28 +303,15 @@ export function eventToForm(event: PublicEvent): EventFormValues {
 export function scheduleBlankForm(previous: PublicEvent | null): EventFormValues {
   if (!previous) return { ...emptyForm, days: buildConsecutiveDays('', 3) };
 
+  // Only inherit the earliest allowed start date from the previous edition.
+  // Do not copy name, venue, map pin, cover image, or other content.
   const earliestStart = dayAfterIso(previous.endDate);
-  const dayCount = previous.dayCount || 3;
 
   return {
     ...emptyForm,
-    name: previous.name?.trim() || CANONICAL_EVENT_NAME,
-    tagline: previous.tagline,
-    description: previous.description,
-    venueName: previous.venueName,
-    venueAddress: previous.venueAddress,
-    venueCity: previous.venueCity,
-    latitude: previous.latitude ?? null,
-    longitude: previous.longitude ?? null,
-    coverImage: previous.coverImage,
-    copyDetailsFromPrevious: false,
     consecutiveStart: earliestStart,
-    dayCount,
-    days: buildConsecutiveDays(earliestStart, dayCount),
-    speakerIds: [],
-    sponsorIds: [],
-    membershipIds: [],
-    membershipLinks: [],
+    dayCount: 3,
+    days: buildConsecutiveDays(earliestStart, 3),
   };
 }
 
