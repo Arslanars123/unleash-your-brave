@@ -13,6 +13,7 @@ import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/utils/app_toast.dart';
 import 'package:unleash_your_brave/core/utils/media_url.dart';
+import 'package:unleash_your_brave/core/utils/validators.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:unleash_your_brave/features/store/data/datasources/store_remote_datasource.dart';
@@ -41,6 +42,7 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
   String? _errorMessage;
   bool _isOffline = false;
   int _quantity = 1;
+  final _emailController = TextEditingController();
   final _deliveryAddressController = TextEditingController();
   final _contactPhoneController = TextEditingController();
 
@@ -50,15 +52,48 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
   void initState() {
     super.initState();
     _product = widget.initialProduct;
+    _emailController.addListener(_onCheckoutFieldsChanged);
+    _deliveryAddressController.addListener(_onCheckoutFieldsChanged);
+    _contactPhoneController.addListener(_onCheckoutFieldsChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prefillEmail());
     unawaited(_load());
   }
 
   @override
   void dispose() {
-    _deliveryAddressController.dispose();
-    _contactPhoneController.dispose();
+    _emailController
+      ..removeListener(_onCheckoutFieldsChanged)
+      ..dispose();
+    _deliveryAddressController
+      ..removeListener(_onCheckoutFieldsChanged)
+      ..dispose();
+    _contactPhoneController
+      ..removeListener(_onCheckoutFieldsChanged)
+      ..dispose();
     super.dispose();
   }
+
+  void _onCheckoutFieldsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _prefillEmail() {
+    if (!mounted) return;
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated &&
+        authState.user.email.trim().isNotEmpty &&
+        _emailController.text.trim().isEmpty) {
+      _emailController.text = authState.user.email.trim();
+    }
+  }
+
+  bool get _hasValidCheckoutEmail =>
+      Validators.email(_emailController.text) == null;
+
+  bool get _hasRequiredDeliveryDetails =>
+      _deliveryAddressController.text.trim().isNotEmpty &&
+      _contactPhoneController.text.trim().isNotEmpty &&
+      _hasValidCheckoutEmail;
 
   Future<void> _load() async {
     setState(() {
@@ -140,8 +175,14 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
       return;
     }
 
+    final email = _emailController.text.trim();
     final deliveryAddress = _deliveryAddressController.text.trim();
     final contactPhone = _contactPhoneController.text.trim();
+    final emailError = Validators.email(email);
+    if (emailError != null) {
+      AppToast.error(emailError);
+      return;
+    }
     if (deliveryAddress.isEmpty) {
       AppToast.error('Enter your delivery address');
       return;
@@ -156,6 +197,7 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
       final session = await sl<StoreRemoteDataSource>().createCheckoutSession(
         productId: product.id,
         quantity: _quantity,
+        email: email,
         deliveryAddress: deliveryAddress,
         contactPhone: contactPhone,
         successUrl: ApiConstants.checkoutSuccessUrl,
@@ -222,7 +264,7 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
     final product = _product;
     if (_loading || product == null || _errorMessage != null) return null;
 
-    final canPay = product.inStock && !_paying;
+    final canPay = product.inStock && !_paying && _hasRequiredDeliveryDetails;
 
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(20, 0, 20, 16),
@@ -438,6 +480,47 @@ class _StoreCheckoutPageState extends State<StoreCheckoutPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Text(
+                        'Email',
+                        style: AppTypography.caption.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        textCapitalization: TextCapitalization.none,
+                        decoration: InputDecoration(
+                          hintText: 'name@example.com',
+                          filled: true,
+                          fillColor: AppColors.bgMaroon,
+                          border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderSubtle),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderSubtle),
+                          ),
+                        ),
+                        style: AppTypography.body,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Enter the email address where you would like to receive the receipt.',
+                        style: AppTypography.caption.copyWith(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
                       Text(
                         'Delivery address',
                         style: AppTypography.caption.copyWith(

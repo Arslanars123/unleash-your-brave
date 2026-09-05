@@ -133,6 +133,12 @@ export const updateStoreProductSchema = z
 export const createStoreCheckoutSessionSchema = z.object({
   productId: z.string().uuid('Product is required'),
   quantity: z.coerce.number().int().min(1).max(100).optional().default(1),
+  email: z
+    .string()
+    .trim()
+    .email('Enter a valid email')
+    .toLowerCase()
+    .max(254, 'Email is too long'),
   deliveryAddress: z
     .string()
     .trim()

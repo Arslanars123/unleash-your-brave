@@ -84,6 +84,8 @@ export interface CreateStoreOrderInput {
 export interface CreateStoreCheckoutSessionInput {
   productId: string;
   quantity?: number;
+  /** Receipt destination — may differ from the account login email. */
+  email: string;
   deliveryAddress: string;
   contactPhone: string;
   successUrl?: string;

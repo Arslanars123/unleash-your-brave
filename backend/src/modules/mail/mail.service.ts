@@ -346,6 +346,74 @@ export class MailService {
     return this.send({ to: input.to, subject, text, html });
   }
 
+  async sendStoreOrderReceipt(input: {
+    to: string;
+    name: string;
+    productName: string;
+    quantity: number;
+    priceLabel: string;
+    deliveryAddress: string;
+    contactPhone: string;
+    purchasedAt: Date;
+    stripePaymentIntentId: string | null;
+    orderId?: string;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const when = input.purchasedAt.toUTCString();
+    const subject = `Order receipt: ${input.productName}`;
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      `Thank you for your ${env.appName} store purchase. Here is your receipt.`,
+      '',
+      `Product: ${input.productName}`,
+      `Quantity: ${input.quantity}`,
+      `Amount: ${input.priceLabel}`,
+      `Date: ${when}`,
+      input.deliveryAddress ? `Delivery address: ${input.deliveryAddress}` : null,
+      input.contactPhone ? `Contact phone: ${input.contactPhone}` : null,
+      input.orderId ? `Order ID: ${input.orderId}` : null,
+      input.stripePaymentIntentId ? `Transaction: ${input.stripePaymentIntentId}` : null,
+      '',
+      'If you have any questions, reply to this email.',
+    ]
+      .filter((line) => line !== null)
+      .join('\n');
+
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>Thank you for your ${escapeHtml(env.appName)} store purchase. Here is your receipt.</p>
+      <p style="font-size:18px;font-weight:700">${escapeHtml(input.productName)}</p>
+      <ul>
+        <li><strong>Quantity:</strong> ${escapeHtml(String(input.quantity))}</li>
+        <li><strong>Amount:</strong> ${escapeHtml(input.priceLabel)}</li>
+        <li><strong>Date:</strong> ${escapeHtml(when)}</li>
+        ${
+          input.deliveryAddress
+            ? `<li><strong>Delivery address:</strong> ${escapeHtml(input.deliveryAddress)}</li>`
+            : ''
+        }
+        ${
+          input.contactPhone
+            ? `<li><strong>Contact phone:</strong> ${escapeHtml(input.contactPhone)}</li>`
+            : ''
+        }
+        ${
+          input.orderId
+            ? `<li><strong>Order ID:</strong> ${escapeHtml(input.orderId)}</li>`
+            : ''
+        }
+        ${
+          input.stripePaymentIntentId
+            ? `<li><strong>Transaction:</strong> ${escapeHtml(input.stripePaymentIntentId)}</li>`
+            : ''
+        }
+      </ul>
+      <p>If you have any questions, reply to this email.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
+
   async sendSpeakerSessionAssigned(input: {
     to: string;
     name: string;

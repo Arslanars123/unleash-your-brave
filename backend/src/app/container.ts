@@ -218,6 +218,7 @@ export async function createContainer() {
     storeOrderRepository,
     storeProductRepository,
     userRepository,
+    mailService,
   );
   const pushNotificationService = new PushNotificationService(deviceTokenRepository);
   const membershipLifecycleService = new MembershipLifecycleService(

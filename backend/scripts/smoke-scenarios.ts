@@ -105,15 +105,26 @@ async function main(): Promise<void> {
       const missing = await api('POST', '/store/checkout/sessions', token, {
         productId,
         quantity: 1,
+        email: 'buyer@example.com',
         deliveryAddress: '',
         contactPhone: '+1234567890',
       });
       if (missing.status === 422) pass('Store checkout rejects empty delivery address');
       else fail('Store checkout rejects empty delivery address', `status=${missing.status}`);
 
+      const missingEmail = await api('POST', '/store/checkout/sessions', token, {
+        productId,
+        quantity: 1,
+        deliveryAddress: 'Home',
+        contactPhone: '+1234567890',
+      });
+      if (missingEmail.status === 422) pass('Store checkout requires receipt email');
+      else fail('Store checkout requires receipt email', `status=${missingEmail.status}`);
+
       const shortOk = await api('POST', '/store/checkout/sessions', token, {
         productId,
         quantity: 1,
+        email: 'buyer@example.com',
         deliveryAddress: 'Home',
         contactPhone: '+1234567890',
         expectedPrice: items![0]!.price as number,

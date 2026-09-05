@@ -6,6 +6,7 @@ import {
   NotFoundError,
 } from '../../core/errors/app-error.js';
 import { logger } from '../../core/logger.js';
+import type { MailService } from '../mail/mail.service.js';
 import type { UserRepository } from '../users/user.repository.js';
 import type { StoreOrderRepository } from './store-order.repository.js';
 import type {
@@ -71,6 +72,7 @@ export class StoreCheckoutService {
     private readonly orders: StoreOrderRepository,
     private readonly products: StoreProductRepository,
     private readonly users: UserRepository,
+    private readonly mail: MailService,
   ) {}
 
   private requireStripe(): Stripe {
@@ -139,7 +141,7 @@ export class StoreCheckoutService {
     );
 
     const names = splitDisplayName(user.name || user.email);
-    const email = user.email.trim().toLowerCase();
+    const email = input.email.trim().toLowerCase();
     const deliveryAddress = input.deliveryAddress.trim();
     const contactPhone = input.contactPhone.trim();
 
@@ -308,7 +310,7 @@ export class StoreCheckoutService {
     }
 
     try {
-      await this.orders.create({
+      const order = await this.orders.create({
         userId,
         email,
         firstName:
@@ -337,6 +339,26 @@ export class StoreCheckoutService {
         purchasedAt: new Date(),
         completedAt: null,
       });
+
+      try {
+        await this.mail.sendStoreOrderReceipt({
+          to: order.email,
+          name: [order.firstName, order.lastName].filter(Boolean).join(' ').trim() || 'there',
+          productName: order.productName,
+          quantity: order.quantity,
+          priceLabel: moneyLabel(order.totalPrice, order.currency),
+          deliveryAddress: order.deliveryAddress ?? '',
+          contactPhone: order.contactPhone ?? '',
+          purchasedAt: order.purchasedAt,
+          stripePaymentIntentId: order.stripePaymentIntentId,
+          orderId: order.id,
+        });
+      } catch (error) {
+        logger.error(
+          { err: error, sessionId: session.id, orderId: order.id, email: order.email },
+          'Store order receipt email failed after successful order create',
+        );
+      }
     } catch (error) {
       const duplicate = await this.orders.findByStripeCheckoutSessionId(session.id);
       if (duplicate) {
