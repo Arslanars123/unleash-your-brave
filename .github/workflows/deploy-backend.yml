@@ -12,9 +12,9 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: ap-southeast-2
+  AWS_REGION: us-east-1
   ECR_REPOSITORY: unleash-backend
-  APP_RUNNER_SERVICE_ARN: arn:aws:apprunner:ap-southeast-2:773063618702:service/unleash-api/63972ddb9f6a43568352bcfedfbdf9d9
+  APP_RUNNER_SERVICE_ARN: arn:aws:apprunner:us-east-1:381491933714:service/unleash-api/0e41e50bfe5b46af86b647375a76c69f
 
 jobs:
   deploy:
@@ -45,7 +45,7 @@ jobs:
         run: |
           TAG="ci-$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
           IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$TAG"
-          docker build --platform linux/amd64 -t "$IMAGE_URI" .
+          docker build --platform linux/amd64 --provenance=false --sbom=false -t "$IMAGE_URI" .
           docker push "$IMAGE_URI"
           echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
@@ -53,11 +53,12 @@ jobs:
         env:
           IMAGE_URI: ${{ steps.build.outputs.image }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-          ACCESS_ROLE: arn:aws:iam::773063618702:role/AppRunnerECRAccessRoleUnleash
+          ACCESS_ROLE: arn:aws:iam::381491933714:role/AppRunnerECRAccessRoleUnleash
+          INSTANCE_ROLE: arn:aws:iam::381491933714:role/AppRunnerInstanceRoleUnleash
+          FIREBASE_SECRET_ARN: arn:aws:secretsmanager:us-east-1:381491933714:secret:unleash/firebase-sa-DAB8rA
         run: |
           set -euo pipefail
 
@@ -66,7 +67,7 @@ jobs:
             --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables' \
             --output json)
 
-          SOURCE=$(CURRENT_ENV="$CURRENT" IMAGE_URI="$IMAGE_URI" MONGODB_URI="$MONGODB_URI" FIREBASE_SERVICE_ACCOUNT_JSON="$FIREBASE_SERVICE_ACCOUNT_JSON" STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK_SECRET" STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY" ACCESS_ROLE="$ACCESS_ROLE" python3 - <<'PY'
+          SOURCE=$(CURRENT_ENV="$CURRENT" IMAGE_URI="$IMAGE_URI" MONGODB_URI="$MONGODB_URI" STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK_SECRET" STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY" ACCESS_ROLE="$ACCESS_ROLE" FIREBASE_SECRET_ARN="$FIREBASE_SECRET_ARN" python3 - <<'PY'
           import json, os
           env = json.loads(os.environ.get("CURRENT_ENV") or "{}") or {}
           mongo = (os.environ.get("MONGODB_URI") or "").strip()
@@ -74,17 +75,19 @@ jobs:
               env["MONGODB_URI"] = mongo
           if not env.get("MONGODB_URI"):
               raise SystemExit("MONGODB_URI missing: set GitHub secret MONGODB_URI")
-          firebase = (os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
-          if firebase:
-              env["FIREBASE_SERVICE_ACCOUNT_JSON"] = firebase
           for key in ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PUBLISHABLE_KEY"):
               value = (os.environ.get(key) or "").strip()
               if value:
                   env[key] = value
+          # Keep Firebase out of plain env vars (too large / breaks App Runner create).
+          env.pop("FIREBASE_SERVICE_ACCOUNT_JSON", None)
+          env["AWS_REGION"] = "us-east-1"
+          env["S3_BUCKET"] = "unleash-media-381491933714"
+          env["S3_PUBLIC_BASE_URL"] = "https://unleash-media-381491933714.s3.us-east-1.amazonaws.com"
           cors = env.get("CORS_ORIGINS", "")
           needed = [
-              "http://unleash-admin-dashboard-773063618702.s3-website-ap-southeast-2.amazonaws.com",
-              "https://d20hqnztq6snl9.cloudfront.net",
+              "http://unleash-admin-dashboard-381491933714.s3-website-us-east-1.amazonaws.com",
+              "https://d1pt0ysevzxlx6.cloudfront.net",
               "http://localhost:5173",
               "https://fittoprofit.com",
               "https://www.fittoprofit.com",
@@ -112,6 +115,9 @@ jobs:
                   "ImageConfiguration": {
                       "Port": "4000",
                       "RuntimeEnvironmentVariables": env,
+                      "RuntimeEnvironmentSecrets": {
+                          "FIREBASE_SERVICE_ACCOUNT_JSON": os.environ["FIREBASE_SECRET_ARN"],
+                      },
                   },
               },
           }))
@@ -120,7 +126,8 @@ jobs:
 
           aws apprunner update-service \
             --service-arn "$APP_RUNNER_SERVICE_ARN" \
-            --source-configuration "$SOURCE"
+            --source-configuration "$SOURCE" \
+            --instance-configuration "{\"Cpu\":\"1024\",\"Memory\":\"2048\",\"InstanceRoleArn\":\"$INSTANCE_ROLE\"}"
 
           echo "Waiting for App Runner RUNNING..."
           for i in $(seq 1 60); do
