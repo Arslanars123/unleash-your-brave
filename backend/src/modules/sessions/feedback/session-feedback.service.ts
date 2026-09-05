@@ -1,5 +1,6 @@
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../../core/errors/app-error.js';
 import type { EffectiveAccessService } from '../../access/access.service.js';
+import type { SpeakerService } from '../../speakers/speaker.service.js';
 import type { UserRepository } from '../../users/user.repository.js';
 import type { SessionRepository } from '../session.repository.js';
 import {
@@ -20,6 +21,7 @@ export class SessionFeedbackService {
     private readonly feedback: SessionFeedbackRepository,
     private readonly sessions: SessionRepository,
     private readonly users: UserRepository,
+    private readonly speakers?: SpeakerService,
     private readonly access?: EffectiveAccessService,
   ) {}
 
@@ -51,8 +53,13 @@ export class SessionFeedbackService {
     speakerId: string | null | undefined,
   ): Promise<void> {
     const session = await this.requireSession(sessionId);
-    if (!speakerId || session.speakerId !== speakerId) {
-      throw new ForbiddenError('You can only view reviews for your own sessions');
+    if (!speakerId || !this.speakers) {
+      throw new ForbiddenError('You can only view reviews for sessions on your linked events');
+    }
+    try {
+      await this.speakers.assertLinkedToEvent(speakerId, session.eventId);
+    } catch {
+      throw new ForbiddenError('You can only view reviews for sessions on your linked events');
     }
   }
 

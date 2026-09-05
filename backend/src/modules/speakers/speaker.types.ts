@@ -1,9 +1,6 @@
 export interface Speaker {
   id: string;
-  /**
-   * Legacy home edition. Prefer event_associations for multi-event links.
-   * Empty string when the speaker is shared-only.
-   */
+  /** Event edition this speaker belongs to. */
   eventId: string;
   name: string;
   /** Portal login email (optional; linked user account when set). */
@@ -17,7 +14,6 @@ export interface Speaker {
 
 export interface PublicSpeaker {
   id: string;
-  /** Edition context when listed for an event; otherwise legacy/home eventId. */
   eventId: string;
   name: string;
   email: string;
@@ -29,8 +25,7 @@ export interface PublicSpeaker {
 }
 
 export interface CreateSpeakerInput {
-  /** When set, the speaker is linked to this edition (and stored as legacy home). */
-  eventId?: string;
+  eventId: string;
   name: string;
   email?: string;
   title?: string;
@@ -39,6 +34,7 @@ export interface CreateSpeakerInput {
 }
 
 export interface UpdateSpeakerInput {
+  eventId?: string;
   name?: string;
   email?: string;
   title?: string;

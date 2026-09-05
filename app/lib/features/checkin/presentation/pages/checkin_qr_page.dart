@@ -46,6 +46,7 @@ bool _isPurchaseRequiredError(ServerException error) {
   final message = error.message.toLowerCase();
   if (message.contains('renewal')) return false;
   return message.contains('membership') ||
+      message.contains('event plan') ||
       message.contains('purchase') ||
       message.contains('check-in qr');
 }
@@ -299,7 +300,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
     final authState = context.read<AuthBloc>().state;
     final user = authState is AuthAuthenticated ? authState.user : null;
     if (user == null) {
-      AppToast.error('Sign in to purchase a pass');
+      AppToast.error('Sign in to purchase an event plan');
       return;
     }
 
@@ -328,7 +329,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
       if (!mounted) return;
       memberships = MembershipEntity.purchasableOnly(memberships);
       if (memberships.isEmpty) {
-        AppToast.error('No memberships available for this event yet');
+        AppToast.error('No event plans available for this event yet');
         return;
       }
 
@@ -485,7 +486,7 @@ class _CheckInQrPageState extends State<CheckInQrPage> with WidgetsBindingObserv
               else if (_needsPurchase)
                 _PurchaseRequiredView(
                   message: _error ??
-                      'You do not have a membership for this event. Please purchase a membership to receive your check-in QR code.',
+                      'You do not have an event plan for this event. Please purchase an event plan to receive your check-in QR code.',
                   busy: _purchasing,
                   onPurchase: _purchaseMembership,
                 )
@@ -559,7 +560,7 @@ class _PurchaseRequiredView extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'Membership required',
+                'Event plan required',
                 textAlign: TextAlign.center,
                 style: AppTypography.headline.copyWith(fontSize: 22),
               ),
@@ -591,7 +592,7 @@ class _PurchaseRequiredView extends StatelessWidget {
                             color: AppColors.textPrimary,
                           ),
                         )
-                      : const Text('Purchase Membership'),
+                      : const Text('Purchase event plan'),
                 ),
               ),
             ],

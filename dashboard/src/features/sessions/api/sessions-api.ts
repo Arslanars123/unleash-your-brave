@@ -13,7 +13,6 @@ export interface ListSessionsParams {
   page?: number;
   perPage?: number;
   search?: string;
-  speakerId?: string;
   eventDayNumber?: number;
   eventId?: string;
 }

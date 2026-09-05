@@ -73,7 +73,7 @@ export function EventAssociationPicker({
   showSponsors = true,
   eventEndDate = null,
   allowCreateSponsor = false,
-  hint = 'Select shared memberships and sponsors for this event. Speakers are assigned when you create sessions. The same tier or sponsor can be linked to multiple events.',
+  hint = 'Select shared memberships and sponsors for this event. Speakers are managed in the Speakers step. The same tier or sponsor can be linked to multiple events.',
   membershipError,
 }: EventAssociationPickerProps) {
   const toast = useToast();

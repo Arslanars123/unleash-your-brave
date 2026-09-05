@@ -48,14 +48,18 @@ class EventsListPage extends StatefulWidget {
   State<EventsListPage> createState() => _EventsListPageState();
 }
 
-class _EventsListPageState extends State<EventsListPage> {
+class _EventsListPageState extends State<EventsListPage>
+    with WidgetsBindingObserver {
   bool _loading = true;
   String? _error;
   List<EventBookingEntity> _bookings = const [];
   List<EventEntity> _available = const [];
   List<EventEntity> _previous = const [];
   bool _purchasing = false;
+  bool _awaitingCheckoutReturn = false;
+  String? _checkoutEventId;
   StreamSubscription<String?>? _accessSub;
+  Timer? _checkoutPoll;
 
   bool get _isDiscover => widget.initialFocus == 'discover';
   bool get _isPrevious => widget.initialFocus == 'previous';
@@ -63,24 +67,64 @@ class _EventsListPageState extends State<EventsListPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _accessSub = AttendeeAccessRefresh.instance.stream.listen((eventId) {
       if (!mounted) return;
-      unawaited(_load());
+      unawaited(_load(silent: true));
     });
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    _checkoutPoll?.cancel();
     _accessSub?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (_awaitingCheckoutReturn) {
+      _awaitingCheckoutReturn = false;
+      unawaited(_handleCheckoutReturn());
+      return;
+    }
+    // Keep Upcoming / My / Past lists fresh when returning to the app.
+    unawaited(_load(silent: true));
+  }
+
+  Future<void> _handleCheckoutReturn() async {
+    if (!mounted) return;
+    AppToast.success(
+      'If payment succeeded, your events will update shortly.',
+    );
+    context.read<AuthBloc>().add(const AuthRefreshRequested());
+    AttendeeAccessRefresh.instance.notify(eventId: _checkoutEventId);
+    await _load(silent: true);
+
+    // Stripe webhooks can lag a few seconds — poll briefly.
+    _checkoutPoll?.cancel();
+    var attempts = 0;
+    _checkoutPoll = Timer.periodic(const Duration(seconds: 3), (timer) {
+      attempts++;
+      if (!mounted || attempts > 5) {
+        timer.cancel();
+        return;
+      }
+      unawaited(_load(silent: true));
+      AttendeeAccessRefresh.instance.notify(eventId: _checkoutEventId);
     });
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final results = await Future.wait([
         sl<CheckInRemoteDataSource>().getMyBookings(),
@@ -107,21 +151,22 @@ class _EventsListPageState extends State<EventsListPage> {
             .toList(growable: false);
         _previous = previous;
         _loading = false;
+        _error = null;
       });
     } on NetworkException catch (error) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = error.message;
       });
     } on ServerException catch (error) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = error.message;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = 'Unable to load events';
@@ -137,7 +182,7 @@ class _EventsListPageState extends State<EventsListPage> {
     final authState = context.read<AuthBloc>().state;
     final user = authState is AuthAuthenticated ? authState.user : null;
     if (user == null) {
-      AppToast.error('Sign in to purchase a pass');
+      AppToast.error('Sign in to purchase an event plan');
       return;
     }
 
@@ -154,7 +199,7 @@ class _EventsListPageState extends State<EventsListPage> {
       memberships = MembershipEntity.purchasableOnly(memberships);
       if (!mounted) return;
       if (memberships.isEmpty) {
-        AppToast.error('No memberships available for this event yet');
+        AppToast.error('No event plans available for this event yet');
         return;
       }
 
@@ -201,7 +246,7 @@ class _EventsListPageState extends State<EventsListPage> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Choose a membership and complete payment in Stripe.',
+                          'Choose an event plan and complete payment in Stripe.',
                           style: AppTypography.caption.copyWith(height: 1.4),
                         ),
                       ],
@@ -236,7 +281,7 @@ class _EventsListPageState extends State<EventsListPage> {
     } on ServerException catch (error) {
       AppToast.error(error.message);
     } catch (_) {
-      AppToast.error('Unable to load memberships');
+      AppToast.error('Unable to load event plans');
     } finally {
       if (mounted) setState(() => _purchasing = false);
     }
@@ -269,8 +314,10 @@ class _EventsListPageState extends State<EventsListPage> {
         AppToast.error('Unable to open Stripe checkout');
         return;
       }
+      _checkoutEventId = eventId;
+      _awaitingCheckoutReturn = true;
       AppToast.success(
-        'Complete payment in your browser, then return to refresh My events.',
+        'Complete payment in your browser, then return here to refresh.',
       );
     } on NetworkException catch (error) {
       AppToast.error(error.message);
@@ -300,10 +347,10 @@ class _EventsListPageState extends State<EventsListPage> {
 
   String get _pageHint {
     if (_isDiscover) {
-      return 'Events you can still book. Purchase a membership to unlock agenda, materials, and check-in for that edition.';
+      return 'Events you can still book. Purchase an event plan to unlock agenda, materials, and check-in for that edition.';
     }
     if (_isPrevious) {
-      return 'All past editions — whether you purchased a membership or not. Open one to view agenda when access allows.';
+      return 'All past editions — whether you purchased an event plan or not. Open one to view agenda when access allows.';
     }
     return 'Your purchased upcoming and live editions. Open any booking to view its agenda — access follows Event permissions set by admin.';
   }

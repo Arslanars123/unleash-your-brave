@@ -14,6 +14,7 @@ import 'package:unleash_your_brave/core/widgets/adaptive_page.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/core/widgets/subpage_app_bar.dart';
 import 'package:unleash_your_brave/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:unleash_your_brave/features/checkin/presentation/attendee_access_refresh.dart';
 import 'package:unleash_your_brave/features/checkin/domain/entities/event_booking_entity.dart';
 import 'package:unleash_your_brave/features/home/data/datasources/events_remote_datasource.dart';
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
@@ -46,27 +47,73 @@ class EventDetailPage extends StatefulWidget {
   State<EventDetailPage> createState() => _EventDetailPageState();
 }
 
-class _EventDetailPageState extends State<EventDetailPage> {
+class _EventDetailPageState extends State<EventDetailPage>
+    with WidgetsBindingObserver {
   bool _loading = true;
   String? _error;
   EventEntity? _event;
   EventBookingEntity? _booking;
   EffectiveEventAccess? _access;
   bool _busy = false;
+  bool _awaitingCheckoutReturn = false;
+  Timer? _checkoutPoll;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _event = widget.initialEvent ?? widget.initialBooking?.event;
     _booking = widget.initialBooking;
     unawaited(_load());
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = _event == null;
-      _error = null;
+  @override
+  void dispose() {
+    _checkoutPoll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (_awaitingCheckoutReturn) {
+      _awaitingCheckoutReturn = false;
+      unawaited(_handleCheckoutReturn());
+      return;
+    }
+    unawaited(_load(silent: true));
+  }
+
+  Future<void> _handleCheckoutReturn() async {
+    if (!mounted) return;
+    AppToast.success(
+      'If payment succeeded, your access will update shortly.',
+    );
+    context.read<AuthBloc>().add(const AuthRefreshRequested());
+    AttendeeAccessRefresh.instance.notify(eventId: widget.eventId);
+    await _load(silent: true);
+
+    _checkoutPoll?.cancel();
+    var attempts = 0;
+    _checkoutPoll = Timer.periodic(const Duration(seconds: 3), (timer) {
+      attempts++;
+      if (!mounted || attempts > 5) {
+        timer.cancel();
+        return;
+      }
+      unawaited(_load(silent: true));
+      AttendeeAccessRefresh.instance.notify(eventId: widget.eventId);
     });
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = _event == null;
+        _error = null;
+      });
+    }
     try {
       final event = await sl<EventsRemoteDataSource>().getById(widget.eventId);
       EffectiveEventAccess? access;
@@ -84,19 +131,19 @@ class _EventDetailPageState extends State<EventDetailPage> {
         _error = null;
       });
     } on NetworkException catch (error) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = error.message;
       });
     } on ServerException catch (error) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = error.message;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = 'Unable to load event';
@@ -122,7 +169,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
     final authState = context.read<AuthBloc>().state;
     final user = authState is AuthAuthenticated ? authState.user : null;
     if (user == null) {
-      AppToast.error('Sign in to purchase a pass');
+      AppToast.error('Sign in to purchase an event plan');
       return;
     }
 
@@ -139,7 +186,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
       if (!mounted) return;
       memberships = MembershipEntity.purchasableOnly(memberships);
       if (memberships.isEmpty) {
-        AppToast.error('No memberships available for this event yet');
+        AppToast.error('No event plans available for this event yet');
         return;
       }
       memberships = [...memberships]
@@ -203,6 +250,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
         AppToast.error('Unable to open Stripe checkout');
         return;
       }
+      _awaitingCheckoutReturn = true;
       AppToast.success('Complete payment in your browser, then return here.');
     } on NetworkException catch (error) {
       AppToast.error(error.message);

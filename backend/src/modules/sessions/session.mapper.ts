@@ -4,7 +4,6 @@ import type {
   Session,
   SessionFeedbackSummary,
   SessionMaterial,
-  SessionSpeakerSummary,
 } from './session.types.js';
 
 export function toPublicMaterial(material: SessionMaterial): PublicSessionMaterial {
@@ -29,7 +28,6 @@ export interface SessionAccessLocks {
 
 export function toPublicSession(
   session: Session,
-  speaker: SessionSpeakerSummary | null,
   feedbackSummary: SessionFeedbackSummary = { averageRating: 0, ratingsCount: 0 },
   access: boolean | SessionAccessLocks = false,
 ): PublicSession {
@@ -46,9 +44,7 @@ export function toPublicSession(
     kind: session.kind ?? 'session',
     name: session.name,
     description: agendaLocked ? '' : session.description,
-    speakerId: session.speakerId ?? null,
     address: session.address ?? '',
-    speaker: agendaLocked ? null : speaker,
     eventDayNumber: session.eventDayNumber,
     startTime: session.startTime,
     endTime: session.endTime,

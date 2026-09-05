@@ -32,6 +32,7 @@ import 'package:unleash_your_brave/features/shell/presentation/pages/profile_pag
 import 'package:unleash_your_brave/features/sponsors/domain/entities/sponsor_entity.dart';
 import 'package:unleash_your_brave/features/sponsors/presentation/pages/sponsor_detail_page.dart';
 import 'package:unleash_your_brave/features/sponsors/presentation/pages/sponsors_list_page.dart';
+import 'package:unleash_your_brave/features/speakers/presentation/pages/speakers_list_page.dart';
 import 'package:unleash_your_brave/features/store/domain/entities/store_entity.dart';
 import 'package:unleash_your_brave/features/store/presentation/pages/my_orders_page.dart';
 import 'package:unleash_your_brave/features/store/presentation/pages/store_checkout_page.dart';
@@ -249,8 +250,19 @@ class AppRouter {
       ),
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,
+        path: '/speakers',
+        builder: (context, state) {
+          final eventId = state.uri.queryParameters['eventId'];
+          return SpeakersListPage(focusEventId: eventId);
+        },
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
         path: '/sponsors',
-        builder: (context, state) => const SponsorsListPage(),
+        builder: (context, state) {
+          final eventId = state.uri.queryParameters['eventId'];
+          return SponsorsListPage(focusEventId: eventId);
+        },
         routes: [
           GoRoute(
             path: ':sponsorId',

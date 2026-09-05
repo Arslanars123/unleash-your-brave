@@ -841,7 +841,7 @@ class _AgendaBody extends StatelessWidget {
                         appliedQuery: searchQuery,
                         onAppliedChanged: onSearchApplied,
                         suggestionsFor: suggestionsFor,
-                        hintText: 'Search sessions, activities, or speakers',
+                        hintText: 'Search sessions or activities',
                       ),
                       const SizedBox(height: 20),
                     ],

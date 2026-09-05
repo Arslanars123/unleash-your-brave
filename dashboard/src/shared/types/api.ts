@@ -511,7 +511,7 @@ export interface PublicSpeaker {
 }
 
 export interface SpeakerPayload {
-  eventId?: string;
+  eventId: string;
   name: string;
   email?: string;
   title?: string;
@@ -519,7 +519,7 @@ export interface SpeakerPayload {
   photo?: string;
 }
 
-/** Editions where the authenticated speaker has sessions / associations. */
+/** Editions where the authenticated speaker is linked. */
 export interface SpeakerLinkedEvent {
   id: string;
   name: string;
@@ -648,13 +648,6 @@ export interface SessionMaterialPayload {
   url: string;
 }
 
-export interface SessionSpeakerSummary {
-  id: string;
-  name: string;
-  title: string;
-  photo: string;
-}
-
 export interface SessionFeedbackSummary {
   averageRating: number;
   ratingsCount: number;
@@ -666,9 +659,7 @@ export interface PublicSession {
   kind: SessionKind;
   name: string;
   description: string;
-  speakerId: string | null;
   address: string;
-  speaker: SessionSpeakerSummary | null;
   eventDayNumber: number;
   startTime: string;
   endTime: string;
@@ -678,6 +669,9 @@ export interface PublicSession {
   feedbackEnabled: boolean;
   feedbackSummary: SessionFeedbackSummary;
   accessRestricted: boolean;
+  materialsLocked?: boolean;
+  reviewsLocked?: boolean;
+  agendaLocked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -687,7 +681,6 @@ export interface SessionPayload {
   kind?: SessionKind;
   name: string;
   description?: string;
-  speakerId?: string | null;
   address?: string;
   eventDayNumber: number;
   startTime?: string;

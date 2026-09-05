@@ -158,14 +158,13 @@ async function main(): Promise<void> {
   }
   console.log('  waiver OK');
 
-  // 6) Session with speaker (Day 1 opening keynote)
+  // 6) Session (Day 1 opening keynote)
   console.log('Creating session...');
   const sessionRes = await api('POST', '/sessions', token, {
     eventId,
     kind: 'session',
     name: 'Opening Keynote: Unleash Your Brave',
     description: 'Kickoff keynote with Arslan Zaheer.',
-    speakerId,
     eventDayNumber: 1,
     startTime: '09:00',
     endTime: '10:00',
@@ -178,7 +177,7 @@ async function main(): Promise<void> {
   }
   console.log('  sessionId', dataOf(sessionRes.json).id);
 
-  // Ensure associations include sponsor + membership (+ speaker if supported)
+  // Ensure associations include sponsor + membership + speaker
   await api('PUT', `/events/${eventId}/associations`, token, {
     sponsorIds: [sponsorId],
     membershipIds: [membershipId],

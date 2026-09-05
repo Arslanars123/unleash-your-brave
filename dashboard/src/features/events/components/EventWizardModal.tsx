@@ -26,6 +26,11 @@ import {
   EventWizardSessionsStep,
   type DraftSession,
 } from '@/features/events/components/EventWizardSessionsStep';
+import {
+  draftSpeakersWithoutEvent,
+  EventWizardSpeakersStep,
+  type DraftSpeaker,
+} from '@/features/events/components/EventWizardSpeakersStep';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { uploadImageFile } from '@/shared/lib/upload-image';
 import type {
@@ -41,12 +46,14 @@ const STEPS = [
   { id: 'details', label: 'Details', description: 'Dates, venue, and cover' },
   { id: 'sponsors', label: 'Sponsors', description: 'Link sponsors to this edition' },
   { id: 'memberships', label: 'Memberships', description: 'Choose tiers for this event' },
+  { id: 'speakers', label: 'Speakers', description: 'Add speakers for this edition' },
   { id: 'sessions', label: 'Sessions', description: 'Build the agenda' },
   { id: 'checkin', label: 'Check-in waiver', description: 'Required waiver form' },
 ] as const;
 
 export interface EventWizardResult {
   payload: ScheduleEventPayload;
+  speakers: Array<Omit<import('@/shared/types/api').SpeakerPayload, 'eventId'>>;
   sessions: SessionPayload[];
   checkInForm: UpsertCheckInFormPayload;
 }
@@ -77,6 +84,7 @@ export function EventWizardModal({
   const [pendingCover, setPendingCover] = useState<File | null>(null);
   const [pendingCoverPreview, setPendingCoverPreview] = useState<string | null>(null);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
+  const [draftSpeakers, setDraftSpeakers] = useState<DraftSpeaker[]>([]);
   const [checkInFormValues, setCheckInFormValues] = useState<CheckInFormValues>(
     freshWizardCheckInFormValues,
   );
@@ -95,6 +103,7 @@ export function EventWizardModal({
       return null;
     });
     setDraftSessions([]);
+    setDraftSpeakers([]);
     setCheckInFormValues(freshWizardCheckInFormValues());
     setValues(scheduleBlankForm(previousEvent));
   }, [open, previousEvent]);
@@ -201,6 +210,7 @@ export function EventWizardModal({
     const finalValues = { ...values, coverImage };
     await onComplete({
       payload: toSchedulePayload(finalValues),
+      speakers: draftSpeakersWithoutEvent(draftSpeakers),
       sessions: draftSessionsToPayloads(draftSessions),
       checkInForm: toCheckInFormPayload(checkInFormValues),
     });
@@ -313,7 +323,7 @@ export function EventWizardModal({
                 showSponsors={false}
                 eventEndDate={eventEndDate}
                 disabled={busy}
-                hint="Link membership tiers to this edition. These tiers can be assigned to sessions in the next step."
+                hint="Link membership tiers to this edition. These tiers can be assigned to sessions later."
                 membershipError={submitted ? errors.membershipIds : undefined}
                 onChange={(next) => {
                   setValues((current) => ({
@@ -339,6 +349,14 @@ export function EventWizardModal({
           ) : null}
 
           {step === 3 ? (
+            <EventWizardSpeakersStep
+              speakers={draftSpeakers}
+              disabled={busy}
+              onChange={setDraftSpeakers}
+            />
+          ) : null}
+
+          {step === 4 ? (
             <EventWizardSessionsStep
               eventDays={eventDays}
               linkedMembershipIds={values.membershipIds}
@@ -348,7 +366,7 @@ export function EventWizardModal({
             />
           ) : null}
 
-          {step === 4 ? (
+          {step === 5 ? (
             <EventWizardCheckInFormStep
               values={checkInFormValues}
               errors={checkInFormErrors}

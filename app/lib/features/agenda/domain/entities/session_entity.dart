@@ -1,17 +1,3 @@
-class SessionSpeakerEntity {
-  const SessionSpeakerEntity({
-    required this.id,
-    required this.name,
-    required this.title,
-    required this.photo,
-  });
-
-  final String id;
-  final String name;
-  final String title;
-  final String photo;
-}
-
 class SessionMaterialEntity {
   const SessionMaterialEntity({
     required this.id,
@@ -50,7 +36,6 @@ class SessionEntity {
     this.endTime = '',
     this.location = '',
     this.address = '',
-    this.speaker,
     this.materials = const [],
     this.feedbackEnabled = true,
     this.feedbackSummary,
@@ -63,7 +48,7 @@ class SessionEntity {
   final String id;
   final String eventId;
 
-  /// `session` = speaker talk; `event` = extra activity (VIP dinner, etc.).
+  /// `session` = agenda talk; `event` = extra activity (VIP dinner, etc.).
   final String kind;
   final String name;
   final String description;
@@ -76,7 +61,6 @@ class SessionEntity {
   final String endTime;
   final String location;
   final String address;
-  final SessionSpeakerEntity? speaker;
   final List<SessionMaterialEntity> materials;
   final bool feedbackEnabled;
   final SessionFeedbackSummaryEntity? feedbackSummary;
@@ -95,17 +79,16 @@ class SessionEntity {
       if (loc.isNotEmpty) parts.add(loc);
       return parts.join(' · ');
     }
-    return speaker?.name.trim() ?? '';
+    final loc = location.trim();
+    return loc.isNotEmpty ? loc : '';
   }
 
   bool matchesAgendaSearch(String rawQuery) {
     final query = rawQuery.trim().toLowerCase();
     if (query.isEmpty) return true;
 
-    final speakerName = speaker?.name.toLowerCase() ?? '';
     if (name.toLowerCase().contains(query)) return true;
     if (description.toLowerCase().contains(query)) return true;
-    if (speakerName.contains(query)) return true;
     if (location.toLowerCase().contains(query)) return true;
     if (address.toLowerCase().contains(query)) return true;
     if (isExtraActivity &&

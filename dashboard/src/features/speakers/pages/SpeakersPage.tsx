@@ -102,7 +102,7 @@ export function SpeakersPage() {
       await updateMutation.mutateAsync({ id: editing.id, payload });
       return;
     }
-    // Global library — link to events from Edit edition associations.
+    // Create with required event selection on the form.
     await createMutation.mutateAsync(payload);
   }
 
@@ -126,8 +126,8 @@ export function SpeakersPage() {
           <span className="page-kicker">Stage</span>
           <h1>Speakers</h1>
           <p className="muted">
-            Shared speaker library. Create speakers here, then link them to events from Edit edition.
-            The same speaker can appear on multiple events; sessions stay separate per event.
+            Speakers belong to an event edition. Choose which event each speaker is for when you
+            create or edit them.
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -179,9 +179,7 @@ export function SpeakersPage() {
           <div className="empty-state">
             <Mic2 size={28} />
             <h2>No speakers yet</h2>
-            <p className="muted">
-              Add speakers to the shared library, then link them to an event from Edit edition.
-            </p>
+            <p className="muted">Add a speaker and select which event they belong to.</p>
             <Button onClick={openCreate}>
               <Plus size={16} />
               Create speaker

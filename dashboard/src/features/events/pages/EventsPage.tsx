@@ -10,6 +10,7 @@ import {
   type EventWizardResult,
 } from '@/features/events/components/EventWizardModal';
 import { sessionsApi } from '@/features/sessions/api/sessions-api';
+import { speakersApi } from '@/features/speakers/api/speakers-api';
 import { CANONICAL_EVENT_NAME } from '@/features/events/constants';
 import { formatEditionRange, formatUsDate } from '@/shared/lib/datetime';
 import { getApiErrorMessage } from '@/shared/api/client';
@@ -116,9 +117,12 @@ export function EventsPage() {
   });
 
   const scheduleMutation = useMutation({
-    mutationFn: async ({ payload, sessions, checkInForm }: EventWizardResult) => {
+    mutationFn: async ({ payload, speakers, sessions, checkInForm }: EventWizardResult) => {
       const event = await eventsApi.schedule(payload);
       await checkInFormsApi.upsertByEvent(event.id, checkInForm);
+      for (const speaker of speakers) {
+        await speakersApi.create({ ...speaker, eventId: event.id });
+      }
       for (const session of sessions) {
         await sessionsApi.create({ ...session, eventId: event.id });
       }
@@ -212,11 +216,19 @@ export function EventsPage() {
   async function handleWizardComplete(result: EventWizardResult) {
     const sessionNote =
       result.sessions.length > 0
-        ? ` ${result.sessions.length} session${result.sessions.length === 1 ? '' : 's'} will be created.`
+        ? ` ${result.sessions.length} session${result.sessions.length === 1 ? '' : 's'}`
+        : '';
+    const speakerNote =
+      result.speakers.length > 0
+        ? ` ${result.speakers.length} speaker${result.speakers.length === 1 ? '' : 's'}`
+        : '';
+    const extras =
+      sessionNote || speakerNote
+        ? ` Will also create${speakerNote}${speakerNote && sessionNote ? ' and' : ''}${sessionNote}.`
         : '';
     const ok = await confirm({
       title: 'Schedule new edition?',
-      message: `Create this event edition with its check-in waiver? Attendees will get a push about the new dates unless you turned notifications off.${sessionNote}`,
+      message: `Create this event edition with its check-in waiver? Attendees will get a push about the new dates unless you turned notifications off.${extras}`,
       confirmLabel: 'Schedule',
       tone: 'primary',
     });

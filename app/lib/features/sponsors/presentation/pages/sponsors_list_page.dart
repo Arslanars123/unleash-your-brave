@@ -20,7 +20,9 @@ import 'package:unleash_your_brave/features/sponsors/presentation/widgets/sponso
 enum _LoadStatus { loading, refreshing, success, offline, error }
 
 class SponsorsListPage extends StatefulWidget {
-  const SponsorsListPage({super.key});
+  const SponsorsListPage({super.key, this.focusEventId});
+
+  final String? focusEventId;
 
   @override
   State<SponsorsListPage> createState() => _SponsorsListPageState();
@@ -43,6 +45,16 @@ class _SponsorsListPageState extends State<SponsorsListPage> {
   }
 
   @override
+  void didUpdateWidget(covariant SponsorsListPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = widget.focusEventId?.trim();
+    final prev = oldWidget.focusEventId?.trim();
+    if (next != null && next.isNotEmpty && next != prev) {
+      unawaited(_load(isRefresh: false));
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -56,6 +68,9 @@ class _SponsorsListPageState extends State<SponsorsListPage> {
   }
 
   Future<String> _resolveEventId() async {
+    final focused = widget.focusEventId?.trim();
+    if (focused != null && focused.isNotEmpty) return focused;
+
     final cubit = context.read<SelectedEventCubit>();
     await cubit.ensureReady();
     final id = cubit.state.eventId;

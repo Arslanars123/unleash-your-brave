@@ -24,21 +24,13 @@ export interface SessionMaterialInput {
   url: string;
 }
 
-export interface SessionSpeakerSummary {
-  id: string;
-  name: string;
-  title: string;
-  photo: string;
-}
-
 export interface Session {
   id: string;
   eventId: string;
-  /** `session` = speaker talk; `event` = extra activity (VIP dinner, etc.). */
+  /** `session` = agenda talk; `event` = extra activity (VIP dinner, etc.). */
   kind: SessionKind;
   name: string;
   description: string;
-  speakerId: string | null;
   /** Optional street / venue address for extra activities. */
   address: string;
   /** 1-based day number on this edition's schedule. */
@@ -69,9 +61,7 @@ export interface PublicSession {
   kind: SessionKind;
   name: string;
   description: string;
-  speakerId: string | null;
   address: string;
-  speaker: SessionSpeakerSummary | null;
   eventDayNumber: number;
   startTime: string;
   endTime: string;
@@ -97,7 +87,6 @@ export interface CreateSessionInput {
   kind?: SessionKind;
   name: string;
   description?: string;
-  speakerId?: string | null;
   address?: string;
   eventDayNumber: number;
   startTime?: string;
@@ -112,7 +101,6 @@ export interface UpdateSessionInput {
   kind?: SessionKind;
   name?: string;
   description?: string;
-  speakerId?: string | null;
   address?: string;
   eventDayNumber?: number;
   startTime?: string;
@@ -130,7 +118,6 @@ export interface ListSessionsQuery {
   perPage: number;
   search?: string;
   eventId?: string;
-  speakerId?: string;
   eventDayNumber?: number;
   /** When set, only sessions open to any of these memberships (or unrestricted). */
   accessibleToMembershipId?: string | null;

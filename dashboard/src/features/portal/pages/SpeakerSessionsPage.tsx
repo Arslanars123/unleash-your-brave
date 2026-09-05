@@ -36,19 +36,25 @@ export function SpeakerSessionsPage() {
 
   const speakerId = user?.speakerId ?? undefined;
 
-  // Always load every assigned session (filter client-side) so the Event dropdown
-  // still works even if /speakers/me/events is not deployed yet.
-  const sessionsQuery = useQuery({
-    queryKey: ['sessions', 'mine', speakerId],
-    queryFn: () => sessionsApi.list({ speakerId, perPage: 100 }),
-    enabled: Boolean(speakerId),
-  });
-
   const linkedEventsQuery = useQuery({
     queryKey: ['speakers', 'me', 'events', speakerId],
     queryFn: () => speakersApi.listMyEvents(),
     enabled: Boolean(speakerId),
     retry: false,
+  });
+
+  const sessionsQuery = useQuery({
+    queryKey: ['sessions', 'mine', speakerId, linkedEventsQuery.data?.map((e) => e.id).join(',')],
+    queryFn: async () => {
+      const events = linkedEventsQuery.data ?? [];
+      const items: PublicSession[] = [];
+      for (const event of events) {
+        const result = await sessionsApi.list({ eventId: event.id, perPage: 100 });
+        items.push(...result.items);
+      }
+      return { items, meta: { page: 1, perPage: items.length, total: items.length, totalPages: 1 } };
+    },
+    enabled: Boolean(speakerId) && linkedEventsQuery.isSuccess,
   });
 
   const workspaceQuery = useQuery({
@@ -79,22 +85,13 @@ export function SpeakerSessionsPage() {
   const allSessions = sessionsQuery.data?.items ?? [];
 
   const linkedEvents = useMemo((): SpeakerLinkedEvent[] => {
+    if (linkedEventsQuery.data && linkedEventsQuery.data.length > 0) {
+      return [...linkedEventsQuery.data].sort((a, b) => b.startDate.localeCompare(a.startDate));
+    }
+
     const counts = new Map<string, number>();
     for (const session of allSessions) {
       counts.set(session.eventId, (counts.get(session.eventId) ?? 0) + 1);
-    }
-
-    if (linkedEventsQuery.data && linkedEventsQuery.data.length > 0) {
-      const byId = new Map(linkedEventsQuery.data.map((event) => [event.id, event]));
-      for (const [eventId, sessionCount] of counts) {
-        const existing = byId.get(eventId);
-        if (existing) {
-          byId.set(eventId, { ...existing, sessionCount });
-        }
-      }
-      return [...byId.values()]
-        .filter((event) => (counts.get(event.id) ?? event.sessionCount) > 0)
-        .sort((a, b) => b.startDate.localeCompare(a.startDate));
     }
 
     const editions = workspaceQuery.data?.editions ?? [];
@@ -176,8 +173,8 @@ export function SpeakerSessionsPage() {
         <div>
           <h1>My sessions</h1>
           <p className="muted">
-            Sessions are grouped by event. Switch editions to view and manage content for each
-            assignment separately.
+            Sessions for events you are linked to. Switch editions to view and manage content for
+            each event.
           </p>
         </div>
       </header>
@@ -207,11 +204,11 @@ export function SpeakerSessionsPage() {
 
       {visibleSessions.length === 0 ? (
         <div className="empty-state">
-          <h2>No sessions assigned yet</h2>
+          <h2>No sessions yet</h2>
           <p className="muted">
             {eventFilter
-              ? 'You have no sessions for this event. Choose another event or All events.'
-              : 'When an admin assigns you to a session, it will show up here.'}
+              ? 'This event has no sessions yet. Choose another event or All events.'
+              : 'When an admin links you to an event with sessions, they will show up here.'}
           </p>
         </div>
       ) : (

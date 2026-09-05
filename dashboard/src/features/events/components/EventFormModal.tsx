@@ -34,6 +34,7 @@ import {
   publicSessionToDraft,
   type DraftSession,
 } from '@/features/events/components/EventWizardSessionsStep';
+import { EventWizardSpeakersStep, type DraftSpeaker } from '@/features/events/components/EventWizardSpeakersStep';
 import type { EventPayload, PublicEvent, UpsertCheckInFormPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -46,6 +47,7 @@ const STEPS = [
   { id: 'details', label: 'Details', description: 'Dates, venue, and cover' },
   { id: 'sponsors', label: 'Sponsors', description: 'Link sponsors to this edition' },
   { id: 'memberships', label: 'Memberships', description: 'Choose tiers for this event' },
+  { id: 'speakers', label: 'Speakers', description: 'Add speakers for this edition' },
   { id: 'sessions', label: 'Sessions', description: 'Build the agenda' },
   { id: 'checkin', label: 'Check-in waiver', description: 'Required waiver form' },
 ] as const;
@@ -85,6 +87,7 @@ export function EventFormModal({
   const [pendingCover, setPendingCover] = useState<File | null>(null);
   const [pendingCoverPreview, setPendingCoverPreview] = useState<string | null>(null);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
+  const [draftSpeakers, setDraftSpeakers] = useState<DraftSpeaker[]>([]);
   const [initialSessionIds, setInitialSessionIds] = useState<string[]>([]);
   const [checkInFormValues, setCheckInFormValues] = useState<CheckInFormValues>(
     freshWizardCheckInFormValues,
@@ -104,6 +107,7 @@ export function EventFormModal({
       return null;
     });
     setDraftSessions([]);
+    setDraftSpeakers([]);
     setInitialSessionIds([]);
     setCheckInFormValues(freshWizardCheckInFormValues());
     if (mode === 'edit' && initialEvent) {
@@ -161,8 +165,8 @@ export function EventFormModal({
   const eventDays = eventDaysFromValues(values);
   const loadingStepData =
     associationsQuery.isLoading ||
-    (step === 3 && sessionsQuery.isLoading) ||
-    (step === 4 && checkInFormQuery.isLoading);
+    (step === 4 && sessionsQuery.isLoading) ||
+    (step === 5 && checkInFormQuery.isLoading);
 
   function validateCheckInStep(): CheckInFormFieldErrors {
     return validateCheckInFormValues(checkInFormValues, {
@@ -364,7 +368,7 @@ export function EventFormModal({
               showSponsors={false}
               eventEndDate={eventEndDate}
               disabled={busy}
-              hint="Link membership tiers to this edition. These tiers can be assigned to sessions in the next step."
+              hint="Link membership tiers to this edition. These tiers can be assigned to sessions later."
               membershipError={submitted ? errors.membershipIds : undefined}
               onChange={(next) => {
                 setValues((current) => ({
@@ -389,6 +393,15 @@ export function EventFormModal({
           ) : null}
 
           {!loadingStepData && step === 3 ? (
+            <EventWizardSpeakersStep
+              eventId={initialEvent?.id}
+              speakers={draftSpeakers}
+              disabled={busy}
+              onChange={setDraftSpeakers}
+            />
+          ) : null}
+
+          {!loadingStepData && step === 4 ? (
             <EventWizardSessionsStep
               eventDays={eventDays}
               linkedMembershipIds={values.membershipIds}
@@ -398,7 +411,7 @@ export function EventFormModal({
             />
           ) : null}
 
-          {!loadingStepData && step === 4 ? (
+          {!loadingStepData && step === 5 ? (
             <EventWizardCheckInFormStep
               values={checkInFormValues}
               errors={checkInFormErrors}

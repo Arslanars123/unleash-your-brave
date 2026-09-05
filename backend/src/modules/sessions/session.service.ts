@@ -2,12 +2,10 @@ import type { AnnouncementService } from '../announcements/announcement.service.
 import type { EffectiveAccessService } from '../access/access.service.js';
 import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
 import { randomUUID } from 'node:crypto';
-import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
-import { formatEditionRange } from '../../core/format-date.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/errors/app-error.js';
 import { logger } from '../../core/logger.js';
 import type { EventAssociationService } from '../event-associations/event-association.service.js';
 import type { EventService } from '../events/event.service.js';
-import type { MailService } from '../mail/mail.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
 import type { UserRepository } from '../users/user.repository.js';
@@ -23,7 +21,6 @@ import type {
   SessionKind,
   SessionMaterial,
   SessionMaterialInput,
-  SessionSpeakerSummary,
   ListSessionsQuery,
   UpdateSessionInput,
 } from './session.types.js';
@@ -44,7 +41,7 @@ function normalizeMaterials(materials: SessionMaterialInput[] | undefined): Sess
 export interface SessionViewerContext {
   userId: string;
   role: UserRole;
-  /** When set, the viewer may manage sessions assigned to this speaker. */
+  /** When set, the viewer may manage sessions on events linked to this speaker. */
   speakerId?: string | null;
 }
 
@@ -66,7 +63,6 @@ function sessionUpdateFingerprint(session: Session): string {
   return [
     session.kind,
     session.name,
-    session.speakerId ?? '',
     session.eventDayNumber,
     session.startTime,
     session.endTime,
@@ -100,9 +96,6 @@ function buildSessionChangeSummary(before: Session, after: Session): string | nu
   if (before.description.trim() !== after.description.trim()) {
     parts.push('Description updated');
   }
-  if ((before.speakerId ?? '') !== (after.speakerId ?? '')) {
-    parts.push(after.speakerId ? 'Speaker updated' : 'Speaker removed');
-  }
   const beforeMemberships = (before.membershipIds ?? []).slice().sort().join(',');
   const afterMemberships = (after.membershipIds ?? []).slice().sort().join(',');
   if (beforeMemberships !== afterMemberships) {
@@ -135,7 +128,6 @@ export class SessionService {
     private readonly memberships?: MembershipRepository,
     private readonly access?: EffectiveAccessService,
     private readonly associations?: EventAssociationService,
-    private readonly mail?: MailService,
   ) {}
 
   setAnnouncementService(service: AnnouncementService): void {
@@ -151,8 +143,9 @@ export class SessionService {
     viewer?: SessionViewerContext,
   ): Promise<PaginatedResult<PublicSession>> {
     const { items, total } = await this.sessions.list(query);
-    // Resolve attendee feature access per edition — never reuse the preferred/current
-    // event's locks for sessions that belong to other editions.
+    const speakerEventIds = viewer?.speakerId
+      ? await this.resolveSpeakerEventIds(viewer.speakerId)
+      : null;
     const accessByEvent = new Map<
       string,
       {
@@ -163,7 +156,7 @@ export class SessionService {
 
     const mapped = await Promise.all(
       items.map(async (session) => {
-        if (this.isSpeakerOwner(session, viewer) || viewer?.role === 'admin') {
+        if (this.isSpeakerForEvent(session.eventId, speakerEventIds) || viewer?.role === 'admin') {
           return this.toPublic(session, {
             accessRestricted: false,
             agendaLocked: false,
@@ -188,7 +181,7 @@ export class SessionService {
 
         return this.toPublic(
           session,
-          this.buildLocks(session, cached.accessibleIds, viewer, cached.featureAccess),
+          this.buildLocks(session, cached.accessibleIds, viewer, cached.featureAccess, speakerEventIds),
         );
       }),
     );
@@ -197,7 +190,10 @@ export class SessionService {
 
   async getById(id: string, viewer?: SessionViewerContext): Promise<PublicSession> {
     const session = await this.requireSession(id);
-    if (this.isSpeakerOwner(session, viewer) || viewer?.role === 'admin') {
+    const speakerEventIds = viewer?.speakerId
+      ? await this.resolveSpeakerEventIds(viewer.speakerId)
+      : null;
+    if (this.isSpeakerForEvent(session.eventId, speakerEventIds) || viewer?.role === 'admin') {
       return this.toPublic(session, {
         accessRestricted: false,
         agendaLocked: false,
@@ -214,20 +210,13 @@ export class SessionService {
         : []);
     return this.toPublic(
       session,
-      this.buildLocks(session, accessibleIds, viewer, featureAccess),
+      this.buildLocks(session, accessibleIds, viewer, featureAccess, speakerEventIds),
     );
   }
 
   async create(input: CreateSessionInput): Promise<PublicSession> {
     await this.events.requireEvent(input.eventId);
     const kind = input.kind ?? 'session';
-    const speakerId = kind === 'session' ? (input.speakerId ?? null) : null;
-    if (kind === 'session' && !speakerId) {
-      throw new BadRequestError('Select a speaker');
-    }
-    if (speakerId) {
-      await this.requireSpeakerForEvent(speakerId, input.eventId);
-    }
     await this.assertValidEventDay(input.eventId, input.eventDayNumber);
     await this.assertMembershipsForEvent(input.membershipIds ?? [], input.eventId);
 
@@ -248,7 +237,6 @@ export class SessionService {
       kind,
       name: input.name,
       description: input.description ?? '',
-      speakerId,
       address: input.address ?? '',
       eventDayNumber: input.eventDayNumber,
       startTime,
@@ -259,10 +247,6 @@ export class SessionService {
       feedbackEnabled: kind === 'session' ? (input.feedbackEnabled ?? true) : false,
     });
 
-    if (speakerId) {
-      void this.notifySpeakerSessionAssigned(created, speakerId);
-    }
-
     return this.toPublic(created);
   }
 
@@ -270,22 +254,10 @@ export class SessionService {
     const existing = await this.requireSession(id);
 
     const kind = input.kind ?? existing.kind;
-    const speakerId =
-      kind === 'event'
-        ? null
-        : input.speakerId !== undefined
-          ? input.speakerId
-          : existing.speakerId;
     const eventDayNumber = input.eventDayNumber ?? existing.eventDayNumber;
     const startTime = input.startTime ?? existing.startTime;
     const endTime = input.endTime ?? existing.endTime;
 
-    if (kind === 'session' && !speakerId) {
-      throw new BadRequestError('Select a speaker');
-    }
-    if (speakerId && input.speakerId !== undefined) {
-      await this.requireSpeakerForEvent(speakerId, existing.eventId);
-    }
     if (input.eventDayNumber !== undefined) {
       await this.assertValidEventDay(existing.eventId, eventDayNumber);
     }
@@ -308,7 +280,6 @@ export class SessionService {
       ...(input.kind !== undefined ? { kind } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
-      ...(input.kind !== undefined || input.speakerId !== undefined ? { speakerId } : {}),
       ...(input.address !== undefined ? { address: input.address } : {}),
       ...(input.eventDayNumber !== undefined ? { eventDayNumber } : {}),
       ...(input.startTime !== undefined ? { startTime: input.startTime } : {}),
@@ -326,14 +297,6 @@ export class SessionService {
 
     if (!updated) throw new NotFoundError('Session');
 
-    const speakerNewlyAssigned =
-      Boolean(speakerId) &&
-      (input.speakerId !== undefined || input.kind !== undefined) &&
-      speakerId !== existing.speakerId;
-    if (speakerNewlyAssigned && speakerId) {
-      void this.notifySpeakerSessionAssigned(updated, speakerId);
-    }
-
     if (input.notifyAttendees) {
       void this.notifyAttendeesSessionUpdated(existing, updated, input);
     }
@@ -348,24 +311,13 @@ export class SessionService {
     await this.feedback.deleteBySession(id);
   }
 
-  /** Removes every session assigned to a speaker (any edition) plus feedback. */
-  async deleteAllForSpeaker(speakerId: string): Promise<number> {
-    const sessionIds: string[] = [];
-    let page = 1;
-    const perPage = 100;
-
-    while (true) {
-      const { items, total } = await this.sessions.list({ speakerId, page, perPage });
-      sessionIds.push(...items.map((session) => session.id));
-      if (page * perPage >= total) break;
-      page += 1;
+  /** Speakers may manage session content on events they are linked to. */
+  async assertSpeakerCanManageSession(speakerId: string, sessionId: string): Promise<void> {
+    const session = await this.requireSession(sessionId);
+    const eventIds = await this.resolveSpeakerEventIds(speakerId);
+    if (!eventIds.has(session.eventId)) {
+      throw new ForbiddenError('You can only update sessions for your linked events');
     }
-
-    for (const sessionId of sessionIds) {
-      await this.delete(sessionId);
-    }
-
-    return sessionIds.length;
   }
 
   private async resolveFeatureAccess(userId: string, eventId?: string) {
@@ -373,10 +325,20 @@ export class SessionService {
     return this.access.resolveForUser(userId, eventId);
   }
 
-  private isSpeakerOwner(session: Session, viewer?: SessionViewerContext): boolean {
-    return Boolean(
-      viewer?.speakerId && session.speakerId && viewer.speakerId === session.speakerId,
-    );
+  private async resolveSpeakerEventIds(speakerId: string): Promise<Set<string>> {
+    const ids = new Set<string>();
+    const speaker = await this.speakers.findById(speakerId);
+    if (speaker?.eventId) ids.add(speaker.eventId);
+    if (this.associations) {
+      for (const eventId of await this.associations.listEventIdsForSpeaker(speakerId)) {
+        ids.add(eventId);
+      }
+    }
+    return ids;
+  }
+
+  private isSpeakerForEvent(eventId: string, speakerEventIds: Set<string> | null): boolean {
+    return Boolean(speakerEventIds?.has(eventId));
   }
 
   private buildLocks(
@@ -384,8 +346,9 @@ export class SessionService {
     accessibleIds: string[],
     viewer: SessionViewerContext | undefined,
     featureAccess: Awaited<ReturnType<EffectiveAccessService['resolveForUser']>> | null,
+    speakerEventIds: Set<string> | null,
   ) {
-    if (this.isSpeakerOwner(session, viewer) || viewer?.role === 'admin') {
+    if (this.isSpeakerForEvent(session.eventId, speakerEventIds) || viewer?.role === 'admin') {
       return {
         accessRestricted: false,
         agendaLocked: false,
@@ -415,12 +378,6 @@ export class SessionService {
     return user?.membershipId ? [user.membershipId] : [];
   }
 
-  private async resolveMembershipId(userId: string): Promise<string | null> {
-    if (!this.users) return null;
-    const user = await this.users.findById(userId);
-    return user?.membershipId ?? null;
-  }
-
   private async toPublic(
     session: Session,
     locks: boolean | {
@@ -430,22 +387,10 @@ export class SessionService {
       agendaLocked?: boolean;
     } = false,
   ): Promise<PublicSession> {
-    const speaker = session.speakerId
-      ? await this.speakers.findById(session.speakerId)
-      : null;
-    const summary: SessionSpeakerSummary | null = speaker
-      ? {
-          id: speaker.id,
-          name: speaker.name,
-          title: speaker.title,
-          photo: speaker.photo,
-        }
-      : null;
-
     const items = await this.feedback.listAllBySession(session.id);
     const feedbackSummary = buildFeedbackSummary(session.id, items);
 
-    return toPublicSession(session, summary, {
+    return toPublicSession(session, {
       averageRating: feedbackSummary.averageRating,
       ratingsCount: feedbackSummary.ratingsCount,
     }, locks);
@@ -467,29 +412,24 @@ export class SessionService {
   private async requireSession(id: string): Promise<Session> {
     const session = await this.sessions.findById(id);
     if (!session) throw new NotFoundError('Session');
-    // Legacy docs may omit membershipIds / feedbackEnabled.
+    // Legacy docs may omit membershipIds / feedbackEnabled / still include speakerId.
     return {
-      ...session,
+      id: session.id,
+      eventId: session.eventId,
       kind: session.kind ?? 'session',
+      name: session.name,
+      description: session.description,
       address: session.address ?? '',
-      speakerId: session.speakerId ?? null,
+      eventDayNumber: session.eventDayNumber,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      location: session.location,
       membershipIds: session.membershipIds ?? [],
       materials: session.materials ?? [],
       feedbackEnabled: session.kind === 'event' ? false : session.feedbackEnabled !== false,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
     };
-  }
-
-  /**
-   * Speakers live in a shared library. Assigning one to a session links them to the
-   * edition automatically — no separate event-level speaker association step.
-   */
-  private async requireSpeakerForEvent(speakerId: string, eventId: string): Promise<void> {
-    const speaker = await this.speakers.findById(speakerId);
-    if (!speaker) throw new BadRequestError('Selected speaker was not found');
-    if (speaker.eventId === eventId) return;
-    if (this.associations) {
-      await this.associations.linkSpeaker(eventId, speakerId);
-    }
   }
 
   private async notifyAttendeesSessionUpdated(
@@ -524,7 +464,6 @@ export class SessionService {
 
       const event = await this.events.getById(after.eventId);
       const label = after.kind === 'event' ? 'Activity' : 'Session';
-      // Unique per before→after change so re-edits still notify; identical double-saves still dedupe.
       const systemKey = `session:update:${after.id}:${sessionUpdateFingerprint(before)}=>${sessionUpdateFingerprint(after)}`;
 
       await this.announcements.publishSessionUpdateNotice({
@@ -537,42 +476,6 @@ export class SessionService {
       logger.error(
         { err: error, sessionId: after.id, eventId: after.eventId },
         'Failed to notify attendees about session update',
-      );
-    }
-  }
-
-  private async notifySpeakerSessionAssigned(
-    session: Session,
-    speakerId: string,
-  ): Promise<void> {
-    if (!this.mail) return;
-    try {
-      const speaker = await this.speakers.findById(speakerId);
-      const email = speaker?.email?.trim().toLowerCase();
-      if (!speaker || !email) return;
-
-      const event = await this.events.getById(session.eventId);
-      const eventLabel = `${event.name} (${formatEditionRange(event.startDate, event.endDate)})`;
-      const day = event.days.find((d) => d.dayNumber === session.eventDayNumber);
-      const dayLabel = day
-        ? `${day.label || `Day ${day.dayNumber}`} (${formatEditionRange(day.date, day.date)})`
-        : `Day ${session.eventDayNumber}`;
-
-      await this.mail.sendSpeakerSessionAssigned({
-        to: email,
-        name: speaker.name,
-        eventName: eventLabel,
-        sessionName: session.name,
-        sessionDescription: session.description,
-        dayLabel,
-        startTime: session.startTime,
-        endTime: session.endTime,
-        location: session.location || session.address,
-      });
-    } catch (error) {
-      logger.error(
-        { err: error, sessionId: session.id, speakerId },
-        'Failed to send speaker session assignment email',
       );
     }
   }

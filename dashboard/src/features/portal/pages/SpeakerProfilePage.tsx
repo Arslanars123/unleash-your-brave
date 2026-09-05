@@ -40,7 +40,8 @@ export function SpeakerProfilePage() {
   }, [speakerQuery.data]);
 
   const saveMutation = useMutation({
-    mutationFn: (payload: SpeakerPayload) => speakersApi.update(user!.speakerId!, payload),
+    mutationFn: (payload: Partial<SpeakerPayload>) =>
+      speakersApi.update(user!.speakerId!, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['speakers', 'me'] });
       toast.success('Profile saved');

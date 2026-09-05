@@ -4,7 +4,6 @@ import type { EventAssociationService } from '../event-associations/event-associ
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import type { SessionRepository } from '../sessions/session.repository.js';
-import type { SessionService } from '../sessions/session.service.js';
 import type { UserService } from '../users/user.service.js';
 import type { PaginatedResult, SpeakerRepository } from './speaker.repository.js';
 import { toPublicSpeaker } from './speaker.mapper.js';
@@ -20,7 +19,6 @@ import type {
 export class SpeakerService {
   private associations: EventAssociationService | null = null;
   private sessions: SessionRepository | null = null;
-  private sessionService: SessionService | null = null;
 
   constructor(
     private readonly speakers: SpeakerRepository,
@@ -35,10 +33,6 @@ export class SpeakerService {
 
   setSessionRepository(sessions: SessionRepository): void {
     this.sessions = sessions;
-  }
-
-  setSessionService(sessions: SessionService): void {
-    this.sessionService = sessions;
   }
 
   async list(query: ListSpeakersQuery): Promise<PaginatedResult<PublicSpeaker>> {
@@ -90,10 +84,11 @@ export class SpeakerService {
   }
 
   async create(input: CreateSpeakerInput): Promise<PublicSpeaker> {
-    const eventId = input.eventId?.trim() || '';
-    if (eventId) {
-      await this.events.requireEvent(eventId);
+    const eventId = input.eventId.trim();
+    if (!eventId) {
+      throw new BadRequestError('Event is required');
     }
+    await this.events.requireEvent(eventId);
 
     const created = await this.speakers.create({
       eventId,
@@ -104,7 +99,7 @@ export class SpeakerService {
       photo: input.photo ?? '',
     });
 
-    if (eventId && this.associations) {
+    if (this.associations) {
       await this.associations.linkSpeaker(eventId, created.id);
     }
 
@@ -112,15 +107,23 @@ export class SpeakerService {
       await this.provisionPortalAccount(created, input.email.trim(), true);
     }
 
-    return toPublicSpeaker(
-      eventId ? { ...created, eventId } : created,
-    );
+    return toPublicSpeaker({ ...created, eventId });
   }
 
   async update(id: string, input: UpdateSpeakerInput): Promise<PublicSpeaker> {
-    await this.requireSpeaker(id);
+    const existing = await this.requireSpeaker(id);
+
+    let nextEventId = existing.eventId;
+    if (input.eventId !== undefined) {
+      nextEventId = input.eventId.trim();
+      if (!nextEventId) {
+        throw new BadRequestError('Event is required');
+      }
+      await this.events.requireEvent(nextEventId);
+    }
 
     const updated = await this.speakers.update(id, {
+      ...(input.eventId !== undefined ? { eventId: nextEventId } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.email !== undefined ? { email: input.email.trim().toLowerCase() } : {}),
       ...(input.title !== undefined ? { title: input.title } : {}),
@@ -129,6 +132,11 @@ export class SpeakerService {
     });
 
     if (!updated) throw new NotFoundError('Speaker');
+
+    if (this.associations && input.eventId !== undefined && nextEventId !== existing.eventId) {
+      await this.associations.purgeSpeakerLinks(id);
+      await this.associations.linkSpeaker(nextEventId, id);
+    }
 
     const email = input.email?.trim() || updated.email.trim();
     if (email) {
@@ -140,10 +148,6 @@ export class SpeakerService {
 
   async delete(id: string): Promise<void> {
     await this.requireSpeaker(id);
-
-    if (this.sessionService) {
-      await this.sessionService.deleteAllForSpeaker(id);
-    }
 
     if (this.associations) {
       await this.associations.purgeSpeakerLinks(id);
@@ -166,30 +170,14 @@ export class SpeakerService {
   }
 
   /**
-   * Editions where this speaker is assigned (via sessions and/or associations).
-   * Speakers manage session content per edition from the portal.
+   * Editions where this speaker is linked (home eventId and/or associations).
    */
   async listLinkedEvents(speakerId: string): Promise<LinkedSpeakerEvent[]> {
     await this.requireSpeaker(speakerId);
 
     const eventIds = new Set<string>();
-    const sessionCountByEvent = new Map<string, number>();
-
-    if (this.sessions) {
-      const { items } = await this.sessions.list({
-        speakerId,
-        page: 1,
-        perPage: 500,
-      });
-      for (const session of items) {
-        if (session.kind === 'event') continue;
-        eventIds.add(session.eventId);
-        sessionCountByEvent.set(
-          session.eventId,
-          (sessionCountByEvent.get(session.eventId) ?? 0) + 1,
-        );
-      }
-    }
+    const speaker = await this.speakers.findById(speakerId);
+    if (speaker?.eventId) eventIds.add(speaker.eventId);
 
     if (this.associations) {
       for (const eventId of await this.associations.listEventIdsForSpeaker(speakerId)) {
@@ -201,13 +189,22 @@ export class SpeakerService {
     for (const eventId of eventIds) {
       try {
         const event = await this.events.getById(eventId);
+        let sessionCount = 0;
+        if (this.sessions) {
+          const { total } = await this.sessions.list({
+            eventId,
+            page: 1,
+            perPage: 1,
+          });
+          sessionCount = total;
+        }
         results.push({
           id: event.id,
           name: event.name,
           startDate: event.startDate,
           endDate: event.endDate,
           status: event.status,
-          sessionCount: sessionCountByEvent.get(eventId) ?? 0,
+          sessionCount,
         });
       } catch {
         // Skip deleted / missing events.

@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
+import { eventsApi } from '@/features/events/api/events-api';
+import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
 import type { PublicSpeaker, SpeakerPayload } from '@/shared/types/api';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
@@ -11,6 +14,7 @@ import {
 import { TextArea } from '@/shared/ui/TextArea';
 
 export interface SpeakerFormValues {
+  eventId: string;
   name: string;
   email: string;
   title: string;
@@ -21,6 +25,7 @@ export interface SpeakerFormValues {
 type FieldErrors = Partial<Record<keyof SpeakerFormValues, string>>;
 
 const emptyForm: SpeakerFormValues = {
+  eventId: '',
   name: '',
   email: '',
   title: '',
@@ -30,6 +35,7 @@ const emptyForm: SpeakerFormValues = {
 
 function speakerToForm(speaker: PublicSpeaker): SpeakerFormValues {
   return {
+    eventId: speaker.eventId ?? '',
     name: speaker.name,
     email: speaker.email,
     title: speaker.title,
@@ -38,8 +44,12 @@ function speakerToForm(speaker: PublicSpeaker): SpeakerFormValues {
   };
 }
 
-function validate(values: SpeakerFormValues): FieldErrors {
+function validate(values: SpeakerFormValues, requireEvent: boolean): FieldErrors {
   const errors: FieldErrors = {};
+
+  if (requireEvent && !values.eventId) {
+    errors.eventId = 'Select an event';
+  }
 
   if (!values.name.trim()) errors.name = 'Name is required';
   else if (values.name.trim().length < 2) errors.name = 'Name must be at least 2 characters';
@@ -58,6 +68,7 @@ function validate(values: SpeakerFormValues): FieldErrors {
 
 export function toSpeakerPayload(values: SpeakerFormValues): SpeakerPayload {
   return {
+    eventId: values.eventId,
     name: values.name.trim(),
     email: values.email.trim() || undefined,
     title: values.title.trim(),
@@ -70,6 +81,9 @@ interface SpeakerFormModalProps {
   open: boolean;
   mode: 'create' | 'edit';
   initialSpeaker?: PublicSpeaker | null;
+  /** Prefill / lock event when creating from an edition context. */
+  eventId?: string;
+  hideEventSelect?: boolean;
   loading?: boolean;
   onClose: () => void;
   onSubmit: (payload: SpeakerPayload) => Promise<void> | void;
@@ -79,6 +93,8 @@ export function SpeakerFormModal({
   open,
   mode,
   initialSpeaker,
+  eventId,
+  hideEventSelect = false,
   loading = false,
   onClose,
   onSubmit,
@@ -89,19 +105,35 @@ export function SpeakerFormModal({
   const [committingPhoto, setCommittingPhoto] = useState(false);
   const photoRef = useRef<MediaImageFieldHandle>(null);
 
+  const eventsQuery = useQuery({
+    queryKey: ['events', 'speaker-form'],
+    queryFn: () => eventsApi.list({ perPage: 100 }),
+    enabled: open && !hideEventSelect,
+  });
+
+  const editions = eventsQuery.data?.items ?? [];
+  const requireEvent = !hideEventSelect || Boolean(eventId);
+
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
     setErrors({});
-    setValues(initialSpeaker ? speakerToForm(initialSpeaker) : emptyForm);
-  }, [open, initialSpeaker]);
+    if (initialSpeaker) {
+      setValues(speakerToForm(initialSpeaker));
+    } else {
+      setValues({
+        ...emptyForm,
+        eventId: eventId ?? '',
+      });
+    }
+  }, [open, initialSpeaker, eventId]);
 
   if (!open) return null;
 
   function update<K extends keyof SpeakerFormValues>(key: K, value: SpeakerFormValues[K]) {
     setValues((current) => {
       const next = { ...current, [key]: value };
-      if (submitted) setErrors(validate(next));
+      if (submitted) setErrors(validate(next, requireEvent));
       return next;
     });
   }
@@ -122,9 +154,13 @@ export function SpeakerFormModal({
       setCommittingPhoto(false);
     }
 
-    const nextValues = { ...values, photo };
+    const nextValues = {
+      ...values,
+      photo,
+      eventId: hideEventSelect ? (eventId || values.eventId) : values.eventId,
+    };
     setValues(nextValues);
-    const nextErrors = validate(nextValues);
+    const nextErrors = validate(nextValues, requireEvent);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     await onSubmit(toSpeakerPayload(nextValues));
@@ -147,6 +183,28 @@ export function SpeakerFormModal({
         </header>
 
         <form className="modal-body event-form" onSubmit={handleSubmit} noValidate>
+          {!hideEventSelect ? (
+            <label className="field">
+              <span className="field-label">
+                Event <span className="required-mark">*</span>
+              </span>
+              <select
+                className={`field-input${errors.eventId ? ' field-input-error' : ''}`}
+                value={values.eventId}
+                onChange={(e) => update('eventId', e.target.value)}
+                disabled={eventsQuery.isLoading}
+              >
+                <option value="">Select event</option>
+                {editions.map((edition) => (
+                  <option key={edition.id} value={edition.id}>
+                    {edition.name} ({formatEditionRange(edition)})
+                  </option>
+                ))}
+              </select>
+              {errors.eventId ? <span className="field-error">{errors.eventId}</span> : null}
+            </label>
+          ) : null}
+
           <Input
             label="Name"
             requiredMark

@@ -5,15 +5,20 @@ import 'dart:ui' show Color;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unleash_your_brave/app/router/app_router.dart';
 import 'package:unleash_your_brave/core/constants/app_constants.dart';
+import 'package:unleash_your_brave/core/theme/app_colors.dart';
+import 'package:unleash_your_brave/core/theme/app_theme.dart';
+import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/features/chat/domain/repositories/chat_repository.dart';
 import 'package:unleash_your_brave/core/auth/session_invalidation.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/attendee_access_refresh.dart';
 import 'package:unleash_your_brave/features/checkin/presentation/check_in_status_refresh.dart';
 import 'package:unleash_your_brave/firebase_options.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Handles FCM + local notifications for chat and announcements.
 ///
@@ -57,7 +62,7 @@ class PushNotificationService {
   bool get isEnabled =>
       _prefs.getBool(StorageKeys.pushNotificationsEnabled) ?? true;
 
-  Future<void> initialize() async {
+  Future<void> initialize({bool openSettingsIfDenied = false}) async {
     if (_initialized) {
       if (isEnabled) {
         await registerTokenWithBackend();
@@ -69,10 +74,11 @@ class PushNotificationService {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
     const androidInit = AndroidInitializationSettings('@drawable/ic_stat_uyb');
+    // Do not request OS permission here — single path via FirebaseMessaging.
     const iosInit = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
     await _local.initialize(
       const InitializationSettings(android: androidInit, iOS: iosInit),
@@ -84,11 +90,6 @@ class PushNotificationService {
             AndroidFlutterLocalNotificationsPlugin>();
     await androidPlugin?.createNotificationChannel(_androidChannel);
     await androidPlugin?.createNotificationChannel(_announcementsChannel);
-
-    final iosPlugin = _local
-        .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>();
-    await iosPlugin?.requestPermissions(alert: true, badge: true, sound: true);
 
     await _messaging.setForegroundNotificationPresentationOptions(
       alert: true,
@@ -117,32 +118,93 @@ class PushNotificationService {
     });
 
     if (isEnabled) {
-      await _requestPermissionAndRegister();
+      final allowed = await _requestPermissionAndRegister(
+        allowSoftAsk: true,
+        openSettingsIfDenied: openSettingsIfDenied,
+      );
+      if (!allowed) {
+        await _prefs.setBool(StorageKeys.pushNotificationsEnabled, false);
+      }
     }
   }
 
   /// Persists the preference and registers/unregisters the device token.
   Future<bool> setEnabled(bool enabled) async {
-    await _prefs.setBool(StorageKeys.pushNotificationsEnabled, enabled);
+    if (!enabled) {
+      await _prefs.setBool(StorageKeys.pushNotificationsEnabled, false);
+      await unregisterCurrentToken(deleteToken: false);
+      return false;
+    }
 
-    if (enabled) {
-      if (!_initialized) {
-        await initialize();
-      } else {
-        final allowed = await _requestPermissionAndRegister();
-        if (!allowed) {
-          await _prefs.setBool(StorageKeys.pushNotificationsEnabled, false);
-          return false;
-        }
-      }
+    await _prefs.setBool(StorageKeys.pushNotificationsEnabled, true);
+
+    if (!_initialized) {
+      await initialize(openSettingsIfDenied: true);
       return isEnabled;
     }
 
-    await unregisterCurrentToken(deleteToken: false);
+    final allowed = await _requestPermissionAndRegister(
+      allowSoftAsk: true,
+      openSettingsIfDenied: true,
+    );
+    if (!allowed) {
+      await _prefs.setBool(StorageKeys.pushNotificationsEnabled, false);
+      return false;
+    }
+    return true;
+  }
+
+  /// Opens the OS Settings screen for this app (needed after a prior Deny).
+  Future<bool> openSystemNotificationSettings() async {
+    final uri = Platform.isIOS
+        ? Uri.parse('app-settings:')
+        : Uri.parse(
+            'intent:#Intent;action=android.settings.APPLICATION_DETAILS_SETTINGS;'
+            'data=package:com.unleashyourbrave.unleash_your_brave;end',
+          );
+    try {
+      if (await canLaunchUrl(uri)) {
+        return launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      if (Platform.isIOS) {
+        return launchUrl(Uri.parse('app-settings:'));
+      }
+    } catch (error) {
+      debugPrint('Unable to open system settings: $error');
+    }
     return false;
   }
 
-  Future<bool> _requestPermissionAndRegister() async {
+  Future<bool> _requestPermissionAndRegister({
+    required bool allowSoftAsk,
+    required bool openSettingsIfDenied,
+  }) async {
+    final current = await _messaging.getNotificationSettings();
+    final status = current.authorizationStatus;
+
+    if (status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional) {
+      await registerTokenWithBackend();
+      return true;
+    }
+
+    if (status == AuthorizationStatus.denied) {
+      debugPrint('Push permission denied');
+      if (openSettingsIfDenied) {
+        await openSystemNotificationSettings();
+      }
+      return false;
+    }
+
+    // notDetermined — soft-ask before the one-time system dialog.
+    if (allowSoftAsk) {
+      final proceed = await _showSoftAskDialog();
+      if (!proceed) {
+        debugPrint('Push soft-ask declined');
+        return false;
+      }
+    }
+
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -160,6 +222,65 @@ class PushNotificationService {
 
     await registerTokenWithBackend();
     return true;
+  }
+
+  Future<bool> _showSoftAskDialog() async {
+    // Wait briefly for the navigator after auth transition.
+    for (var i = 0; i < 20; i++) {
+      final context = AppRouter.rootNavigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        final result = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              backgroundColor: AppColors.bgCard,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+              ),
+              title: Text(
+                'Stay in the loop',
+                style: AppTypography.body.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+              content: Text(
+                'Allow notifications for chat messages, event announcements, '
+                'and reminders. You can change this anytime in Profile → Settings.',
+                style: AppTypography.caption.copyWith(height: 1.45),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(
+                    'Not now',
+                    style: AppTypography.button.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(
+                    'Allow',
+                    style: AppTypography.button.copyWith(
+                      color: AppColors.accentPink,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+        return result ?? false;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    // No UI available — skip system prompt to avoid a surprise OS dialog.
+    return false;
   }
 
   Future<void> registerTokenWithBackend() async {

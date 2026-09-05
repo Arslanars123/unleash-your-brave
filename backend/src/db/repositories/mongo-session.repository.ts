@@ -36,7 +36,6 @@ export class MongoSessionRepository implements SessionRepository {
   async list(query: ListSessionsQuery): Promise<PaginatedResult<Session>> {
     const filter: Filter<MongoDoc<Session>> = {};
     if (query.eventId) filter.eventId = query.eventId;
-    if (query.speakerId) filter.speakerId = query.speakerId;
     if (query.eventDayNumber) filter.eventDayNumber = query.eventDayNumber;
 
     const andClauses: Record<string, unknown>[] = [];

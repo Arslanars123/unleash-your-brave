@@ -6,7 +6,6 @@ import { useEditionScope } from '@/features/events/hooks/useEditionScope';
 import { sessionsApi } from '@/features/sessions/api/sessions-api';
 import { SessionFeedbackModal } from '@/features/sessions/components/SessionFeedbackModal';
 import { SessionFormModal } from '@/features/sessions/components/SessionFormModal';
-import { speakersApi } from '@/features/speakers/api/speakers-api';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { formatSessionTimeRange } from '@/shared/lib/datetime';
@@ -43,12 +42,6 @@ export function SessionsPage() {
         perPage: PER_PAGE,
         eventId,
       }),
-    enabled: Boolean(eventId),
-  });
-
-  const speakersQuery = useQuery({
-    queryKey: ['speakers', 'library', 'session-picker'],
-    queryFn: () => speakersApi.list({ perPage: 100 }),
     enabled: Boolean(eventId),
   });
 
@@ -144,12 +137,10 @@ export function SessionsPage() {
   }
 
   const saving = createMutation.isPending || updateMutation.isPending;
-  const speakers = speakersQuery.data?.items ?? [];
   const memberships = membershipsQuery.data?.items ?? [];
   const canEdit = Boolean(eventId);
   const bootstrapLoading =
-    workspaceQuery.isLoading ||
-    (Boolean(eventId) && (sessionsQuery.isLoading || speakersQuery.isLoading));
+    workspaceQuery.isLoading || (Boolean(eventId) && sessionsQuery.isLoading);
 
   return (
     <div className="page">
@@ -160,7 +151,7 @@ export function SessionsPage() {
           <p className="muted">
             {isPastEdition
               ? 'Agenda from a past edition — admins can still edit sessions, materials, and reviews.'
-              : 'Agenda for the selected edition. Pick speakers from the shared library when you create a session.'}
+              : 'Agenda for the selected edition. Speakers are managed separately on the Speakers page.'}
           </p>
         </div>
         {canEdit ? (
@@ -169,7 +160,7 @@ export function SessionsPage() {
               <Plus size={16} />
               Add extra activity
             </Button>
-            <Button onClick={() => openCreate('session')} disabled={!speakers.length || !eventDays.length}>
+            <Button onClick={() => openCreate('session')} disabled={!eventDays.length}>
               <Plus size={16} />
               Create session
             </Button>
@@ -196,12 +187,7 @@ export function SessionsPage() {
             return result.items.map((session) => ({
               id: session.id,
               title: session.name,
-              subtitle: [
-                session.speaker?.name,
-                session.eventDayNumber ? `Day ${session.eventDayNumber}` : null,
-              ]
-                .filter(Boolean)
-                .join(' · '),
+              subtitle: session.eventDayNumber ? `Day ${session.eventDayNumber}` : undefined,
             }));
           }}
         />
@@ -221,11 +207,6 @@ export function SessionsPage() {
       ) : null}
       {!bootstrapLoading && !eventId ? (
         <p className="form-error">Schedule an event on the Event page before managing sessions.</p>
-      ) : null}
-      {!bootstrapLoading && canEdit && speakers.length === 0 ? (
-        <p className="form-error">
-          Add at least one speaker on the Speakers page before creating sessions.
-        </p>
       ) : null}
       {!bootstrapLoading && canEdit && eventDays.length === 0 ? (
         <p className="form-error">Set event days on the Event page before creating sessions.</p>
@@ -247,7 +228,7 @@ export function SessionsPage() {
                   <Plus size={16} />
                   Add extra activity
                 </Button>
-                <Button onClick={() => openCreate('session')} disabled={!speakers.length || !eventDays.length}>
+                <Button onClick={() => openCreate('session')} disabled={!eventDays.length}>
                   <Plus size={16} />
                   Create session
                 </Button>
@@ -264,7 +245,6 @@ export function SessionsPage() {
                   <th>Day</th>
                   <th>Time</th>
                   <th>Location</th>
-                  <th>Speaker</th>
                   <th>Rating</th>
                   <th>Materials</th>
                   <th />
@@ -315,7 +295,6 @@ export function SessionsPage() {
                           <span className="muted">—</span>
                         )}
                       </td>
-                      <td>{isEvent ? '—' : (session.speaker?.name ?? '—')}</td>
                       <td>
                         {isEvent ? (
                           <span className="muted">—</span>
@@ -389,7 +368,6 @@ export function SessionsPage() {
           mode={editing ? 'edit' : 'create'}
           initialSession={editing}
           defaultKind={createKind}
-          speakers={speakers}
           memberships={memberships}
           eventDays={eventDays}
           loading={saving}

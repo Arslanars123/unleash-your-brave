@@ -61,20 +61,6 @@ function refineSessionTimes<T extends { startTime?: string; endTime?: string }>(
 
 const sessionKindSchema = z.enum(['session', 'event']);
 
-function refineSessionKind<T extends { kind?: 'session' | 'event'; speakerId?: string | null }>(
-  value: T,
-  ctx: z.RefinementCtx,
-) {
-  const kind = value.kind ?? 'session';
-  if (kind === 'session' && !value.speakerId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Select a speaker',
-      path: ['speakerId'],
-    });
-  }
-}
-
 export const sessionIdParamSchema = z.object({
   id: z.string().uuid('Expected a valid session id'),
 });
@@ -84,7 +70,6 @@ export const listSessionsQuerySchema = z.object({
   perPage: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().min(1).optional(),
   eventId: z.string().uuid().optional(),
-  speakerId: z.string().uuid().optional(),
   eventDayNumber: z.coerce.number().int().min(1).max(60).optional(),
 });
 
@@ -94,7 +79,6 @@ export const createSessionSchema = z
     kind: sessionKindSchema.optional().default('session'),
     name: z.string().trim().min(2, 'Name is required').max(160),
     description: z.string().trim().max(5000).optional().default(''),
-    speakerId: z.string().uuid().optional().nullable(),
     address: z.string().trim().max(500).optional().default(''),
     eventDayNumber: z.coerce.number().int().min(1, 'Select an event day').max(60),
     startTime: timeHmSchema.optional().default(''),
@@ -106,7 +90,6 @@ export const createSessionSchema = z
   })
   .superRefine((value, ctx) => {
     refineSessionTimes(value, ctx);
-    refineSessionKind(value, ctx);
   });
 
 export const updateSessionSchema = z
@@ -114,7 +97,6 @@ export const updateSessionSchema = z
     kind: sessionKindSchema.optional(),
     name: z.string().trim().min(2).max(160).optional(),
     description: z.string().trim().max(5000).optional(),
-    speakerId: z.string().uuid().optional().nullable(),
     address: z.string().trim().max(500).optional(),
     eventDayNumber: z.coerce.number().int().min(1).max(60).optional(),
     startTime: timeHmSchema.optional(),
@@ -130,16 +112,9 @@ export const updateSessionSchema = z
   })
   .superRefine((value, ctx) => {
     refineSessionTimes(value, ctx);
-    if (value.kind === 'session' && value.speakerId === null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Select a speaker',
-        path: ['speakerId'],
-      });
-    }
   });
 
-/** Speakers may only edit description + materials on their own sessions. */
+/** Speakers may only edit description + materials on sessions for their linked events. */
 export const speakerUpdateSessionSchema = z
   .object({
     description: z.string().trim().max(5000).optional(),

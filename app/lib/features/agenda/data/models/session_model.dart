@@ -12,7 +12,6 @@ class SessionModel extends SessionEntity {
     super.endTime,
     super.location,
     super.address,
-    super.speaker,
     super.materials,
     super.feedbackEnabled,
     super.feedbackSummary,
@@ -23,7 +22,6 @@ class SessionModel extends SessionEntity {
   });
 
   factory SessionModel.fromJson(Map<String, dynamic> json) {
-    final speakerJson = json['speaker'];
     final materialsJson = json['materials'];
     final feedbackJson = json['feedbackSummary'];
 
@@ -38,9 +36,6 @@ class SessionModel extends SessionEntity {
       endTime: json['endTime'] as String? ?? '',
       location: json['location'] as String? ?? '',
       address: json['address'] as String? ?? '',
-      speaker: speakerJson is Map<String, dynamic>
-          ? SessionSpeakerModel.fromJson(speakerJson)
-          : null,
       materials: materialsJson is List
           ? materialsJson
               .whereType<Map<String, dynamic>>()
@@ -70,14 +65,6 @@ class SessionModel extends SessionEntity {
       'endTime': endTime,
       'location': location,
       'address': address,
-      'speaker': speaker == null
-          ? null
-          : {
-              'id': speaker!.id,
-              'name': speaker!.name,
-              'title': speaker!.title,
-              'photo': speaker!.photo,
-            },
       'materials': materials
           .map(
             (m) => {
@@ -100,24 +87,6 @@ class SessionModel extends SessionEntity {
       'reviewsLocked': reviewsLocked,
       'agendaLocked': agendaLocked,
     };
-  }
-}
-
-class SessionSpeakerModel extends SessionSpeakerEntity {
-  const SessionSpeakerModel({
-    required super.id,
-    required super.name,
-    required super.title,
-    required super.photo,
-  });
-
-  factory SessionSpeakerModel.fromJson(Map<String, dynamic> json) {
-    return SessionSpeakerModel(
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      title: json['title'] as String? ?? '',
-      photo: json['photo'] as String? ?? '',
-    );
   }
 }
 

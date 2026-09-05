@@ -55,7 +55,11 @@ class AuthTextField extends StatelessWidget {
       textInputAction: textInputAction ?? TextInputAction.done,
       onFieldSubmitted: onFieldSubmitted ??
           (_) => FocusManager.instance.primaryFocus?.unfocus(),
-      onEditingComplete: () => FocusManager.instance.primaryFocus?.unfocus(),
+      // If onEditingComplete is set, Flutter skips onFieldSubmitted — only
+      // unfocus when the caller did not provide a submit handler.
+      onEditingComplete: onFieldSubmitted == null
+          ? () => FocusManager.instance.primaryFocus?.unfocus()
+          : null,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: AppTypography.caption,
@@ -152,23 +156,27 @@ class AuthPrimaryButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       height: context.responsive(compact: 52.0, medium: 54.0, expanded: 56.0),
-      child: ElevatedButton(
-        onPressed: loading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+      // Keep focus on the text field so the first tap is not cancelled when
+      // the keyboard / KeyboardActions bar rebuilds.
+      child: ExcludeFocus(
+        child: ElevatedButton(
+          onPressed: loading ? null : onPressed,
+          style: ElevatedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+            ),
           ),
+          child: loading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.textPrimary,
+                  ),
+                )
+              : Text(label),
         ),
-        child: loading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.textPrimary,
-                ),
-              )
-            : Text(label),
       ),
     );
   }

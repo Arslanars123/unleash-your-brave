@@ -36,9 +36,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _submit() {
-    FocusScope.of(context).unfocus();
-
     if (!_formKey.currentState!.validate()) {
+      FocusScope.of(context).unfocus();
       setState(() => _autovalidateMode = AutovalidateMode.onUserInteraction);
       return;
     }
@@ -49,6 +48,7 @@ class _LoginPageState extends State<LoginPage> {
             password: _passwordController.text,
           ),
         );
+    FocusScope.of(context).unfocus();
   }
 
   Future<void> _showInviteAlreadyUsedDialog(String message) async {
@@ -131,7 +131,10 @@ class _LoginPageState extends State<LoginPage> {
           builder: (context, state) {
             final loading = state is AuthLoading;
 
-            return KeyboardActions.done(
+            return KeyboardActions(
+              navigation: KeyboardNavigation.none,
+              onSubmit: loading ? null : _submit,
+              submitText: 'Sign in',
               child: AdaptiveCenteredBody(
                 child: Form(
                   key: _formKey,

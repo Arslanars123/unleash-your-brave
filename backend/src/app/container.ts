@@ -192,7 +192,6 @@ export async function createContainer() {
     membershipRepository,
     effectiveAccessService,
     eventAssociationService,
-    mailService,
   );
   eventAssociationService.setCatalogServices({
     speakers: speakerService,
@@ -201,7 +200,6 @@ export async function createContainer() {
   });
   speakerService.setAssociationService(eventAssociationService);
   speakerService.setSessionRepository(sessionRepository);
-  speakerService.setSessionService(sessionService);
   sponsorService.setAssociationService(eventAssociationService);
   membershipService.setAssociationService(eventAssociationService);
   eventService.setAssociationService(eventAssociationService);
@@ -209,6 +207,7 @@ export async function createContainer() {
     sessionFeedbackRepository,
     sessionRepository,
     userRepository,
+    speakerService,
     effectiveAccessService,
   );
   const storeService = new StoreService(

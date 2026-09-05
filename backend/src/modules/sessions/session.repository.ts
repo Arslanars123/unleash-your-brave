@@ -34,7 +34,6 @@ export class InMemorySessionRepository implements SessionRepository {
     const filtered = [...this.sessions.values()]
       .filter((session) => {
         if (query.eventId && session.eventId !== query.eventId) return false;
-        if (query.speakerId && session.speakerId !== query.speakerId) return false;
         if (query.eventDayNumber && session.eventDayNumber !== query.eventDayNumber) return false;
         if (query.accessibleToMembershipIds !== undefined) {
           if (!isSessionAccessible(session, query.accessibleToMembershipIds)) {

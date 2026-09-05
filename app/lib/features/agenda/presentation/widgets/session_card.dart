@@ -17,8 +17,6 @@ class SessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final speakerName = session.speaker?.name.trim() ?? '';
-    final speakerTitle = session.speaker?.title.trim() ?? '';
     final description = session.description.trim();
     final materialCount = session.materials.length;
     final address = session.address.trim();
@@ -128,41 +126,6 @@ class SessionCard extends StatelessWidget {
                     height: 1.45,
                     color: AppColors.textSecondary,
                   ),
-                ),
-              ],
-              if (speakerName.isNotEmpty && !isExtraActivity) ...[
-                const SizedBox(height: 14),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.mic_none_rounded,
-                      size: 16,
-                      color: AppColors.accentPink,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            speakerName,
-                            style: AppTypography.body.copyWith(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          if (speakerTitle.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              speakerTitle,
-                              style: AppTypography.caption.copyWith(fontSize: 12),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
                 ),
               ],
               if (address.isNotEmpty && isExtraActivity) ...[

@@ -31,7 +31,9 @@ import 'package:unleash_your_brave/features/home/presentation/cubit/selected_eve
 import 'package:unleash_your_brave/features/memberships/data/datasources/memberships_remote_datasource.dart';
 import 'package:unleash_your_brave/features/posts/data/datasources/posts_remote_datasource.dart';
 import 'package:unleash_your_brave/features/sponsors/data/datasources/sponsors_remote_datasource.dart';
+import 'package:unleash_your_brave/features/speakers/data/datasources/speakers_remote_datasource.dart';
 import 'package:unleash_your_brave/features/store/data/datasources/store_remote_datasource.dart';
+import 'package:unleash_your_brave/features/legal/data/datasources/legal_remote_datasource.dart';
 
 final sl = GetIt.instance;
 
@@ -83,7 +85,9 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => PostsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => MembershipsRemoteDataSource(sl()));
   sl.registerLazySingleton(() => SponsorsRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => SpeakersRemoteDataSource(sl()));
   sl.registerLazySingleton(() => StoreRemoteDataSource(sl()));
+  sl.registerLazySingleton(() => LegalRemoteDataSource());
 
   sl.registerLazySingleton(
     () => SelectedEventCubit(

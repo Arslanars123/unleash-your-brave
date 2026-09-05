@@ -12,7 +12,6 @@ import 'package:unleash_your_brave/core/theme/app_typography.dart';
 import 'package:unleash_your_brave/core/utils/app_toast.dart';
 import 'package:unleash_your_brave/core/utils/datetime_format.dart';
 import 'package:unleash_your_brave/core/utils/media_url.dart';
-import 'package:unleash_your_brave/core/widgets/app_circle_avatar.dart';
 import 'package:unleash_your_brave/core/widgets/load_error_view.dart';
 import 'package:unleash_your_brave/features/agenda/data/datasources/sessions_remote_datasource.dart';
 import 'package:unleash_your_brave/features/agenda/domain/entities/session_entity.dart';
@@ -377,7 +376,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
 
     final sidePad = context.pagePadding.left;
     final description = session.description.trim();
-    final speaker = session.speaker;
     final materials = session.materials;
     final summary = session.feedbackSummary;
     final ratingsCount = summary?.ratingsCount ?? 0;
@@ -448,10 +446,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                       session.name,
                       style: AppTypography.headline.copyWith(fontSize: 28),
                     ),
-                    if (speaker != null && speaker.name.trim().isNotEmpty && !isExtraActivity) ...[
-                      const SizedBox(height: 20),
-                      _SpeakerBlock(speaker: speaker),
-                    ],
                     const SizedBox(height: 28),
                     Row(
                       children: [
@@ -475,7 +469,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                     if (session.agendaLocked)
                       const _LockedSection(
                         message:
-                            'Session details are locked. Ask an admin for access or purchase a pass.',
+                            'Session details are locked. Ask an admin for access or purchase an event plan.',
                       )
                     else
                       Text(
@@ -625,59 +619,6 @@ class _MetaChip extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SpeakerBlock extends StatelessWidget {
-  const _SpeakerBlock({required this.speaker});
-
-  final SessionSpeakerEntity speaker;
-
-  @override
-  Widget build(BuildContext context) {
-    final title = speaker.title.trim();
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        AppCircleAvatar(
-          radius: 26,
-          photoUrl: speaker.photo,
-          backgroundColor: AppColors.bgMaroon,
-          fallback: Text(
-            speaker.name.trim().isNotEmpty
-                ? speaker.name.trim()[0].toUpperCase()
-                : '?',
-            style: AppTypography.body.copyWith(
-              fontWeight: FontWeight.w600,
-              color: AppColors.accentPink,
-            ),
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                speaker.name,
-                style: AppTypography.body.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-              if (title.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  title,
-                  style: AppTypography.caption.copyWith(fontSize: 13),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

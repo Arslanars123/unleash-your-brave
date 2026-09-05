@@ -7,7 +7,6 @@ import type {
   PublicEventDay,
   PublicMembership,
   PublicSession,
-  PublicSpeaker,
   SessionKind,
   SessionMaterialType,
   SessionPayload,
@@ -28,7 +27,6 @@ export interface SessionFormValues {
   kind: SessionKind;
   name: string;
   description: string;
-  speakerId: string;
   address: string;
   eventDayNumber: string;
   startTime: string;
@@ -56,7 +54,6 @@ const emptyForm: SessionFormValues = {
   kind: 'session',
   name: '',
   description: '',
-  speakerId: '',
   address: '',
   eventDayNumber: '',
   startTime: '',
@@ -73,7 +70,6 @@ function sessionToForm(session: PublicSession): SessionFormValues {
     kind: session.kind ?? 'session',
     name: session.name,
     description: session.description,
-    speakerId: session.speakerId ?? '',
     address: session.address ?? '',
     eventDayNumber: String(session.eventDayNumber),
     startTime: session.startTime ?? '',
@@ -98,7 +94,6 @@ function validate(values: SessionFormValues): FieldErrors {
   if (!values.name.trim()) errors.name = 'Name is required';
   else if (values.name.trim().length < 2) errors.name = 'Name must be at least 2 characters';
 
-  if (!isEvent && !values.speakerId) errors.speakerId = 'Select a speaker';
   if (!values.eventDayNumber) errors.eventDayNumber = 'Select an event day';
 
   const start = values.startTime.trim();
@@ -140,7 +135,6 @@ export function toSessionPayload(
     kind: values.kind,
     name: values.name.trim(),
     description: values.description.trim(),
-    speakerId: isEvent ? null : values.speakerId,
     address: values.address.trim(),
     eventDayNumber: Number(values.eventDayNumber),
     startTime: values.startTime.trim(),
@@ -164,7 +158,6 @@ interface SessionFormModalProps {
   mode: 'create' | 'edit';
   initialSession?: PublicSession | null;
   defaultKind?: SessionKind;
-  speakers: PublicSpeaker[];
   memberships: PublicMembership[];
   eventDays: PublicEventDay[];
   loading?: boolean;
@@ -177,7 +170,6 @@ export function SessionFormModal({
   mode,
   initialSession,
   defaultKind = 'session',
-  speakers,
   memberships,
   eventDays,
   loading = false,
@@ -203,12 +195,11 @@ export function SessionFormModal({
             ...emptyForm,
             kind: defaultKind,
             eventDayNumber: eventDays[0] ? String(eventDays[0].dayNumber) : '',
-            speakerId: speakers[0]?.id ?? '',
             feedbackEnabled: defaultKind === 'session',
             notifyAttendees: true,
           },
     );
-  }, [open, initialSession, eventDays, speakers, defaultKind]);
+  }, [open, initialSession, eventDays, defaultKind]);
 
   if (!open) return null;
 
@@ -325,7 +316,7 @@ export function SessionFormModal({
                   });
                 }}
               >
-                <option value="session">Session (speaker talk)</option>
+                <option value="session">Session (agenda talk)</option>
                 <option value="event">Extra activity (VIP dinner, etc.)</option>
               </select>
             </label>
@@ -352,28 +343,6 @@ export function SessionFormModal({
                 : 'What this session covers...'
             }
           />
-
-          {!isEvent ? (
-            <label className="field">
-              <span className="field-label">
-                Assigned speaker <span className="required-mark">*</span>
-              </span>
-              <select
-                className={`field-input${errors.speakerId ? ' field-input-error' : ''}`}
-                value={values.speakerId}
-                onChange={(e) => update('speakerId', e.target.value)}
-              >
-                <option value="">Select speaker</option>
-                {speakers.map((speaker) => (
-                  <option key={speaker.id} value={speaker.id}>
-                    {speaker.name}
-                    {speaker.title ? ` — ${speaker.title}` : ''}
-                  </option>
-                ))}
-              </select>
-              {errors.speakerId ? <span className="field-error">{errors.speakerId}</span> : null}
-            </label>
-          ) : null}
 
           <label className="field">
             <span className="field-label">

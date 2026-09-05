@@ -18,6 +18,7 @@ import 'package:unleash_your_brave/features/home/data/datasources/app_branding_r
 import 'package:unleash_your_brave/features/home/domain/entities/event_entity.dart';
 import 'package:unleash_your_brave/features/home/presentation/cubit/selected_event_cubit.dart';
 import 'package:unleash_your_brave/features/home/presentation/widgets/event_countdown.dart';
+import 'package:unleash_your_brave/features/home/presentation/widgets/home_event_sections.dart';
 import 'package:unleash_your_brave/features/home/presentation/widgets/quick_action_card.dart';
 import 'package:unleash_your_brave/features/home/presentation/widgets/welcome_card.dart';
 
@@ -167,6 +168,10 @@ class _HomeContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final eventId = event?.id;
     final statusLabel = event?.status.toUpperCase();
+    // Prefer global app branding cover; fall back to the selected event cover.
+    final coverImage = isLoadableMediaUrl(homeCoverImage)
+        ? homeCoverImage
+        : (event?.coverImage ?? '');
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(
@@ -180,7 +185,7 @@ class _HomeContent extends StatelessWidget {
             dateLabel: event?.dateRangeLabel ?? EventConstants.dateLabel,
             eventName: event?.name,
             statusLabel: statusLabel,
-            coverImage: homeCoverImage,
+            coverImage: coverImage,
             onOpenDrawer: onOpenDrawer,
           ),
         ),
@@ -213,32 +218,19 @@ class _HomeContent extends StatelessWidget {
                         onTap: () => context.go('/profile'),
                       ),
                     SizedBox(height: context.sectionGap * 0.75),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: QuickActionCard(
-                            icon: Icons.qr_code_2,
-                            title: 'Check-in',
-                            subtitle: 'Selected event QR',
-                            onTap: () {
-                              final q = eventId != null && eventId.isNotEmpty
-                                  ? '/check-in?eventId=$eventId'
-                                  : '/check-in';
-                              context.push(q);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: QuickActionCard(
-                            icon: Icons.calendar_today_outlined,
-                            title: 'Agenda',
-                            subtitle: 'See the schedule',
-                            onTap: () => context.go('/agenda'),
-                          ),
-                        ),
-                      ],
+                    QuickActionCard(
+                      icon: Icons.qr_code_2,
+                      title: 'Check-in',
+                      subtitle: 'Selected event QR',
+                      onTap: () {
+                        final q = eventId != null && eventId.isNotEmpty
+                            ? '/check-in?eventId=$eventId'
+                            : '/check-in';
+                        context.push(q);
+                      },
                     ),
+                    SizedBox(height: context.sectionGap * 0.75),
+                    HomeEventSections(eventId: eventId),
                   ],
                 ),
               ),
@@ -527,12 +519,6 @@ class _HomeDrawer extends StatelessWidget {
               title: 'Previous events',
               subtitle: 'All past editions',
               onTap: () => _go(context, '/events?focus=previous'),
-            ),
-            _DrawerTile(
-              icon: Icons.storefront_outlined,
-              title: 'Sponsors',
-              subtitle: 'Partner offers & resources',
-              onTap: () => _go(context, '/sponsors'),
             ),
             _DrawerTile(
               icon: Icons.shopping_bag_outlined,

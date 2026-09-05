@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { ForbiddenError, UnauthorizedError } from '../../core/errors/app-error.js';
+import { UnauthorizedError } from '../../core/errors/app-error.js';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
 import type { SessionService, SessionViewerContext } from './session.service.js';
 import type { CreateSessionInput, ListSessionsQuery, UpdateSessionInput } from './session.types.js';
@@ -36,10 +36,7 @@ export class SessionController {
     const input = req.body as UpdateSessionInput;
 
     if (req.auth.role !== 'admin' && req.auth.speakerId) {
-      const session = await this.service.getById(id);
-      if (session.speakerId !== req.auth.speakerId) {
-        throw new ForbiddenError('You can only update sessions assigned to you');
-      }
+      await this.service.assertSpeakerCanManageSession(req.auth.speakerId, id);
       sendSuccess(
         res,
         await this.service.update(id, {
