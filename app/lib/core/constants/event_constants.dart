@@ -6,6 +6,7 @@ abstract final class EventConstants {
   static const String dateLabel = 'September 10–12, 2026';
   static const String countdownTitle = 'DAYS UNTIL WE GATHER';
 
-  /// Event start (local) — drives the live countdown.
-  static final DateTime startsAt = DateTime(2026, 9, 10, 9);
+  /// Event start calendar day (local) — fallback when API date is unavailable.
+  /// API dates are UTC midnights of the calendar day; see [eventCalendarDayLocal].
+  static final DateTime startsAt = DateTime(2026, 9, 10);
 }
