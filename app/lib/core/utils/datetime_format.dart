@@ -58,3 +58,13 @@ String formatUsShortDate(DateTime date, {bool utc = false}) {
   final d = utc ? date.toUtc() : date.toLocal();
   return '${_shortMonth(d.month)} ${d.day}';
 }
+
+/// Event `startDate` values are stored as UTC midnight of a calendar day
+/// (e.g. `2026-09-10T00:00:00.000Z` means “Sep 10”, not an instant in US time).
+///
+/// For countdowns, use local midnight of that calendar day so Eastern (and other
+/// US) users see days until Thursday 9/10 — not Wednesday evening.
+DateTime eventCalendarDayLocal(DateTime storedStartDate) {
+  final utc = storedStartDate.toUtc();
+  return DateTime(utc.year, utc.month, utc.day);
+}

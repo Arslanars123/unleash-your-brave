@@ -6,6 +6,7 @@ import 'package:unleash_your_brave/core/responsive/responsive.dart';
 import 'package:unleash_your_brave/core/theme/app_colors.dart';
 import 'package:unleash_your_brave/core/theme/app_theme.dart';
 import 'package:unleash_your_brave/core/theme/app_typography.dart';
+import 'package:unleash_your_brave/core/utils/datetime_format.dart';
 
 class EventCountdown extends StatefulWidget {
   const EventCountdown({
@@ -27,7 +28,11 @@ class _EventCountdownState extends State<EventCountdown> {
   late Duration _remaining;
   Timer? _timer;
 
-  DateTime get _target => widget.target ?? EventConstants.startsAt;
+  DateTime get _target {
+    final raw = widget.target;
+    if (raw == null) return EventConstants.startsAt;
+    return eventCalendarDayLocal(raw);
+  }
 
   @override
   void initState() {
