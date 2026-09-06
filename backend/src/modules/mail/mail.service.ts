@@ -358,57 +358,66 @@ export class MailService {
     stripePaymentIntentId: string | null;
     orderId?: string;
   }): Promise<{ sent: boolean; skipped?: boolean }> {
+    // Inbox-friendly copy (Shopify / Apple style): brand + "order confirmed",
+    // avoid spammy “receipt / purchase / transaction” framing in the subject.
     const when = input.purchasedAt.toUTCString();
-    const subject = `Order receipt: ${input.productName}`;
+    const displayName = input.name.trim() || 'there';
+    const subject = `Your ${env.appName} order is confirmed`;
+
     const text = [
-      `Hi ${input.name},`,
+      `Hi ${displayName},`,
       '',
-      `Thank you for your ${env.appName} store purchase. Here is your receipt.`,
+      `Thanks for your order from ${env.appName}.`,
+      'Here are your order details for your records.',
       '',
-      `Product: ${input.productName}`,
-      `Quantity: ${input.quantity}`,
-      `Amount: ${input.priceLabel}`,
-      `Date: ${when}`,
-      input.deliveryAddress ? `Delivery address: ${input.deliveryAddress}` : null,
-      input.contactPhone ? `Contact phone: ${input.contactPhone}` : null,
-      input.orderId ? `Order ID: ${input.orderId}` : null,
-      input.stripePaymentIntentId ? `Transaction: ${input.stripePaymentIntentId}` : null,
+      `Item: ${input.productName}`,
+      `Qty: ${input.quantity}`,
+      `Total: ${input.priceLabel}`,
+      `Ordered on: ${when}`,
+      input.deliveryAddress ? `Ships to: ${input.deliveryAddress}` : null,
+      input.contactPhone ? `Phone: ${input.contactPhone}` : null,
+      input.orderId ? `Order number: ${input.orderId}` : null,
+      input.stripePaymentIntentId ? `Payment reference: ${input.stripePaymentIntentId}` : null,
       '',
-      'If you have any questions, reply to this email.',
+      'Need help with this order? Just reply to this email.',
+      '',
+      `— ${env.appName}`,
     ]
       .filter((line) => line !== null)
       .join('\n');
 
     const html = `
-      <p>Hi ${escapeHtml(input.name)},</p>
-      <p>Thank you for your ${escapeHtml(env.appName)} store purchase. Here is your receipt.</p>
-      <p style="font-size:18px;font-weight:700">${escapeHtml(input.productName)}</p>
-      <ul>
-        <li><strong>Quantity:</strong> ${escapeHtml(String(input.quantity))}</li>
-        <li><strong>Amount:</strong> ${escapeHtml(input.priceLabel)}</li>
-        <li><strong>Date:</strong> ${escapeHtml(when)}</li>
+      <p>Hi ${escapeHtml(displayName)},</p>
+      <p>Thanks for your order from <strong>${escapeHtml(env.appName)}</strong>.</p>
+      <p>Here are your order details for your records.</p>
+      <p style="font-size:18px;font-weight:700;margin:16px 0 8px">${escapeHtml(input.productName)}</p>
+      <ul style="padding-left:20px;line-height:1.6">
+        <li><strong>Qty:</strong> ${escapeHtml(String(input.quantity))}</li>
+        <li><strong>Total:</strong> ${escapeHtml(input.priceLabel)}</li>
+        <li><strong>Ordered on:</strong> ${escapeHtml(when)}</li>
         ${
           input.deliveryAddress
-            ? `<li><strong>Delivery address:</strong> ${escapeHtml(input.deliveryAddress)}</li>`
+            ? `<li><strong>Ships to:</strong> ${escapeHtml(input.deliveryAddress)}</li>`
             : ''
         }
         ${
           input.contactPhone
-            ? `<li><strong>Contact phone:</strong> ${escapeHtml(input.contactPhone)}</li>`
+            ? `<li><strong>Phone:</strong> ${escapeHtml(input.contactPhone)}</li>`
             : ''
         }
         ${
           input.orderId
-            ? `<li><strong>Order ID:</strong> ${escapeHtml(input.orderId)}</li>`
+            ? `<li><strong>Order number:</strong> ${escapeHtml(input.orderId)}</li>`
             : ''
         }
         ${
           input.stripePaymentIntentId
-            ? `<li><strong>Transaction:</strong> ${escapeHtml(input.stripePaymentIntentId)}</li>`
+            ? `<li><strong>Payment reference:</strong> ${escapeHtml(input.stripePaymentIntentId)}</li>`
             : ''
         }
       </ul>
-      <p>If you have any questions, reply to this email.</p>
+      <p>Need help with this order? Just reply to this email.</p>
+      <p>— ${escapeHtml(env.appName)}</p>
     `;
 
     return this.send({ to: input.to, subject, text, html });
