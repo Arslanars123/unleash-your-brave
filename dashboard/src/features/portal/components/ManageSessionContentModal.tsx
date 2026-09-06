@@ -3,7 +3,7 @@ import { ExternalLink, FileText, Plus, Trash2, Upload, X } from 'lucide-react';
 import { uploadsApi } from '@/features/uploads/api/uploads-api';
 import { getApiErrorMessage } from '@/shared/api/client';
 import { formatSessionTimeRange } from '@/shared/lib/datetime';
-import { isValidMediaRef, resolveMediaUrl } from '@/shared/lib/media';
+import { isValidMediaRef, normalizeWebsiteUrl, resolveMediaUrl } from '@/shared/lib/media';
 import type {
   PublicSession,
   SessionMaterialPayload,
@@ -97,9 +97,14 @@ export function ManageSessionContentModal({
     const next: FieldErrors = {};
     rows.forEach((material, index) => {
       if (!material.title.trim()) next[`title-${index}`] = 'Title is required';
-      if (!material.url.trim()) next[`url-${index}`] = 'URL or file is required';
-      else if (!isValidMediaRef(material.url.trim())) {
-        next[`url-${index}`] = 'Enter a valid URL or upload a file';
+      if (!material.url.trim()) {
+        next[`url-${index}`] =
+          material.type === 'link' ? 'Website URL is required' : 'URL or file is required';
+      } else if (!isValidMediaRef(material.url.trim())) {
+        next[`url-${index}`] =
+          material.type === 'link'
+            ? 'Enter a valid website URL (e.g. https://www.example.com)'
+            : 'Enter a valid URL or upload a file';
       }
     });
     return next;
@@ -160,7 +165,10 @@ export function ManageSessionContentModal({
       materials: materials.map((material) => ({
         type: material.type,
         title: material.title.trim(),
-        url: material.url.trim(),
+        url:
+          material.type === 'link'
+            ? normalizeWebsiteUrl(material.url)
+            : material.url.trim(),
       })),
     });
   }
@@ -287,34 +295,47 @@ export function ManageSessionContentModal({
                           placeholder="Worksheet PDF"
                         />
                         <Input
-                          label="URL / file path"
+                          label={material.type === 'link' ? 'Website URL' : 'URL / file path'}
                           requiredMark
                           value={material.url}
                           error={errors[`url-${index}`]}
                           onChange={(e) => updateMaterial(index, { url: e.target.value })}
-                          placeholder="https://… or /uploads/…"
+                          onBlur={() => {
+                            if (material.type !== 'link' || !material.url.trim()) return;
+                            const normalized = normalizeWebsiteUrl(material.url);
+                            if (normalized !== material.url.trim()) {
+                              updateMaterial(index, { url: normalized });
+                            }
+                          }}
+                          placeholder={
+                            material.type === 'link'
+                              ? 'www.example.com or https://…'
+                              : 'https://… or /uploads/…'
+                          }
                         />
-                        <div className="material-row-actions">
-                          <input
-                            ref={(el) => {
-                              fileRefs.current[material.key] = el;
-                            }}
-                            type="file"
-                            accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.mp4,.webm,.mov,application/pdf,video/*"
-                            hidden
-                            onChange={(e) => void handleUpload(index, e.target.files?.[0])}
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            loading={uploadingKey === material.key}
-                            disabled={busy}
-                            onClick={() => fileRefs.current[material.key]?.click()}
-                          >
-                            <Upload size={14} />
-                            Upload file
-                          </Button>
-                        </div>
+                        {material.type !== 'link' ? (
+                          <div className="material-row-actions">
+                            <input
+                              ref={(el) => {
+                                fileRefs.current[material.key] = el;
+                              }}
+                              type="file"
+                              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.mp4,.webm,.mov,application/pdf,video/*"
+                              hidden
+                              onChange={(e) => void handleUpload(index, e.target.files?.[0])}
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              loading={uploadingKey === material.key}
+                              disabled={busy}
+                              onClick={() => fileRefs.current[material.key]?.click()}
+                            >
+                              <Upload size={14} />
+                              Upload file
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     </li>
                   );
