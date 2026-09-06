@@ -60,7 +60,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Take a new profile photo with your camera.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Show your position on the event venue map so you can find your way around.</string>
+	<string>Required by the maps SDK to show the event venue map. This app does not access or track your personal location.</string>
 	<key>GMSApiKey</key>
 	<string>$(GOOGLE_MAPS_API_KEY)</string>
 </dict>
