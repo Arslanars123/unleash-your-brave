@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BadgePercent,
   CircleDollarSign,
-  Package,
   Ticket,
   UserCheck,
   Users,
@@ -127,24 +126,13 @@ export function OverviewPage() {
                 </p>
               </div>
             </article>
-            <article className="stat-card">
-              <Package size={20} />
-              <div>
-                <p>Store tickets / units</p>
-                <strong>{overview.store.unitsSold}</strong>
-                <p className="hint" style={{ margin: '4px 0 0' }}>
-                  {overview.store.orderCount} paid orders
-                </p>
-              </div>
-            </article>
             <article className="stat-card success">
               <CircleDollarSign size={20} />
               <div>
                 <p>Total revenue</p>
                 <strong>{formatMoney(overview.totals.revenue, currency)}</strong>
                 <p className="hint" style={{ margin: '4px 0 0' }}>
-                  Memberships {formatMoney(overview.memberships.revenue, currency)} · Store{' '}
-                  {formatMoney(overview.store.revenue, currency)}
+                  From memberships
                 </p>
               </div>
             </article>
