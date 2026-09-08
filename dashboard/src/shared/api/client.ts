@@ -61,6 +61,15 @@ apiClient.interceptors.response.use(
 export function getApiErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
   if (axios.isAxiosError<ErrorEnvelope>(error)) {
     const apiError = error.response?.data?.error;
+    if (Array.isArray(apiError?.details)) {
+      const lines = apiError.details
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean);
+      if (lines.length > 0) {
+        const summary = lines.slice(0, 8).join(' · ');
+        return lines.length > 8 ? `${summary} · (+${lines.length - 8} more)` : summary;
+      }
+    }
     if (apiError?.details && typeof apiError.details === 'object') {
       const details = apiError.details as {
         fieldErrors?: Record<string, string[] | undefined>;

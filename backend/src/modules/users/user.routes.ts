@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../../core/http/async-handler.js';
 import { authenticate, authorize } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
+import { excelImportUpload } from '../uploads/upload.middleware.js';
 import type { UserController } from './user.controller.js';
 import {
   createUserSchema,
@@ -45,6 +46,12 @@ export function createUserRouter(controller: UserController): Router {
   router.get('/', validate({ query: listUsersQuerySchema }), asyncHandler(controller.list));
 
   router.post('/', validate({ body: createUserSchema }), asyncHandler(controller.create));
+
+  router.post(
+    '/import',
+    excelImportUpload.single('file'),
+    asyncHandler(controller.importExcel),
+  );
 
   router.get('/:id', validate({ params: userIdParamSchema }), asyncHandler(controller.getById));
 

@@ -1,12 +1,13 @@
 import bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { env } from '../../config/env.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, ConflictError, NotFoundError, ValidationError } from '../../core/errors/app-error.js';
 import { formatEditionRange } from '../../core/format-date.js';
 import type { MembershipPurchase } from '../checkout/purchase.types.js';
 import type { MembershipPurchaseRepository } from '../checkout/purchase.repository.js';
 import type { PushNotificationService } from '../chat/push.service.js';
 import type { RealtimeHub } from '../realtime/realtime.hub.js';
+import { startOfUtcDay } from '../events/event.mapper.js';
 import type { EventService } from '../events/event.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import { computeMembershipPeriod } from '../memberships/membership-entitlement.js';
@@ -14,6 +15,7 @@ import type { MembershipService } from '../memberships/membership.service.js';
 import type { MembershipRepository } from '../memberships/membership.repository.js';
 import type { SpeakerRepository } from '../speakers/speaker.repository.js';
 import type { SponsorRepository } from '../sponsors/sponsor.repository.js';
+import { parseAttendeeImportWorkbook } from './attendee-import.js';
 import type { PaginatedResult, UserRepository } from './user.repository.js';
 import type {
   CreateUserInput,
@@ -561,6 +563,156 @@ export class UserService {
     });
 
     return { user: toPublicUser(created), outcome: 'created' };
+  }
+
+  /**
+   * Admin Excel import: validate the whole file first, then create/link attendees
+   * with the same invite/email flow as Create Attendee.
+   */
+  async importAttendeesFromExcel(buffer: Buffer): Promise<{
+    imported: number;
+    created: number;
+    linked: number;
+  }> {
+    if (!this.events || !this.membershipService) {
+      throw new BadRequestError('Attendee invite is not configured');
+    }
+
+    const rows = parseAttendeeImportWorkbook(buffer);
+    const { items: events } = await this.events.list({ page: 1, perPage: 100 });
+    const eventsByStart = new Map<string, typeof events>();
+    for (const event of events) {
+      const key = startOfUtcDay(new Date(event.startDate)).toISOString().slice(0, 10);
+      const list = eventsByStart.get(key) ?? [];
+      list.push(event);
+      eventsByStart.set(key, list);
+    }
+
+    const membershipCache = new Map<string, Awaited<ReturnType<MembershipService['list']>>['items']>();
+    const resolved: Array<{
+      rowNumber: number;
+      email: string;
+      fullName: string;
+      eventId: string;
+      membershipId: string;
+    }> = [];
+    const errors: string[] = [];
+
+    for (const row of rows) {
+      const matches = eventsByStart.get(row.eventStartDate) ?? [];
+      if (matches.length === 0) {
+        errors.push(
+          `Row ${row.rowNumber}: no event found with start date ${row.eventStartDate}.`,
+        );
+        continue;
+      }
+      if (matches.length > 1) {
+        errors.push(
+          `Row ${row.rowNumber}: multiple events share start date ${row.eventStartDate}; use a unique start date.`,
+        );
+        continue;
+      }
+      const event = matches[0]!;
+
+      let memberships = membershipCache.get(event.id);
+      if (!memberships) {
+        const listed = await this.membershipService.list({
+          page: 1,
+          perPage: 100,
+          eventId: event.id,
+        });
+        memberships = listed.items;
+        membershipCache.set(event.id, memberships);
+      }
+
+      const needle = row.membershipName.trim().toLowerCase();
+      const membershipMatches = memberships.filter(
+        (item) => item.name.trim().toLowerCase() === needle,
+      );
+      if (membershipMatches.length === 0) {
+        const available =
+          memberships.length > 0
+            ? memberships.map((item) => item.name).join(', ')
+            : '(none linked to this event)';
+        errors.push(
+          `Row ${row.rowNumber}: membership "${row.membershipName}" is not linked to event "${event.name}" (${row.eventStartDate}). Available: ${available}.`,
+        );
+        continue;
+      }
+      if (membershipMatches.length > 1) {
+        errors.push(
+          `Row ${row.rowNumber}: multiple memberships named "${row.membershipName}" for this event.`,
+        );
+        continue;
+      }
+
+      resolved.push({
+        rowNumber: row.rowNumber,
+        email: row.email,
+        fullName: row.fullName,
+        eventId: event.id,
+        membershipId: membershipMatches[0]!.id,
+      });
+    }
+
+    // Duplicate emails in the same file for the same event.
+    const seen = new Set<string>();
+    for (const row of resolved) {
+      const key = `${row.email}::${row.eventId}`;
+      if (seen.has(key)) {
+        errors.push(
+          `Row ${row.rowNumber}: duplicate email ${row.email} for the same event in this file.`,
+        );
+      }
+      seen.add(key);
+    }
+
+    if (this.purchases) {
+      for (const row of resolved) {
+        const existing = await this.users.findByEmail(row.email);
+        if (!existing) continue;
+        const purchases = await this.purchases.listByUserId(existing.id);
+        const alreadyRegistered = purchases.some(
+          (item: MembershipPurchase) =>
+            item.eventId === row.eventId && item.paymentStatus === 'paid',
+        );
+        if (alreadyRegistered) {
+          errors.push(
+            `Row ${row.rowNumber}: ${row.email} is already registered for that event.`,
+          );
+        }
+        if (existing.role === 'admin') {
+          errors.push(
+            `Row ${row.rowNumber}: ${row.email} belongs to an admin account and cannot be imported as an attendee.`,
+          );
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new ValidationError(errors, 'Excel import failed validation — no attendees were imported');
+    }
+
+    let created = 0;
+    let linked = 0;
+    for (const row of resolved) {
+      const result = await this.create({
+        email: row.email,
+        name: row.fullName,
+        role: 'member',
+        status: 'active',
+        eventId: row.eventId,
+        membershipId: row.membershipId,
+      });
+      if (result.outcome === 'created') created += 1;
+      else linked += 1;
+    }
+
+    return {
+      imported: created + linked,
+      created,
+      linked,
+    };
   }
 
   /**

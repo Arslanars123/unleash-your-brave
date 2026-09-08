@@ -68,6 +68,18 @@ export const usersApi = {
     return data.data;
   },
 
+  async importExcel(file: File): Promise<{ imported: number; created: number; linked: number }> {
+    const body = new FormData();
+    body.append('file', file);
+    const { data } = await apiClient.post<
+      SuccessEnvelope<{ imported: number; created: number; linked: number }>
+    >('/users/import', body, {
+      headers: { 'Content-Type': undefined },
+      timeout: 120_000,
+    });
+    return data.data;
+  },
+
   async update(id: string, payload: UpdateUserPayload): Promise<PublicUser> {
     const { data } = await apiClient.patch<SuccessEnvelope<PublicUser>>(`/users/${id}`, payload);
     return data.data;

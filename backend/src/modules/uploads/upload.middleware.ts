@@ -91,3 +91,28 @@ function createUploader(folder: 'events' | 'materials', allowed: Set<string>, ma
 
 export const imageUpload = createUploader('events', IMAGE_MIME, 10 * 1024 * 1024);
 export const materialUpload = createUploader('materials', MATERIAL_MIME, 50 * 1024 * 1024);
+
+const EXCEL_MIME = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/octet-stream',
+]);
+
+/** Memory-only .xlsx upload for admin attendee import (never written to disk/S3). */
+export const excelImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const name = file.originalname.toLowerCase();
+    const okExt = name.endsWith('.xlsx') || name.endsWith('.xls');
+    if (!okExt && !EXCEL_MIME.has(file.mimetype)) {
+      cb(new BadRequestError('Upload an Excel .xlsx file'));
+      return;
+    }
+    if (!okExt) {
+      cb(new BadRequestError('Upload an Excel .xlsx file'));
+      return;
+    }
+    cb(null, true);
+  },
+});

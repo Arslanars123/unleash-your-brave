@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
-import { Eye, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Eye, Pencil, Plus, Trash2, Upload, Users, X } from 'lucide-react';
 import { usersApi } from '@/features/users/api/users-api';
 import { membershipsApi } from '@/features/memberships/api/memberships-api';
 import { useEditionScope } from '@/features/events/hooks/useEditionScope';
@@ -30,6 +30,7 @@ export function UsersPage() {
   const [viewing, setViewing] = useState<PublicUser | null>(null);
   const [deleting, setDeleting] = useState<PublicUser | null>(null);
   const [formEventId, setFormEventId] = useState<string | undefined>();
+  const importInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -99,6 +100,20 @@ export function UsersPage() {
       closeModal();
     },
     onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to create attendee')),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: (file: File) => usersApi.importExcel(file),
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['users', 'list'] }),
+        queryClient.invalidateQueries({ queryKey: ['users', 'stats'] }),
+      ]);
+      toast.success(
+        `Imported ${result.imported} attendee${result.imported === 1 ? '' : 's'} (${result.created} new, ${result.linked} existing)`,
+      );
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Unable to import Excel file')),
   });
 
   const updateMutation = useMutation({
@@ -239,6 +254,24 @@ export function UsersPage() {
     return '—';
   }
 
+  async function handleImportFile(file: File | undefined) {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+      toast.error('Upload an Excel .xlsx file');
+      return;
+    }
+    const ok = await confirm({
+      title: 'Import attendees from Excel?',
+      message:
+        'The whole file is validated first. If any row is invalid, nothing is imported. Valid rows use the same invite emails as Create attendee.',
+      confirmLabel: 'Import file',
+      tone: 'primary',
+    });
+    if (!ok) return;
+    await importMutation.mutateAsync(file);
+  }
+
   return (
     <div className="page">
       <header className="page-header">
@@ -247,13 +280,34 @@ export function UsersPage() {
           <h1>Attendees</h1>
           <p className="muted">
             All attendees by default. Optionally filter by edition to see only people who purchased
-            for that event.
+            for that event. Excel columns: email, full_name, event_start_date, membership_name.
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus size={16} />
-          Create attendee
-        </Button>
+        <div className="page-header-actions">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              void handleImportFile(file);
+            }}
+          />
+          <Button
+            variant="secondary"
+            loading={importMutation.isPending}
+            onClick={() => importInputRef.current?.click()}
+          >
+            <Upload size={16} />
+            Import Excel
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus size={16} />
+            Create attendee
+          </Button>
+        </div>
       </header>
 
       <EditionSwitcher

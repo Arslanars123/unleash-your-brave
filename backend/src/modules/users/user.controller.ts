@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { UnauthorizedError } from '../../core/errors/app-error.js';
+import { BadRequestError, UnauthorizedError } from '../../core/errors/app-error.js';
 import { buildPaginationMeta, sendPaginated, sendSuccess } from '../../core/http/response.js';
 import type { CheckoutService } from '../checkout/checkout.service.js';
 import type { UserService } from './user.service.js';
@@ -52,6 +52,14 @@ export class UserController {
 
   create = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, await this.service.create(req.body as CreateUserInput), 201);
+  };
+
+  importExcel = async (req: Request, res: Response): Promise<void> => {
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      throw new BadRequestError('Excel file is required');
+    }
+    sendSuccess(res, await this.service.importAttendeesFromExcel(file.buffer), 201);
   };
 
   update = async (req: Request, res: Response): Promise<void> => {
