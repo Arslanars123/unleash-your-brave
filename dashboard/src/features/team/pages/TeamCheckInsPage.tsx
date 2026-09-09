@@ -288,7 +288,7 @@ export function TeamCheckInsPage() {
         <p className="team-page-kicker">Current event</p>
         <h1>{current.name}</h1>
         <p className="muted">
-          {formatEditionRange(current.startDate, current.endDate)}
+          {formatEditionRange(current)}
           {current.venueCity ? ` · ${current.venueCity}` : ''}
         </p>
         <div className="team-status-row">
@@ -331,6 +331,19 @@ export function TeamCheckInsPage() {
             onChange={(next) => {
               setSearch(next);
               setPage(1);
+            }}
+            loadSuggestions={async (draft) => {
+              if (!eventId) return [];
+              const result = await checkInsApi.list({
+                eventId,
+                search: draft,
+                perPage: 6,
+              });
+              return result.items.map((row) => ({
+                id: row.userId,
+                title: row.user?.fullName || row.user?.name || row.user?.email || 'Attendee',
+                subtitle: row.user?.email,
+              }));
             }}
           />
           <div className="team-filter-row">
@@ -425,7 +438,9 @@ export function TeamCheckInsPage() {
             page={meta.page}
             totalPages={meta.totalPages}
             total={meta.total}
+            perPage={meta.perPage}
             onPageChange={setPage}
+            label="attendees"
           />
         ) : null}
       </section>

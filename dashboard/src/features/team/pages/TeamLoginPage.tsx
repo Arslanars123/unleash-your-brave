@@ -48,7 +48,9 @@ export function TeamLoginPage() {
 
   return (
     <AuthLayout brandLine="Door check-in for the current event — simple, fast, mobile-ready.">
-      <p className="auth-form-kicker">Desk team</p>
+      <p className="muted" style={{ marginBottom: 4 }}>
+        Desk team
+      </p>
       <h1>Team check-in login</h1>
       <p className="muted">Use the email and temporary password from your invite.</p>
       <form className="auth-form stack" onSubmit={(event) => void onSubmit(event)}>

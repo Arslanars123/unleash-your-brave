@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import { env } from '../../config/env.js';
 import { UnauthorizedError } from '../../core/errors/app-error.js';
 import type { MailService } from '../mail/mail.service.js';
+import type { TeamMemberService } from '../team-members/team-member.service.js';
+import { toPublicDeskUser } from '../team-members/team-member.service.js';
 import type { UserRepository } from '../users/user.repository.js';
 import { generatePasswordResetOtp } from '../users/user.service.js';
 import type { PublicUser } from '../users/user.types.js';
@@ -44,6 +46,7 @@ export class AuthService {
     private readonly users: UserRepository,
     private readonly userService: UserService,
     private readonly mail: MailService,
+    private readonly teamMembers?: TeamMemberService,
   ) {}
 
   async register(input: RegisterInput): Promise<AuthResult> {
@@ -58,9 +61,43 @@ export class AuthService {
   }
 
   async login(input: LoginInput): Promise<AuthResult> {
-    const user = await this.users.findByEmail(input.email);
+    const email = input.email.trim().toLowerCase();
+
+    // Desk team is a separate collection. Same email may also exist as attendee/admin —
+    // authenticate against whichever store matches the password.
+    if (this.teamMembers) {
+      const desk = await this.teamMembers.findRecordByEmail(email);
+      if (desk) {
+        const deskPasswordOk = await bcrypt.compare(input.password, desk.passwordHash);
+        if (deskPasswordOk) {
+          if (desk.status === 'deactivated') {
+            throw new UnauthorizedError("You don't have an account.");
+          }
+          if (desk.status !== 'active') {
+            throw new UnauthorizedError('Account is suspended');
+          }
+          return {
+            user: toPublicDeskUser(desk),
+            tokens: issueTokenPair(desk.id, 'desk'),
+          };
+        }
+      }
+    }
+
+    const user = await this.users.findByEmail(email);
     if (!user) {
       throw new UnauthorizedError('Invalid email or password');
+    }
+
+    // Legacy desk rows in users collection (if any).
+    if (user.role === 'desk') {
+      const passwordOk = await bcrypt.compare(input.password, user.passwordHash);
+      if (!passwordOk) throw new UnauthorizedError('Invalid email or password');
+      if (user.status !== 'active') throw new UnauthorizedError('Account is suspended');
+      return {
+        user: toPublicUser(user),
+        tokens: issueTokenPair(user.id, 'desk'),
+      };
     }
 
     const passwordOk = await bcrypt.compare(input.password, user.passwordHash);
@@ -76,7 +113,6 @@ export class AuthService {
         const notExpired =
           !user.inviteCodeExpiresAt || user.inviteCodeExpiresAt.getTime() > Date.now();
 
-        // Password already set — invite cannot be reused.
         if (!user.mustChangePassword) {
           throw new UnauthorizedError(
             'You already used your invite code and set up a password. Please enter your password, or reset it if you forgot.',
@@ -102,7 +138,6 @@ export class AuthService {
       throw new UnauthorizedError('Invalid email or password');
     }
 
-    // First-time users must verify with the emailed invite code, not a password guess.
     if (passwordOk && user.mustChangePassword && user.inviteCodeHash) {
       throw new UnauthorizedError(
         'Enter the invite code from your email to continue',
@@ -127,6 +162,18 @@ export class AuthService {
   }
 
   async changePassword(userId: string, input: ChangePasswordInput): Promise<PublicUser> {
+    if (this.teamMembers) {
+      const desk = await this.teamMembers.findRecordById(userId);
+      if (desk) {
+        if (!input.currentPassword) {
+          throw new UnauthorizedError('Current password is required');
+        }
+        const ok = await bcrypt.compare(input.currentPassword, desk.passwordHash);
+        if (!ok) throw new UnauthorizedError('Current password is incorrect');
+        return this.teamMembers.setPassword(userId, input.newPassword);
+      }
+    }
+
     const user = await this.users.findById(userId);
     if (!user) throw new UnauthorizedError('Invalid session');
 
@@ -143,6 +190,20 @@ export class AuthService {
 
   async forgotPassword(input: ForgotPasswordInput): Promise<ForgotPasswordResult> {
     const email = input.email.trim().toLowerCase();
+
+    if (this.teamMembers) {
+      const desk = await this.teamMembers.findRecordByEmail(email);
+      if (desk?.status === 'deactivated') {
+        throw new UnauthorizedError("You don't have an account.");
+      }
+      if (desk && desk.status === 'active') {
+        // Desk reset uses the same OTP email path via temporary storage on the team member.
+        // For now redirect them to ask admin for Reinvite (simpler, avoids parallel OTP store).
+        // Still return generic message; admin Reinvite is the supported reset for desk.
+        return { message: GENERIC_RESET_MESSAGE };
+      }
+    }
+
     const user = await this.users.findByEmail(email);
 
     if (user?.status === 'deactivated') {
@@ -202,6 +263,16 @@ export class AuthService {
       throw new UnauthorizedError('Invalid refresh token');
     }
 
+    if (this.teamMembers) {
+      const desk = await this.teamMembers.findRecordById(payload.sub);
+      if (desk) {
+        if (desk.status !== 'active') {
+          throw new UnauthorizedError('Invalid refresh token');
+        }
+        return issueTokenPair(desk.id, 'desk');
+      }
+    }
+
     const user = await this.users.findById(payload.sub);
     if (!user || user.status !== 'active') {
       throw new UnauthorizedError('Invalid refresh token');
@@ -214,6 +285,10 @@ export class AuthService {
   }
 
   async me(userId: string): Promise<PublicUser> {
+    if (this.teamMembers) {
+      const desk = await this.teamMembers.findRecordById(userId);
+      if (desk) return toPublicDeskUser(desk);
+    }
     return this.userService.getById(userId);
   }
 }

@@ -51,6 +51,11 @@ async function ensureIndexes(database: Db): Promise<void> {
       { key: { membershipId: 1 }, name: 'users_membershipId' },
       { key: { createdAt: -1 }, name: 'users_createdAt' },
     ]),
+    database.collection('team_members').createIndexes([
+      { key: { email: 1 }, unique: true, name: 'team_members_email_unique' },
+      { key: { status: 1 }, name: 'team_members_status' },
+      { key: { createdAt: -1 }, name: 'team_members_createdAt' },
+    ]),
     database.collection('events').createIndexes([
       { key: { startDate: -1 }, name: 'events_startDate' },
     ]),

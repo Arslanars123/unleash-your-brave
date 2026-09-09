@@ -162,6 +162,14 @@ export function TeamMembersPage() {
             setSearch(next);
             setPage(1);
           }}
+          loadSuggestions={async (draft) => {
+            const result = await teamMembersApi.list({ search: draft, perPage: 6 });
+            return result.items.map((item) => ({
+              id: item.id,
+              title: item.name,
+              subtitle: item.email,
+            }));
+          }}
         />
       </div>
 
@@ -227,7 +235,9 @@ export function TeamMembersPage() {
           page={meta.page}
           totalPages={meta.totalPages}
           total={meta.total}
+          perPage={meta.perPage}
           onPageChange={setPage}
+          label="team members"
         />
       ) : null}
 

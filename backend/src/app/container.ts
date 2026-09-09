@@ -60,6 +60,7 @@ import { MembershipLifecycleService } from '../modules/memberships/membership-li
 import { TeamMemberController } from '../modules/team-members/team-member.controller.js';
 import { createTeamMemberRouter } from '../modules/team-members/team-member.routes.js';
 import { TeamMemberService } from '../modules/team-members/team-member.service.js';
+import { MongoTeamMemberRepository } from '../db/repositories/mongo-team-member.repository.js';
 import { UploadController } from '../modules/uploads/upload.controller.js';
 import { MediaStorageService } from '../modules/uploads/media-storage.service.js';
 import { createUploadRouter } from '../modules/uploads/upload.routes.js';
@@ -115,6 +116,7 @@ export async function createContainer() {
   await connectMongo();
 
   const userRepository = new MongoUserRepository();
+  const teamMemberRepository = new MongoTeamMemberRepository();
   const eventRepository = new MongoEventRepository();
   const speakerRepository = new MongoSpeakerRepository();
   const sessionRepository = new MongoSessionRepository();
@@ -153,7 +155,8 @@ export async function createContainer() {
     sponsorRepository,
     membershipRepository,
   );
-  const authService = new AuthService(userRepository, userService, mailService);
+  const teamMemberService = new TeamMemberService(teamMemberRepository, mailService);
+  const authService = new AuthService(userRepository, userService, mailService, teamMemberService);
   const eventService = new EventService(eventRepository);
   const eventAssociationRepository = new MongoEventAssociationRepository();
   await eventAssociationRepository.ensureIndexes();
@@ -334,7 +337,6 @@ export async function createContainer() {
   const announcementController = new AnnouncementController(announcementService);
   const appBrandingService = new AppBrandingService(appBrandingRepository);
   const appBrandingController = new AppBrandingController(appBrandingService);
-  const teamMemberService = new TeamMemberService(userRepository, mailService);
   const teamMemberController = new TeamMemberController(teamMemberService);
   // CLIENT_TESTING_MODE — remove with feature.
   const clientTestingController = new ClientTestingController(clientTestingService);
