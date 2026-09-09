@@ -8,8 +8,9 @@ import { updateClientTestingSchema } from './client-testing.schema.js';
 export function createClientTestingRouter(controller: ClientTestingController): Router {
   const router = Router();
 
-  // Admin-only: temporary client testing toggle.
-  router.get('/', authenticate, authorize('admin'), asyncHandler(controller.get));
+  // Desk may read status so check-in opens early when testing mode is on.
+  // Only admins can toggle it.
+  router.get('/', authenticate, authorize('admin', 'desk'), asyncHandler(controller.get));
   router.patch(
     '/',
     authenticate,

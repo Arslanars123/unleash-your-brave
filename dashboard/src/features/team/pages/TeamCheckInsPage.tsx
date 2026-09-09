@@ -8,6 +8,7 @@ import {
 import { checkInsApi } from '@/features/checkins/api/checkins-api';
 import { CheckInScanDetailsModal } from '@/features/checkins/components/CheckInScanDetailsModal';
 import { CheckInScanner } from '@/features/checkins/components/CheckInScanner';
+import { clientTestingApi } from '@/features/client-testing/api/client-testing-api';
 import { eventsApi } from '@/features/events/api/events-api';
 import { formatEditionRange } from '@/features/events/hooks/useEditionScope';
 import { getApiErrorMessage } from '@/shared/api/client';
@@ -78,8 +79,15 @@ export function TeamCheckInsPage() {
     return upcoming[0] ?? (workspace.current?.published !== false ? workspace.current : null);
   })();
   const eventId = current?.id;
-  const checkInOpen = current?.status === 'live';
+  // CLIENT_TESTING_MODE — remove testing query / upcoming branch when deleting feature.
+  const testingQuery = useQuery({
+    queryKey: ['client-testing', 'team'],
+    queryFn: () => clientTestingApi.get(),
+  });
+  const clientTestingEnabled = Boolean(testingQuery.data?.enabled);
   const isUpcoming = current?.status === 'upcoming';
+  const checkInOpen =
+    current?.status === 'live' || (clientTestingEnabled && isUpcoming);
 
   const listQuery = useQuery({
     queryKey: ['checkins', 'team-list', eventId, search, status, page],
@@ -235,7 +243,9 @@ export function TeamCheckInsPage() {
       if (!checkInOpen) {
         toast.error(
           isUpcoming
-            ? 'Check-in opens on the event start date — not before.'
+            ? clientTestingEnabled
+              ? 'Check-in is not available for this event.'
+              : 'Check-in opens on the event start date — not before. (Admin can enable Testing mode to open early.)'
             : 'Check-in is not available for this event.',
         );
         return;
@@ -248,6 +258,7 @@ export function TeamCheckInsPage() {
       completeFormMutation.isPending,
       checkInOpen,
       isUpcoming,
+      clientTestingEnabled,
       scanMutation,
       toast,
     ],
@@ -257,7 +268,7 @@ export function TeamCheckInsPage() {
     if (checkInOpen) return true;
     toast.error(
       isUpcoming
-        ? 'Check-in opens on the event start date — not before.'
+        ? 'Check-in opens on the event start date — not before. (Admin can enable Testing mode to open early.)'
         : 'Check-in is not available for this event.',
     );
     return false;
@@ -293,6 +304,9 @@ export function TeamCheckInsPage() {
         </p>
         <div className="team-status-row">
           <span className={`status-pill status-${current.status}`}>{current.status}</span>
+          {clientTestingEnabled && isUpcoming ? (
+            <span className="status-pill status-published">testing open</span>
+          ) : null}
           <span className="team-stat">
             <UserCheck size={16} />
             {stats?.checkedInCount ?? 0} / {stats?.attendeeCount ?? 0} checked in
@@ -301,8 +315,12 @@ export function TeamCheckInsPage() {
         {!checkInOpen ? (
           <p className="team-banner">
             {isUpcoming
-              ? 'Check-in opens on the event start date — not before.'
+              ? 'Check-in opens on the event start date — not before. Ask an admin to enable Testing mode to open early.'
               : 'Check-in is closed for this event.'}
+          </p>
+        ) : clientTestingEnabled && isUpcoming ? (
+          <p className="team-banner team-banner-ok">
+            Testing mode is on — check-in is open before the start date.
           </p>
         ) : null}
       </header>
