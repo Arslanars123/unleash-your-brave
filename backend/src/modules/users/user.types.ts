@@ -1,4 +1,4 @@
-export const USER_ROLES = ['admin', 'member', 'speaker', 'sponsor'] as const;
+export const USER_ROLES = ['admin', 'member', 'speaker', 'sponsor', 'desk'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const USER_STATUSES = ['active', 'suspended', 'deactivated'] as const;
@@ -8,7 +8,7 @@ export type UserStatus = (typeof USER_STATUSES)[number];
 export const MEMBERSHIP_STATUSES = ['active', 'expired'] as const;
 export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 
-export const DASHBOARD_ROLES = ['admin', 'speaker', 'sponsor'] as const;
+export const DASHBOARD_ROLES = ['admin', 'speaker', 'sponsor', 'desk'] as const;
 export type DashboardRole = (typeof DASHBOARD_ROLES)[number];
 
 export const NETWORKING_PREFS = [

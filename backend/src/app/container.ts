@@ -57,6 +57,9 @@ import { MembershipController } from '../modules/memberships/membership.controll
 import { createMembershipRouter } from '../modules/memberships/membership.routes.js';
 import { MembershipService } from '../modules/memberships/membership.service.js';
 import { MembershipLifecycleService } from '../modules/memberships/membership-lifecycle.service.js';
+import { TeamMemberController } from '../modules/team-members/team-member.controller.js';
+import { createTeamMemberRouter } from '../modules/team-members/team-member.routes.js';
+import { TeamMemberService } from '../modules/team-members/team-member.service.js';
 import { UploadController } from '../modules/uploads/upload.controller.js';
 import { MediaStorageService } from '../modules/uploads/media-storage.service.js';
 import { createUploadRouter } from '../modules/uploads/upload.routes.js';
@@ -331,6 +334,8 @@ export async function createContainer() {
   const announcementController = new AnnouncementController(announcementService);
   const appBrandingService = new AppBrandingService(appBrandingRepository);
   const appBrandingController = new AppBrandingController(appBrandingService);
+  const teamMemberService = new TeamMemberService(userRepository, mailService);
+  const teamMemberController = new TeamMemberController(teamMemberService);
   // CLIENT_TESTING_MODE — remove with feature.
   const clientTestingController = new ClientTestingController(clientTestingService);
   const checkInFormController = new CheckInFormController(checkInFormService);
@@ -382,6 +387,7 @@ export async function createContainer() {
       checkout: createCheckoutRouter(checkoutController),
       announcements: createAnnouncementRouter(announcementController),
       appBranding: createAppBrandingRouter(appBrandingController),
+      teamMembers: createTeamMemberRouter(teamMemberController),
       // CLIENT_TESTING_MODE — remove with feature.
       clientTesting: createClientTestingRouter(clientTestingController),
       checkinForms: createCheckInFormRouter(checkInFormController),

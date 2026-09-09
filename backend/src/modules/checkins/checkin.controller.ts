@@ -75,6 +75,7 @@ export class CheckInController {
         source: body.source,
         poll: body.poll,
         adminUserId: req.auth.userId,
+        actorRole: req.auth.role,
       }),
     );
   };
@@ -101,13 +102,15 @@ export class CheckInController {
         answers: body.answers,
         signatureDataUrl: body.signatureDataUrl,
         signedName: body.signedName,
+        actorRole: req.auth.role,
       }),
     );
   };
 
   list = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth) throw new UnauthorizedError();
     const query = req.query as unknown as ListCheckInsQuery;
-    const result = await this.service.list(query);
+    const result = await this.service.list(query, req.auth.role);
     sendPaginated(res, result.items, {
       ...buildPaginationMeta(query.page, query.perPage, result.total),
       stats: result.stats,
@@ -115,7 +118,8 @@ export class CheckInController {
   };
 
   stats = async (req: Request, res: Response): Promise<void> => {
+    if (!req.auth) throw new UnauthorizedError();
     const eventId = String(req.query.eventId ?? '');
-    sendSuccess(res, await this.service.stats(eventId));
+    sendSuccess(res, await this.service.stats(eventId, req.auth.role));
   };
 }

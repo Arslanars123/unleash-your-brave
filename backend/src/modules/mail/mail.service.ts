@@ -662,6 +662,48 @@ export class MailService {
 
     return this.send({ to: input.to, subject, text, html });
   }
+
+  /** Desk / door team credentials (temporary password). */
+  async sendTeamCredentials(input: {
+    to: string;
+    name: string;
+    password: string;
+    loginUrl: string;
+    isReinvite?: boolean;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const subject = input.isReinvite
+      ? `Your ${env.appName} team login was reset`
+      : `Your ${env.appName} team check-in login`;
+
+    const intro = input.isReinvite
+      ? 'Your desk team password was reset. Use the new password below to sign in.'
+      : 'You have been added as a desk team member for event check-in.';
+
+    const text = [
+      `Hi ${input.name},`,
+      '',
+      intro,
+      '',
+      `Login page: ${input.loginUrl}`,
+      `Email: ${input.to}`,
+      `Temporary password: ${input.password}`,
+      '',
+      'You can change this password after signing in if you want.',
+      'Check-in is available for the current event once the event start date begins.',
+    ].join('\n');
+
+    const html = `
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>${escapeHtml(intro)}</p>
+      <p><strong>Login page:</strong> <a href="${escapeHtml(input.loginUrl)}">${escapeHtml(input.loginUrl)}</a></p>
+      <p><strong>Email:</strong> ${escapeHtml(input.to)}<br/>
+      <strong>Temporary password:</strong> <code style="font-size:16px;letter-spacing:1px">${escapeHtml(input.password)}</code></p>
+      <p>You can change this password after signing in if you want.</p>
+      <p>Check-in is available for the current event once the event start date begins.</p>
+    `;
+
+    return this.send({ to: input.to, subject, text, html });
+  }
 }
 
 function escapeHtml(value: string): string {

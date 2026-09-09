@@ -23,7 +23,8 @@ interface AuthContextValue {
   isAdmin: boolean;
   isSpeaker: boolean;
   isSponsor: boolean;
-  login: (payload: LoginPayload) => Promise<PublicUser>;
+  isDesk: boolean;
+  login: (payload: LoginPayload & { portal?: 'admin' | 'team' }) => Promise<PublicUser>;
   changePassword: (payload: ChangePasswordPayload) => Promise<PublicUser>;
   logout: () => void;
 }
@@ -35,19 +36,33 @@ function hasDashboardAccess(user: PublicUser): boolean {
     user.role === 'admin' ||
     user.role === 'speaker' ||
     user.role === 'sponsor' ||
+    user.role === 'desk' ||
     Boolean(user.speakerId) ||
     Boolean(user.sponsorId)
   );
 }
 
-function assertDashboardUser(user: PublicUser): PublicUser {
-  if (!hasDashboardAccess(user)) {
+function assertPortalUser(
+  user: PublicUser,
+  portal: 'admin' | 'team' = 'admin',
+): PublicUser {
+  if (portal === 'team') {
+    if (user.role !== 'desk') {
+      throw new Error('Use the admin / portal login for this account');
+    }
+    return user;
+  }
+  if (user.role === 'desk') {
+    throw new Error('Desk team accounts sign in at /team/login');
+  }
+  if (!hasDashboardAccess(user) || user.role === 'member') {
     throw new Error('This portal is for admins, speakers, and sponsors');
   }
   return user;
 }
 
 function homePathForUserCapabilities(user: PublicUser): string {
+  if (user.role === 'desk') return '/team/checkins';
   if (user.speakerId || user.role === 'speaker') return '/my-speaker-profile';
   if (user.sponsorId || user.role === 'sponsor') return '/my-sponsor-profile';
   return '/';
@@ -75,7 +90,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const me = assertDashboardUser(await authApi.me());
+        const me = await authApi.me();
+        if (!hasDashboardAccess(me)) {
+          throw new Error('No dashboard access');
+        }
         if (!cancelled) {
           setUser(me);
           tokenStorage.setUser(JSON.stringify(me));
@@ -94,12 +112,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (payload: LoginPayload) => {
+  const login = useCallback(async (payload: LoginPayload & { portal?: 'admin' | 'team' }) => {
     const result = await authApi.login({
       email: payload.email.trim(),
       password: payload.password,
     });
-    assertDashboardUser(result.user);
+    assertPortalUser(result.user, payload.portal ?? 'admin');
     tokenStorage.setTokens(result.tokens.accessToken, result.tokens.refreshToken);
     tokenStorage.setUser(JSON.stringify(result.user));
     setUser(result.user);
@@ -107,7 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const changePassword = useCallback(async (payload: ChangePasswordPayload) => {
-    const updated = assertDashboardUser(await authApi.changePassword(payload));
+    const updated = await authApi.changePassword(payload);
+    if (!hasDashboardAccess(updated)) {
+      throw new Error('No dashboard access');
+    }
     tokenStorage.setUser(JSON.stringify(updated));
     setUser(updated);
     return updated;
@@ -120,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isSpeaker = Boolean(user?.speakerId) || user?.role === 'speaker';
   const isSponsor = Boolean(user?.sponsorId) || user?.role === 'sponsor';
+  const isDesk = user?.role === 'desk';
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -130,11 +152,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: user?.role === 'admin',
       isSpeaker,
       isSponsor,
+      isDesk,
       login,
       changePassword,
       logout,
     }),
-    [user, isBootstrapping, isSpeaker, isSponsor, login, changePassword, logout],
+    [user, isBootstrapping, isSpeaker, isSponsor, isDesk, login, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -150,6 +173,7 @@ export function useAuth(): AuthContextValue {
 
 export function getHomePathForUser(user: PublicUser | null): string {
   if (!user) return '/login';
+  if (user.role === 'desk') return '/team/checkins';
   if (user.mustChangePassword) return '/set-password';
   return homePathForUserCapabilities(user);
 }

@@ -14,6 +14,7 @@ import type { MembershipRepository } from '../memberships/membership.repository.
 import type { PushNotificationService } from '../chat/push.service.js';
 import { toPublicUser } from '../users/user.mapper.js';
 import type { UserRepository } from '../users/user.repository.js';
+import type { UserRole } from '../users/user.types.js';
 import type { CheckInPendingScanRepository } from './checkin-pending-scan.repository.js';
 import { toPublicCheckIn } from './checkin.mapper.js';
 import type { CheckInQrTokenRepository } from './checkin-qr-token.repository.js';
@@ -178,6 +179,33 @@ export class CheckInService {
     );
   }
 
+  /**
+   * Desk team is locked to the published current event (live, else soonest upcoming).
+   * Check-in window still enforces "not before start" via assertCheckInWindowOpen.
+   */
+  async resolveEventIdForActor(
+    role: UserRole | string,
+    requestedEventId?: string,
+  ): Promise<string> {
+    if (role !== 'desk') {
+      if (!requestedEventId?.trim()) {
+        throw new BadRequestError('eventId is required');
+      }
+      return requestedEventId.trim();
+    }
+
+    const available = await this.events.listAvailableForPurchase();
+    const live = available.find((event) => event.status === 'live');
+    const current = live ?? available[0];
+    if (!current) {
+      throw new BadRequestError('No current event is available for check-in');
+    }
+    if (requestedEventId?.trim() && requestedEventId.trim() !== current.id) {
+      throw new ForbiddenError('Desk team can only check in for the current event');
+    }
+    return current.id;
+  }
+
   async scan(input: {
     token?: string;
     eventId?: string;
@@ -187,7 +215,19 @@ export class CheckInService {
     /** When true, only report status — do not create/refresh a pending session. */
     poll?: boolean;
     adminUserId: string;
+    actorRole?: UserRole | string;
   }): Promise<CheckInScanResult> {
+    if (input.actorRole === 'desk') {
+      const deskEventId = await this.resolveEventIdForActor(
+        'desk',
+        input.expectedEventId ?? input.eventId,
+      );
+      input = {
+        ...input,
+        eventId: input.eventId ? deskEventId : input.eventId,
+        expectedEventId: deskEventId,
+      };
+    }
     const { eventId, userId } = await this.resolveAttendeeIds(input);
     const source: 'qr' | 'manual' =
       input.source ?? (input.token ? 'qr' : 'manual');
@@ -421,9 +461,22 @@ export class CheckInService {
     answers: SubmitCheckInFormInput['answers'];
     signatureDataUrl?: string;
     signedName: string;
+    actorRole?: UserRole | string;
   }): Promise<CheckInScanResult> {
     if (!this.checkInForms) {
       throw new BadRequestError('Check-in forms are not available');
+    }
+
+    if (input.actorRole === 'desk') {
+      const deskEventId = await this.resolveEventIdForActor(
+        'desk',
+        input.expectedEventId ?? input.eventId,
+      );
+      input = {
+        ...input,
+        eventId: input.eventId ? deskEventId : input.eventId,
+        expectedEventId: deskEventId,
+      };
     }
 
     const { eventId, userId } = await this.resolveAttendeeIds(input);
@@ -475,11 +528,16 @@ export class CheckInService {
     }
   }
 
-  async list(query: ListCheckInsQuery): Promise<{
+  async list(
+    query: ListCheckInsQuery,
+    actorRole?: UserRole | string,
+  ): Promise<{
     items: Array<PublicCheckIn & { checkedIn: boolean }>;
     total: number;
     stats: CheckInStats;
   }> {
+    const eventId = await this.resolveEventIdForActor(actorRole ?? 'admin', query.eventId);
+    query = { ...query, eventId };
     const event = await this.events.getById(query.eventId);
     if (!event) throw new NotFoundError('Event');
 
@@ -546,12 +604,13 @@ export class CheckInService {
     };
   }
 
-  async stats(eventId: string): Promise<CheckInStats> {
-    const event = await this.events.getById(eventId);
+  async stats(eventId: string, actorRole?: UserRole | string): Promise<CheckInStats> {
+    const scopedEventId = await this.resolveEventIdForActor(actorRole ?? 'admin', eventId);
+    const event = await this.events.getById(scopedEventId);
     if (!event) throw new NotFoundError('Event');
     return {
-      eventId,
-      checkedInCount: await this.checkIns.countByEvent(eventId),
+      eventId: scopedEventId,
+      checkedInCount: await this.checkIns.countByEvent(scopedEventId),
       attendeeCount: await this.countActiveMembers(),
     };
   }

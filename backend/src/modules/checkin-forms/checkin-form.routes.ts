@@ -37,11 +37,11 @@ export function createCheckInFormRouter(controller: CheckInFormController): Rout
     asyncHandler(controller.submitMyForm),
   );
 
-  // Admin: form for event (active or not)
+  // Admin + desk: form for event (active or not) — needed for door waiver flow
   router.get(
     '/',
     authenticate,
-    authorize('admin'),
+    authorize('admin', 'desk'),
     validate({ query: eventIdQuerySchema }),
     asyncHandler(controller.getByEvent),
   );

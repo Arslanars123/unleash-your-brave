@@ -56,29 +56,29 @@ export function createCheckInRouter(controller: CheckInController): Router {
     asyncHandler(controller.completeMyForm),
   );
 
-  // Admin: scan QR or manual check-in
+  // Admin + desk: scan QR or manual check-in
   router.post(
     '/scan',
     authenticate,
-    authorize('admin'),
+    authorize('admin', 'desk'),
     validate({ body: scanCheckInSchema }),
     asyncHandler(controller.scan),
   );
 
-  // Admin: submit check-in form then complete check-in
+  // Admin + desk: submit check-in form then complete check-in
   router.post(
     '/complete-with-form',
     authenticate,
-    authorize('admin'),
+    authorize('admin', 'desk'),
     validate({ body: completeCheckInWithFormSchema }),
     asyncHandler(controller.completeWithForm),
   );
 
-  // Admin: event-wise list (current or past via eventId)
+  // Admin + desk: event-wise list (desk is locked to current event in service)
   router.get(
     '/',
     authenticate,
-    authorize('admin'),
+    authorize('admin', 'desk'),
     validate({ query: listCheckInsQuerySchema }),
     asyncHandler(controller.list),
   );
@@ -86,7 +86,7 @@ export function createCheckInRouter(controller: CheckInController): Router {
   router.get(
     '/stats',
     authenticate,
-    authorize('admin'),
+    authorize('admin', 'desk'),
     validate({ query: checkInStatsQuerySchema }),
     asyncHandler(controller.stats),
   );

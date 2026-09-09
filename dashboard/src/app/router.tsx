@@ -27,6 +27,11 @@ import { MembershipsPage } from '@/features/memberships/pages/MembershipsPage';
 import { EventAccessPage } from '@/features/access/pages/EventAccessPage';
 import { CouponsPage } from '@/features/coupons/pages/CouponsPage';
 import { UsersPage } from '@/features/users/pages/UsersPage';
+import { TeamMembersPage } from '@/features/team-members/pages/TeamMembersPage';
+import { TeamShell } from '@/features/team/layout/TeamShell';
+import { TeamLoginPage } from '@/features/team/pages/TeamLoginPage';
+import { TeamCheckInsPage } from '@/features/team/pages/TeamCheckInsPage';
+import { TeamAccountPage } from '@/features/team/pages/TeamAccountPage';
 import { Spinner } from '@/shared/ui/Spinner';
 
 function RoleHomeRedirect() {
@@ -47,8 +52,18 @@ export function AppRouter() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/team/login" element={<TeamLoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
+
+        <Route element={<ProtectedRoute roles={['desk']} loginPath="/team/login" />}>
+          <Route element={<TeamShell />}>
+            <Route path="/team/checkins" element={<TeamCheckInsPage />} />
+            <Route path="/team/account" element={<TeamAccountPage />} />
+            <Route path="/team" element={<Navigate to="/team/checkins" replace />} />
+          </Route>
+        </Route>
+
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
             <Route element={<ProtectedRoute roles={['admin']} />}>
@@ -68,6 +83,7 @@ export function AppRouter() {
               <Route path="posts" element={<PostsPage />} />
               <Route path="chat" element={<ChatPage />} />
               <Route path="users" element={<UsersPage />} />
+              <Route path="team-members" element={<TeamMembersPage />} />
               <Route path="checkins" element={<CheckInsPage />} />
               {/* CLIENT_TESTING_MODE — remove route when deleting feature. */}
               <Route path="client-testing" element={<ClientTestingPage />} />

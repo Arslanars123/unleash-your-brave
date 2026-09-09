@@ -21,6 +21,7 @@ import {
   TicketPercent,
   UserRound,
   Users,
+  UsersRound,
   ShoppingBag,
   PackageCheck,
   X,
@@ -158,6 +159,10 @@ export function AppShell() {
               <NavLink to="/users">
                 <Users size={18} />
                 Attendees
+              </NavLink>
+              <NavLink to="/team-members">
+                <UsersRound size={18} />
+                Team Members
               </NavLink>
               <NavLink to="/checkins">
                 <QrCode size={18} />

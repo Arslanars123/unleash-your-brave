@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'member' | 'speaker' | 'sponsor';
+export type UserRole = 'admin' | 'member' | 'speaker' | 'sponsor' | 'desk';
 export type UserStatus = 'active' | 'suspended' | 'deactivated';
 
 export type NetworkingPref =

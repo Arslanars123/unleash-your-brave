@@ -97,7 +97,7 @@ export type NameUpdateChoice = 'update' | 'keep';
 /** Present when the checkout email already belongs to an account (any role). */
 export interface CheckoutExistingAccount {
   exists: true;
-  role: 'admin' | 'member' | 'speaker' | 'sponsor';
+  role: 'admin' | 'member' | 'speaker' | 'sponsor' | 'desk';
   existingName: string;
   proposedName: string | null;
   nameConflict: boolean;
