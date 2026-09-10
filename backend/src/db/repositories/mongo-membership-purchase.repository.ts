@@ -128,14 +128,49 @@ export class MongoMembershipPurchaseRepository implements MembershipPurchaseRepo
                   soldCount: { $sum: 1 },
                   uniqueBuyers: { $addToSet: '$userId' },
                   revenue: { $sum: '$price' },
-                  discountTotal: { $sum: { $ifNull: ['$discountAmount', 0] } },
+                  // Only real coupon redemptions — admin comps store full price as
+                  // discountAmount with no coupon and must not inflate this card.
+                  discountTotal: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $or: [
+                            {
+                              $and: [
+                                { $ne: [{ $ifNull: ['$couponId', null] }, null] },
+                                { $ne: ['$couponId', ''] },
+                              ],
+                            },
+                            {
+                              $and: [
+                                { $ne: [{ $ifNull: ['$couponCode', null] }, null] },
+                                { $ne: ['$couponCode', ''] },
+                              ],
+                            },
+                          ],
+                        },
+                        { $ifNull: ['$discountAmount', 0] },
+                        0,
+                      ],
+                    },
+                  },
                   couponRedemptions: {
                     $sum: {
                       $cond: [
                         {
-                          $and: [
-                            { $ne: [{ $ifNull: ['$couponId', null] }, null] },
-                            { $ne: ['$couponId', ''] },
+                          $or: [
+                            {
+                              $and: [
+                                { $ne: [{ $ifNull: ['$couponId', null] }, null] },
+                                { $ne: ['$couponId', ''] },
+                              ],
+                            },
+                            {
+                              $and: [
+                                { $ne: [{ $ifNull: ['$couponCode', null] }, null] },
+                                { $ne: ['$couponCode', ''] },
+                              ],
+                            },
                           ],
                         },
                         1,
@@ -156,7 +191,30 @@ export class MongoMembershipPurchaseRepository implements MembershipPurchaseRepo
                   },
                   soldCount: { $sum: 1 },
                   revenue: { $sum: '$price' },
-                  discountTotal: { $sum: { $ifNull: ['$discountAmount', 0] } },
+                  discountTotal: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $or: [
+                            {
+                              $and: [
+                                { $ne: [{ $ifNull: ['$couponId', null] }, null] },
+                                { $ne: ['$couponId', ''] },
+                              ],
+                            },
+                            {
+                              $and: [
+                                { $ne: [{ $ifNull: ['$couponCode', null] }, null] },
+                                { $ne: ['$couponCode', ''] },
+                              ],
+                            },
+                          ],
+                        },
+                        { $ifNull: ['$discountAmount', 0] },
+                        0,
+                      ],
+                    },
+                  },
                 },
               },
               { $sort: { soldCount: -1, revenue: -1 } },

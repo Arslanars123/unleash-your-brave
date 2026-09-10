@@ -170,7 +170,7 @@ export function OverviewPage() {
                       <th>Membership</th>
                       <th>Sold</th>
                       <th>Revenue</th>
-                      <th>Discounts</th>
+                      <th>Coupon discounts</th>
                     </tr>
                   </thead>
                   <tbody>
