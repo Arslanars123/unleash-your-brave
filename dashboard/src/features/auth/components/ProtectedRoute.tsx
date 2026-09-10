@@ -27,7 +27,7 @@ export function ProtectedRoute({
   }
 
   // Desk accounts stay in the team app — never the admin shell.
-  if (isDesk && !location.pathname.startsWith('/team')) {
+  if (isDesk && !(location.pathname === '/team' || location.pathname.startsWith('/team/'))) {
     return <Navigate to="/team/checkins" replace />;
   }
 

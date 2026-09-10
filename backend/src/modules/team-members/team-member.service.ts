@@ -26,6 +26,8 @@ function generateTeamPassword(): string {
 
 function dashboardLoginUrl(): string {
   const preferred =
+    env.corsOrigins.find((origin) => /d1pt0ysevzxlx6\.cloudfront\.net/i.test(origin)) ??
+    env.corsOrigins.find((origin) => /admin-dashboard-381491933714/i.test(origin)) ??
     env.corsOrigins.find((origin) =>
       /cloudfront|admin-dashboard|localhost:5173/i.test(origin),
     ) ??
