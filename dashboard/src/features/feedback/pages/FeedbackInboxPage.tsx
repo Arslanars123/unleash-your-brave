@@ -12,7 +12,8 @@ import { useToast } from '@/shared/ui/toast';
 const PER_PAGE = 20;
 
 function publicFeedbackUrl(): string {
-  return `${window.location.origin}/share-feedback`;
+  // Static HTML — not the React SPA, so old admin caches cannot redirect to /login
+  return `${window.location.origin}/event-feedback.html`;
 }
 
 export function FeedbackInboxPage() {

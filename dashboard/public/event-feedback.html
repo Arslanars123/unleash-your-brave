@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <title>Share your feedback — Unleash Your Brave</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <style>
+      :root {
+        --ink: #1c1917;
+        --muted: #78716c;
+        --line: #e7e5e4;
+        --brand: #db457b;
+        --bg: #fafaf9;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      .wrap {
+        max-width: 520px;
+        margin: 0 auto;
+        padding: 2rem 1.25rem 3rem;
+      }
+      .kicker {
+        margin: 0 0 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--brand);
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        line-height: 1.2;
+      }
+      .lead {
+        margin: 0 0 1.5rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      label {
+        display: block;
+        margin: 0 0 0.35rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+      }
+      .req { color: var(--brand); }
+      .field { margin-bottom: 1rem; }
+      input, textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0.7rem 0.85rem;
+        font: inherit;
+        background: #fff;
+      }
+      input:focus, textarea:focus {
+        outline: none;
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px rgba(219, 69, 123, 0.14);
+      }
+      textarea { min-height: 140px; resize: vertical; }
+      .error {
+        margin: 0.35rem 0 0;
+        color: #dc2626;
+        font-size: 0.8125rem;
+        font-weight: 600;
+      }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        font: inherit;
+        font-weight: 700;
+        color: #fff;
+        background: var(--brand);
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+      .done {
+        padding: 1.25rem 0;
+      }
+      .done h1 { margin-bottom: 0.75rem; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div id="form-view">
+        <p class="kicker">Unleash Your Brave</p>
+        <h1>Share your feedback</h1>
+        <p class="lead">No login needed — name, email, and a few words about the event.</p>
+
+        <form id="feedback-form" novalidate>
+          <div class="field">
+            <label for="name">Name <span class="req">*</span></label>
+            <input id="name" name="name" autocomplete="name" required />
+            <p class="error" id="name-error" hidden></p>
+          </div>
+          <div class="field">
+            <label for="email">Email <span class="req">*</span></label>
+            <input id="email" name="email" type="email" autocomplete="email" required />
+            <p class="error" id="email-error" hidden></p>
+          </div>
+          <div class="field">
+            <label for="feedback">Feedback <span class="req">*</span></label>
+            <textarea id="feedback" name="feedback" required></textarea>
+            <p class="error" id="feedback-error" hidden></p>
+          </div>
+          <p class="error" id="form-error" hidden></p>
+          <button type="submit" id="submit-btn">Submit feedback</button>
+        </form>
+      </div>
+
+      <div class="done" id="done-view" hidden>
+        <p class="kicker">Thank you</p>
+        <h1>Feedback received</h1>
+        <p class="lead">We appreciate you taking the time to share your thoughts.</p>
+      </div>
+    </main>
+
+    <script>
+      (function () {
+        // Live API — static page (no React / no admin login cache)
+        var API = 'https://p7afpmrcqg.us-east-1.awsapprunner.com/api/v1/feedback';
+        var emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        var form = document.getElementById('feedback-form');
+        var submitBtn = document.getElementById('submit-btn');
+        var formError = document.getElementById('form-error');
+
+        function setError(id, message) {
+          var el = document.getElementById(id);
+          if (!message) {
+            el.hidden = true;
+            el.textContent = '';
+            return;
+          }
+          el.hidden = false;
+          el.textContent = message;
+        }
+
+        form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          formError.hidden = true;
+
+          var name = document.getElementById('name').value.trim();
+          var email = document.getElementById('email').value.trim();
+          var feedback = document.getElementById('feedback').value.trim();
+          var ok = true;
+
+          setError('name-error', name ? '' : 'Name is required');
+          if (!name) ok = false;
+
+          if (!email) {
+            setError('email-error', 'Email is required');
+            ok = false;
+          } else if (!emailOk.test(email)) {
+            setError('email-error', 'Enter a valid email address');
+            ok = false;
+          } else {
+            setError('email-error', '');
+          }
+
+          setError('feedback-error', feedback ? '' : 'Feedback is required');
+          if (!feedback) ok = false;
+          if (!ok) return;
+
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Submitting…';
+
+          fetch(API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ name: name, email: email, feedback: feedback }),
+          })
+            .then(function (res) {
+              return res.json().then(function (body) {
+                if (!res.ok) {
+                  var msg =
+                    (body && body.error && body.error.message) ||
+                    'Unable to submit feedback';
+                  throw new Error(msg);
+                }
+                return body;
+              });
+            })
+            .then(function () {
+              document.getElementById('form-view').hidden = true;
+              document.getElementById('done-view').hidden = false;
+            })
+            .catch(function (err) {
+              formError.hidden = false;
+              formError.textContent = err.message || 'Unable to submit feedback';
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Submit feedback';
+            });
+        });
+      })();
+    </script>
+  </body>
+</html>
