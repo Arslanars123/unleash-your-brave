@@ -8,6 +8,34 @@ export interface SendMailInput {
   subject: string;
   text: string;
   html?: string;
+  /** Append iOS / Android app download links (attendee-facing emails). */
+  includeAttendeeAppLinks?: boolean;
+}
+
+const IOS_APP_URL = 'https://apps.apple.com/us/app/unleash-your-brave/id6802118445';
+const ANDROID_APP_URL = 'https://fittoprofit.com/#download';
+
+function attendeeAppLinksText(): string {
+  return [
+    '',
+    '---',
+    '',
+    'For iOS users, our app is available on the App Store.',
+    IOS_APP_URL,
+    '',
+    'For Android users, our app is currently in the process of being published on the Google Play Store and will be live there soon. In the meantime, you can download the Android app from here.',
+    ANDROID_APP_URL,
+  ].join('\n');
+}
+
+function attendeeAppLinksHtml(): string {
+  return `
+    <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0 16px" />
+    <p>For iOS users, our app is available on the App Store.<br/>
+    <a href="${IOS_APP_URL}">${escapeHtml(IOS_APP_URL)}</a></p>
+    <p>For Android users, our app is currently in the process of being published on the Google Play Store and will be live there soon. In the meantime, you can download the Android app from here.<br/>
+    <a href="${ANDROID_APP_URL}">${escapeHtml(ANDROID_APP_URL)}</a></p>
+  `;
 }
 
 export class MailService {
@@ -41,12 +69,19 @@ export class MailService {
       return { sent: false, skipped: true };
     }
 
+    const text = input.includeAttendeeAppLinks
+      ? `${input.text}${attendeeAppLinksText()}`
+      : input.text;
+    const html = input.includeAttendeeAppLinks
+      ? `${input.html ?? ''}${attendeeAppLinksHtml()}`
+      : input.html;
+
     await this.getTransporter().sendMail({
       from: env.smtp.from,
       to: input.to,
       subject: input.subject,
-      text: input.text,
-      html: input.html,
+      text,
+      html,
     });
 
     logger.info({ to: input.to, subject: input.subject }, 'Email sent');
@@ -148,7 +183,13 @@ export class MailService {
       <p>If you did not expect this email, you can ignore it.</p>
     `;
 
-    return this.send({ to: input.to, subject, text, html });
+    return this.send({
+      to: input.to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: isAttendee,
+    });
   }
 
   /**
@@ -214,7 +255,13 @@ export class MailService {
       <p>If you did not expect this email, you can ignore it.</p>
     `;
 
-    return this.send({ to: input.to, subject, text, html });
+    return this.send({
+      to: input.to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: true,
+    });
   }
 
   async sendExistingAccountPortalAccess(input: {
@@ -266,7 +313,13 @@ export class MailService {
       <p>If you forgot your password, use Forgot password in the app or dashboard.</p>
     `;
 
-    return this.send({ to: input.to, subject, text, html });
+    return this.send({
+      to: input.to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: Boolean(input.isAttendee),
+    });
   }
 
   async sendMembershipPurchaseConfirmation(input: {
@@ -343,7 +396,13 @@ export class MailService {
       <p>If you have any questions, reply to this email.</p>
     `;
 
-    return this.send({ to: input.to, subject, text, html });
+    return this.send({
+      to: input.to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: true,
+    });
   }
 
   async sendStoreOrderReceipt(input: {
@@ -420,7 +479,13 @@ export class MailService {
       <p>— ${escapeHtml(env.appName)}</p>
     `;
 
-    return this.send({ to: input.to, subject, text, html });
+    return this.send({
+      to: input.to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: true,
+    });
   }
 
   async sendSpeakerSessionAssigned(input: {
@@ -603,7 +668,13 @@ export class MailService {
       <p>If you already renewed, you can ignore this email.</p>
     `;
 
-    return this.send({ to: input.to, subject, text, html });
+    return this.send({
+      to: input.to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: true,
+    });
   }
 
   async sendMembershipExpiredNotice(input: {
@@ -629,7 +700,13 @@ export class MailService {
       <p>Open the app → Profile → renew your membership.</p>
     `;
 
-    return this.send({ to: input.to, subject, text, html });
+    return this.send({
+      to: input.to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: true,
+    });
   }
 
   async sendPasswordResetOtp(input: {
@@ -660,7 +737,13 @@ export class MailService {
       <p>If you did not request this, you can ignore this email.</p>
     `;
 
-    return this.send({ to: input.to, subject, text, html });
+    return this.send({
+      to: input.to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: true,
+    });
   }
 
   /** Desk / door team credentials (temporary password). */
@@ -703,6 +786,43 @@ export class MailService {
     `;
 
     return this.send({ to: input.to, subject, text, html });
+  }
+
+  /** Notify staff when someone submits the public event feedback form. */
+  async sendFeedbackSubmissionNotice(input: {
+    name: string;
+    email: string;
+    feedback: string;
+  }): Promise<{ sent: boolean; skipped?: boolean }> {
+    const to = 'dedee@fittoprofit.com';
+    const subject = 'New event feedback submitted';
+    const text = [
+      'New feedback was submitted on the event feedback form.',
+      '',
+      `Name: ${input.name}`,
+      `Email: ${input.email}`,
+      '',
+      'Feedback:',
+      input.feedback,
+    ].join('\n');
+
+    const html = `
+      <p>New feedback was submitted on the event feedback form.</p>
+      <ul>
+        <li><strong>Name:</strong> ${escapeHtml(input.name)}</li>
+        <li><strong>Email:</strong> ${escapeHtml(input.email)}</li>
+      </ul>
+      <p><strong>Feedback:</strong></p>
+      <p style="white-space:pre-wrap;line-height:1.5">${escapeHtml(input.feedback)}</p>
+    `;
+
+    return this.send({
+      to,
+      subject,
+      text,
+      html,
+      includeAttendeeAppLinks: false,
+    });
   }
 }
 

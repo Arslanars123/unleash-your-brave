@@ -264,7 +264,7 @@ export async function createContainer() {
   await couponRepository.ensureIndexes();
   const feedbackRepository = new MongoFeedbackRepository();
   await feedbackRepository.ensureIndexes();
-  const feedbackService = new FeedbackService(feedbackRepository);
+  const feedbackService = new FeedbackService(feedbackRepository, mailService);
   const couponService = new CouponService(
     couponRepository,
     membershipService,
