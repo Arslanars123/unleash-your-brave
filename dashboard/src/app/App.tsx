@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '@/features/auth/context/AuthProvider';
 import { AppRouter } from '@/app/router';
 import { ConfirmProvider } from '@/shared/ui/ConfirmDialog';
@@ -19,9 +20,11 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <ConfirmProvider>
-          <AuthProvider>
-            <AppRouter />
-          </AuthProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <AppRouter />
+            </AuthProvider>
+          </BrowserRouter>
         </ConfirmProvider>
       </ToastProvider>
     </QueryClientProvider>
