@@ -141,6 +141,14 @@ export interface CheckInStats {
   attendeeCount: number;
 }
 
+export interface PublicFeedbackSubmission {
+  id: string;
+  name: string;
+  email: string;
+  feedback: string;
+  createdAt: string;
+}
+
 export interface PublicCheckInRow {
   id: string;
   eventId: string;

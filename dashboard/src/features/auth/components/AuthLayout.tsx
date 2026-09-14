@@ -5,12 +5,14 @@ interface AuthLayoutProps {
   children: ReactNode;
   /** Short line under the brand on the visual panel */
   brandLine?: string;
+  kicker?: string;
 }
 
 /** Shared immersive auth chrome — brand panel + form stage. */
 export function AuthLayout({
   children,
   brandLine = 'Events, memberships, and the people who make them brave.',
+  kicker = 'Admin portal',
 }: AuthLayoutProps) {
   return (
     <div className="auth-stage">
@@ -23,7 +25,7 @@ export function AuthLayout({
         </div>
 
         <div className="auth-brand-content">
-          <p className="auth-brand-kicker">Admin portal</p>
+          <p className="auth-brand-kicker">{kicker}</p>
           <BrandLogo variant="dark" height={148} className="auth-brand-logo" />
           <p className="auth-brand-line">{brandLine}</p>
         </div>

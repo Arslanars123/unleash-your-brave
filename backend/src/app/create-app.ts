@@ -92,6 +92,7 @@ export function createApp(container: Container): Express {
   app.use('/api/v1/checkin-forms', container.routers.checkinForms);
   app.use('/api/v1/checkins', container.routers.checkins);
   app.use('/api/v1/posts', container.routers.posts);
+  app.use('/api/v1/feedback', container.routers.feedback);
   app.use('/api/v1/uploads', container.routers.uploads);
   app.use('/api/v1/webhooks', container.routers.webhooks);
   app.use('/api/v1/realtime', container.routers.realtime);

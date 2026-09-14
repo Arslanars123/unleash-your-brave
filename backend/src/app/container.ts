@@ -30,6 +30,9 @@ import { CheckInFormService } from '../modules/checkin-forms/checkin-form.servic
 import { CouponController } from '../modules/coupons/coupon.controller.js';
 import { createCouponRouter } from '../modules/coupons/coupon.routes.js';
 import { CouponService } from '../modules/coupons/coupon.service.js';
+import { FeedbackController } from '../modules/feedback/feedback.controller.js';
+import { createFeedbackRouter } from '../modules/feedback/feedback.routes.js';
+import { FeedbackService } from '../modules/feedback/feedback.service.js';
 import { CheckoutController } from '../modules/checkout/checkout.controller.js';
 import { createCheckoutRouter } from '../modules/checkout/checkout.routes.js';
 import { CheckoutService } from '../modules/checkout/checkout.service.js';
@@ -84,6 +87,7 @@ import { MongoChatMessageRepository } from '../db/repositories/mongo-chat-messag
 import { MongoChatReactionRepository } from '../db/repositories/mongo-chat-reaction.repository.js';
 import { MongoDeviceTokenRepository } from '../db/repositories/mongo-device-token.repository.js';
 import { MongoCouponRepository } from '../db/repositories/mongo-coupon.repository.js';
+import { MongoFeedbackRepository } from '../db/repositories/mongo-feedback.repository.js';
 import { MongoCheckInRepository } from '../db/repositories/mongo-checkin.repository.js';
 import { MongoCheckInFormRepository } from '../db/repositories/mongo-checkin-form.repository.js';
 import { MongoEventRepository } from '../db/repositories/mongo-event.repository.js';
@@ -258,6 +262,9 @@ export async function createContainer() {
   sessionService.setPurchaseRepository(membershipPurchaseRepository);
   const couponRepository = new MongoCouponRepository();
   await couponRepository.ensureIndexes();
+  const feedbackRepository = new MongoFeedbackRepository();
+  await feedbackRepository.ensureIndexes();
+  const feedbackService = new FeedbackService(feedbackRepository);
   const couponService = new CouponService(
     couponRepository,
     membershipService,
@@ -332,6 +339,7 @@ export async function createContainer() {
   const storeController = new StoreController(storeService, storeCheckoutService);
   const membershipController = new MembershipController(membershipService);
   const couponController = new CouponController(couponService);
+  const feedbackController = new FeedbackController(feedbackService);
   const accessController = new AccessController(effectiveAccessService);
   const checkoutController = new CheckoutController(checkoutService);
   const announcementController = new AnnouncementController(announcementService);
@@ -385,6 +393,7 @@ export async function createContainer() {
       store: createStoreRouter(storeController),
       memberships: createMembershipRouter(membershipController),
       coupons: createCouponRouter(couponController),
+      feedback: createFeedbackRouter(feedbackController),
       access: createAccessRouter(accessController),
       checkout: createCheckoutRouter(checkoutController),
       announcements: createAnnouncementRouter(announcementController),

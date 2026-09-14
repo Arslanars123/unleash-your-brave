@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/app/layout/AppShell';
 import { ProtectedRoute } from '@/features/auth/components/ProtectedRoute';
 import { getHomePathForUser, useAuth } from '@/features/auth/context/AuthProvider';
@@ -13,6 +13,8 @@ import { PortalNotificationsPage } from '@/features/announcements/pages/PortalNo
 import { CheckInsPage } from '@/features/checkins/pages/CheckInsPage';
 import { ClientTestingPage } from '@/features/client-testing/pages/ClientTestingPage';
 import { EventsPage } from '@/features/events/pages/EventsPage';
+import { FeedbackInboxPage } from '@/features/feedback/pages/FeedbackInboxPage';
+import { PublicFeedbackPage } from '@/features/feedback/pages/PublicFeedbackPage';
 import { SpeakerProfilePage } from '@/features/portal/pages/SpeakerProfilePage';
 import { SpeakerSessionsPage } from '@/features/portal/pages/SpeakerSessionsPage';
 import { SponsorProfilePage } from '@/features/portal/pages/SponsorProfilePage';
@@ -49,9 +51,9 @@ function PortalProfileRedirect() {
 
 export function AppRouter() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/feedback" element={<PublicFeedbackPage />} />
         <Route path="/team/login" element={<TeamLoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
@@ -85,6 +87,7 @@ export function AppRouter() {
               <Route path="users" element={<UsersPage />} />
               <Route path="team-members" element={<TeamMembersPage />} />
               <Route path="checkins" element={<CheckInsPage />} />
+              <Route path="feedback-inbox" element={<FeedbackInboxPage />} />
               {/* CLIENT_TESTING_MODE — remove route when deleting feature. */}
               <Route path="client-testing" element={<ClientTestingPage />} />
             </Route>
@@ -108,6 +111,5 @@ export function AppRouter() {
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </BrowserRouter>
   );
 }

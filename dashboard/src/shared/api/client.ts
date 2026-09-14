@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { ErrorEnvelope, SuccessEnvelope, TokenPair } from '@/shared/types/api';
-import { tokenStorage } from '@/shared/lib/token-storage';
+import { portalFromPath, tokenStorage, type AuthPortal } from '@/shared/lib/token-storage';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
 
@@ -11,7 +11,8 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = tokenStorage.getAccess();
+  const portal = portalFromPath();
+  const token = tokenStorage.getAccess(portal);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -20,18 +21,18 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
 let refreshPromise: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = tokenStorage.getRefresh();
+async function refreshAccessToken(portal: AuthPortal): Promise<string | null> {
+  const refreshToken = tokenStorage.getRefresh(portal);
   if (!refreshToken) return null;
 
   try {
     const { data } = await axios.post<SuccessEnvelope<TokenPair>>(`${baseURL}/auth/refresh`, {
       refreshToken,
     });
-    tokenStorage.setTokens(data.data.accessToken, data.data.refreshToken);
+    tokenStorage.setTokens(data.data.accessToken, data.data.refreshToken, portal);
     return data.data.accessToken;
   } catch {
-    tokenStorage.clear();
+    tokenStorage.clear(portal);
     return null;
   }
 }
@@ -40,10 +41,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ErrorEnvelope>) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+    const portal = portalFromPath();
 
     if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true;
-      refreshPromise ??= refreshAccessToken().finally(() => {
+      refreshPromise ??= refreshAccessToken(portal).finally(() => {
         refreshPromise = null;
       });
       const nextToken = await refreshPromise;
@@ -51,7 +53,7 @@ apiClient.interceptors.response.use(
         original.headers.Authorization = `Bearer ${nextToken}`;
         return apiClient(original);
       }
-      window.location.assign('/login');
+      window.location.assign(portal === 'team' ? '/team/login' : '/login');
     }
 
     return Promise.reject(error);

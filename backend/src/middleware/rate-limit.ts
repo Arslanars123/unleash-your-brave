@@ -17,6 +17,15 @@ export const apiRateLimiter = rateLimit({
     req.path.startsWith('/api/v1/realtime'),
 });
 
+/** Public feedback form — keep spam from filling the inbox. */
+export const feedbackSubmitRateLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 8,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: skipInTests,
+});
+
 /** Tighter budget for credential endpoints to blunt brute-force attempts. */
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60_000,

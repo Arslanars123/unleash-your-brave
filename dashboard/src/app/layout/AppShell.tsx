@@ -15,6 +15,7 @@ import {
   Megaphone,
   Menu,
   MessageCircle,
+  MessageSquareText,
   Mic2,
   QrCode,
   Smartphone,
@@ -168,6 +169,10 @@ export function AppShell() {
                 <QrCode size={18} />
                 Check-in
               </NavLink>
+              <NavLink to="/feedback-inbox">
+                <MessageSquareText size={18} />
+                Feedback
+              </NavLink>
               {/* CLIENT_TESTING_MODE — remove nav item when deleting feature. */}
               <NavLink to="/client-testing">
                 <FlaskConical size={18} />
@@ -192,7 +197,7 @@ export function AppShell() {
           {isSponsor ? (
             <NavLink to="/my-sponsor-profile">
               <Handshake size={18} />
-              Sponsor profile
+              Sponsor offers
             </NavLink>
           ) : null}
 
