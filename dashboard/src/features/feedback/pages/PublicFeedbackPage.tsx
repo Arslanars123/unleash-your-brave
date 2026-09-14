@@ -1,12 +1,19 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import axios from 'axios';
 import { AuthLayout } from '@/features/auth/components/AuthLayout';
-import { feedbackApi } from '@/features/feedback/api/feedback-api';
-import { getApiErrorMessage } from '@/shared/api/client';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { TextArea } from '@/shared/ui/TextArea';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
+
+/** Standalone client — do not import apiClient here (avoids auth redirect interceptors). */
+const publicClient = axios.create({
+  baseURL,
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 15_000,
+});
 
 interface FieldErrors {
   name?: string;
@@ -22,6 +29,15 @@ function validate(name: string, email: string, feedback: string): FieldErrors {
   else if (!EMAIL_REGEX.test(trimmedEmail)) errors.email = 'Enter a valid email address';
   if (!feedback.trim()) errors.feedback = 'Feedback is required';
   return errors;
+}
+
+function submitErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const message = (error.response?.data as { error?: { message?: string } } | undefined)?.error
+      ?.message;
+    if (message) return message;
+  }
+  return 'Unable to submit feedback';
 }
 
 export function PublicFeedbackPage() {
@@ -48,14 +64,14 @@ export function PublicFeedbackPage() {
 
     setLoading(true);
     try {
-      await feedbackApi.submit({
+      await publicClient.post('/feedback', {
         name: name.trim(),
         email: email.trim(),
         feedback: feedback.trim(),
       });
       setDone(true);
     } catch (error) {
-      setFormError(getApiErrorMessage(error, 'Unable to submit feedback'));
+      setFormError(submitErrorMessage(error));
     } finally {
       setLoading(false);
     }

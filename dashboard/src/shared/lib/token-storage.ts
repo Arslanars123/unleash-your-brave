@@ -22,6 +22,7 @@ export function portalFromPath(pathname = window.location.pathname): AuthPortal 
 export function isPublicAuthPath(pathname = window.location.pathname): boolean {
   return (
     pathname === '/feedback' ||
+    pathname === '/share-feedback' ||
     pathname === '/login' ||
     pathname === '/team/login' ||
     pathname === '/forgot-password' ||

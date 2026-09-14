@@ -12,7 +12,7 @@ import { useToast } from '@/shared/ui/toast';
 const PER_PAGE = 20;
 
 function publicFeedbackUrl(): string {
-  return `${window.location.origin}/feedback`;
+  return `${window.location.origin}/share-feedback`;
 }
 
 export function FeedbackInboxPage() {

@@ -28,6 +28,7 @@ export function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/feedback" element={<PublicFeedbackPage />} />
+              <Route path="/share-feedback" element={<PublicFeedbackPage />} />
               <Route
                 path="*"
                 element={
