@@ -14,7 +14,6 @@ import { CheckInsPage } from '@/features/checkins/pages/CheckInsPage';
 import { ClientTestingPage } from '@/features/client-testing/pages/ClientTestingPage';
 import { EventsPage } from '@/features/events/pages/EventsPage';
 import { FeedbackInboxPage } from '@/features/feedback/pages/FeedbackInboxPage';
-import { PublicFeedbackPage } from '@/features/feedback/pages/PublicFeedbackPage';
 import { SpeakerProfilePage } from '@/features/portal/pages/SpeakerProfilePage';
 import { SpeakerSessionsPage } from '@/features/portal/pages/SpeakerSessionsPage';
 import { SponsorProfilePage } from '@/features/portal/pages/SponsorProfilePage';
@@ -53,7 +52,6 @@ export function AppRouter() {
   return (
     <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/feedback" element={<PublicFeedbackPage />} />
         <Route path="/team/login" element={<TeamLoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />

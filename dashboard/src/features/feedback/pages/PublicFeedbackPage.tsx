@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { feedbackApi } from '@/features/feedback/api/feedback-api';
 import { getApiErrorMessage } from '@/shared/api/client';
@@ -33,6 +33,10 @@ export function PublicFeedbackPage() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = 'Share your feedback — Unleash Your Brave';
+  }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -75,7 +79,9 @@ export function PublicFeedbackPage() {
           <header className="auth-form-header">
             <p className="auth-form-eyebrow">Unleash Your Brave</p>
             <h2>Share your feedback</h2>
-            <p className="muted">Name, email, and a few words about the event.</p>
+            <p className="muted">
+              No login needed — just your name, email, and a few words about the event.
+            </p>
           </header>
 
           <Input
