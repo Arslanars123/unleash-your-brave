@@ -18,6 +18,17 @@ export function portalFromPath(pathname = window.location.pathname): AuthPortal 
   return pathname === '/team' || pathname.startsWith('/team/') ? 'team' : 'admin';
 }
 
+/** Routes anyone can open without a dashboard session (e.g. public feedback form). */
+export function isPublicAuthPath(pathname = window.location.pathname): boolean {
+  return (
+    pathname === '/feedback' ||
+    pathname === '/login' ||
+    pathname === '/team/login' ||
+    pathname === '/forgot-password' ||
+    pathname === '/set-password'
+  );
+}
+
 function migrateLegacyAdminTokens(): void {
   const admin = keysFor('admin');
   if (localStorage.getItem(admin.access)) return;

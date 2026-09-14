@@ -1,6 +1,11 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { ErrorEnvelope, SuccessEnvelope, TokenPair } from '@/shared/types/api';
-import { portalFromPath, tokenStorage, type AuthPortal } from '@/shared/lib/token-storage';
+import {
+  isPublicAuthPath,
+  portalFromPath,
+  tokenStorage,
+  type AuthPortal,
+} from '@/shared/lib/token-storage';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
 
@@ -53,7 +58,10 @@ apiClient.interceptors.response.use(
         original.headers.Authorization = `Bearer ${nextToken}`;
         return apiClient(original);
       }
-      window.location.assign(portal === 'team' ? '/team/login' : '/login');
+      // Never kick people off public pages (e.g. /feedback) into login.
+      if (!isPublicAuthPath(window.location.pathname)) {
+        window.location.assign(portal === 'team' ? '/team/login' : '/login');
+      }
     }
 
     return Promise.reject(error);

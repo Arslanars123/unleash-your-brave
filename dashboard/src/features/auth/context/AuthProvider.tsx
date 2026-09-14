@@ -7,12 +7,18 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   authApi,
   type ChangePasswordPayload,
   type LoginPayload,
 } from '@/features/auth/api/auth-api';
-import { tokenStorage } from '@/shared/lib/token-storage';
+import {
+  isPublicAuthPath,
+  portalFromPath,
+  tokenStorage,
+  type AuthPortal,
+} from '@/shared/lib/token-storage';
 import type { PublicUser, UserRole } from '@/shared/types/api';
 
 interface AuthContextValue {
@@ -24,8 +30,10 @@ interface AuthContextValue {
   isSpeaker: boolean;
   isSponsor: boolean;
   isDesk: boolean;
-  login: (payload: LoginPayload & { portal?: 'admin' | 'team' }) => Promise<PublicUser>;
+  activePortal: AuthPortal;
+  login: (payload: LoginPayload & { portal?: AuthPortal }) => Promise<PublicUser>;
   changePassword: (payload: ChangePasswordPayload) => Promise<PublicUser>;
+  /** Logs out only the current portal (team vs admin stay independent). */
   logout: () => void;
 }
 
@@ -42,10 +50,7 @@ function hasDashboardAccess(user: PublicUser): boolean {
   );
 }
 
-function assertPortalUser(
-  user: PublicUser,
-  portal: 'admin' | 'team' = 'admin',
-): PublicUser {
+function assertPortalUser(user: PublicUser, portal: AuthPortal = 'admin'): PublicUser {
   if (portal === 'team') {
     if (user.role !== 'desk') {
       throw new Error('Use the admin / portal login for this account');
@@ -68,41 +73,73 @@ function homePathForUserCapabilities(user: PublicUser): string {
   return '/';
 }
 
+async function loadPortalSession(portal: AuthPortal): Promise<PublicUser | null> {
+  const access = tokenStorage.getAccess(portal);
+  if (!access) return null;
+
+  try {
+    const me = await authApi.me();
+    if (portal === 'team') {
+      if (me.role !== 'desk') {
+        tokenStorage.clear(portal);
+        return null;
+      }
+    } else if (!hasDashboardAccess(me) || me.role === 'desk') {
+      tokenStorage.clear(portal);
+      return null;
+    }
+    tokenStorage.setUser(JSON.stringify(me), portal);
+    return me;
+  } catch {
+    tokenStorage.clear(portal);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const activePortal = portalFromPath(location.pathname);
+
   const [user, setUser] = useState<PublicUser | null>(() => {
-    const cached = tokenStorage.getUser<PublicUser>();
-    return cached && hasDashboardAccess(cached) ? cached : null;
+    const cached = tokenStorage.getUser<PublicUser>(activePortal);
+    if (!cached) return null;
+    if (activePortal === 'team') return cached.role === 'desk' ? cached : null;
+    return hasDashboardAccess(cached) && cached.role !== 'desk' ? cached : null;
   });
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [bootstrappedPortal, setBootstrappedPortal] = useState<AuthPortal | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
-      const access = tokenStorage.getAccess();
-      if (!access) {
-        tokenStorage.clear();
+      // Public pages (feedback form, login, etc.) must never run session refresh —
+      // a stale token 401 was redirecting people away from /feedback to /login.
+      if (isPublicAuthPath(location.pathname)) {
         if (!cancelled) {
-          setUser(null);
+          setBootstrappedPortal(activePortal);
           setIsBootstrapping(false);
         }
         return;
       }
 
-      try {
-        const me = await authApi.me();
-        if (!hasDashboardAccess(me)) {
-          throw new Error('No dashboard access');
-        }
-        if (!cancelled) {
-          setUser(me);
-          tokenStorage.setUser(JSON.stringify(me));
-        }
-      } catch {
-        tokenStorage.clear();
-        if (!cancelled) setUser(null);
-      } finally {
-        if (!cancelled) setIsBootstrapping(false);
+      setIsBootstrapping(true);
+      const cached = tokenStorage.getUser<PublicUser>(activePortal);
+      if (cached) {
+        const valid =
+          activePortal === 'team'
+            ? cached.role === 'desk'
+            : hasDashboardAccess(cached) && cached.role !== 'desk';
+        if (!cancelled) setUser(valid ? cached : null);
+      } else if (!cancelled) {
+        setUser(null);
+      }
+
+      const next = await loadPortalSession(activePortal);
+      if (!cancelled) {
+        setUser(next);
+        setBootstrappedPortal(activePortal);
+        setIsBootstrapping(false);
       }
     }
 
@@ -110,33 +147,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activePortal, location.pathname]);
 
-  const login = useCallback(async (payload: LoginPayload & { portal?: 'admin' | 'team' }) => {
-    const result = await authApi.login({
-      email: payload.email.trim(),
-      password: payload.password,
-    });
-    assertPortalUser(result.user, payload.portal ?? 'admin');
-    tokenStorage.setTokens(result.tokens.accessToken, result.tokens.refreshToken);
-    tokenStorage.setUser(JSON.stringify(result.user));
-    setUser(result.user);
-    return result.user;
-  }, []);
+  const login = useCallback(
+    async (payload: LoginPayload & { portal?: AuthPortal }) => {
+      const portal = payload.portal ?? 'admin';
+      const result = await authApi.login({
+        email: payload.email.trim(),
+        password: payload.password,
+      });
+      assertPortalUser(result.user, portal);
+      tokenStorage.setTokens(result.tokens.accessToken, result.tokens.refreshToken, portal);
+      tokenStorage.setUser(JSON.stringify(result.user), portal);
+      if (portalFromPath() === portal) {
+        setUser(result.user);
+      }
+      return result.user;
+    },
+    [],
+  );
 
   const changePassword = useCallback(async (payload: ChangePasswordPayload) => {
+    const portal = portalFromPath();
     const updated = await authApi.changePassword(payload);
-    if (!hasDashboardAccess(updated)) {
+    if (portal === 'team') {
+      if (updated.role !== 'desk') throw new Error('No desk access');
+    } else if (!hasDashboardAccess(updated) || updated.role === 'desk') {
       throw new Error('No dashboard access');
     }
-    tokenStorage.setUser(JSON.stringify(updated));
+    tokenStorage.setUser(JSON.stringify(updated), portal);
     setUser(updated);
     return updated;
   }, []);
 
   const logout = useCallback(() => {
-    tokenStorage.clear();
-    setUser(null);
+    const portal = portalFromPath();
+    tokenStorage.clear(portal);
+    if (portalFromPath() === portal) {
+      setUser(null);
+    }
   }, []);
 
   const isSpeaker = Boolean(user?.speakerId) || user?.role === 'speaker';
@@ -147,17 +196,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       isAuthenticated: Boolean(user),
-      isBootstrapping,
+      // Keep spinner until this portal finished its own bootstrap.
+      isBootstrapping: isBootstrapping || bootstrappedPortal !== activePortal,
       mustChangePassword: Boolean(user?.mustChangePassword),
       isAdmin: user?.role === 'admin',
+      isSpeaker,
+      isSponsor,
+      isDesk,
+      activePortal,
+      login,
+      changePassword,
+      logout,
+    }),
+    [
+      user,
+      isBootstrapping,
+      bootstrappedPortal,
+      activePortal,
       isSpeaker,
       isSponsor,
       isDesk,
       login,
       changePassword,
       logout,
-    }),
-    [user, isBootstrapping, isSpeaker, isSponsor, isDesk, login, changePassword, logout],
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
